@@ -110,3 +110,16 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '1'
+
+      - name: Check the image against the CIS Docker Benchmark
+        run: >-
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+          goodwithtech/dockle:v0.4.15 --exit-code 1 --exit-level warn lanlord:ci
+
+      - name: Check the Dockerfile for misconfigurations
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: MEDIUM,HIGH,CRITICAL
+          exit-code: '1'
