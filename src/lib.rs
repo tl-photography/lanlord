@@ -5,7 +5,7 @@ use axum::{Router, response::Html, routing::get};
 use tower_http::set_header::SetResponseHeaderLayer;
 
 /// Headers on every response: no external content, no frames, no caching of device data.
-const SECURITY_HEADERS: [(HeaderName, &str); 8] = [
+const SECURITY_HEADERS: [(HeaderName, &str); 9] = [
     (
         header::CONTENT_SECURITY_POLICY,
         "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
@@ -25,6 +25,10 @@ const SECURITY_HEADERS: [(HeaderName, &str); 8] = [
     (
         HeaderName::from_static("cross-origin-resource-policy"),
         "same-origin",
+    ),
+    (
+        HeaderName::from_static("cross-origin-embedder-policy"),
+        "require-corp",
     ),
 ];
 

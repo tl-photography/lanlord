@@ -49,5 +49,6 @@ async fn every_response_has_the_security_headers() {
         assert_eq!(headers["x-frame-options"], "DENY", "{path}");
         assert_eq!(headers["referrer-policy"], "no-referrer", "{path}");
         assert_eq!(headers["cache-control"], "no-store", "{path}");
+        assert_eq!(headers["cross-origin-embedder-policy"], "require-corp", "{path}");
     }
 }
