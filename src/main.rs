@@ -33,8 +33,21 @@ fn healthcheck() -> ExitCode {
     }
 }
 
+/// Waits for Ctrl-C or SIGTERM (sent by `docker stop`).
 async fn shutdown_signal() {
-    let _ = tokio::signal::ctrl_c().await;
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut signal) => {
+                signal.recv().await;
+            }
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    tokio::select! {
+        _ = tokio::signal::ctrl_c() => {}
+        () = terminate => {}
+    }
+    tracing::info!("shutting down");
 }
 
 #[tokio::main]
