@@ -1,5 +1,5 @@
 #!/bin/sh
-# Security checks of the built image: user, package manager, setuid files, start with all restrictions,
+# Security checks of the built image: user, shell, package manager, setuid files, start with all restrictions,
 # response headers and clean stop.
 # Usage: tests/container.sh <image>
 set -eu
@@ -20,28 +20,33 @@ cleanup() {
 }
 trap cleanup EXIT
 
-in_image() {
-    docker run --rm --entrypoint sh "$image" -c "$1"
-}
+# File list of the image, read from outside: the image has no shell to run checks in.
+created=$(docker create "$image")
+files=$(docker export "$created" | tar -tv)
+docker rm "$created" > /dev/null
 
 user=$(docker image inspect "$image" --format '{{.Config.User}}')
-if [ -n "$user" ] && [ "$user" != root ] && [ "$user" != 0 ]; then
-    pass "runs as a non-root user ($user)"
+case $user in
+    "" | root | 0 | 0:* | root:*) fail "runs as a non-root user ($user)" ;;
+    *) pass "runs as a non-root user ($user)" ;;
+esac
+
+if printf '%s\n' "$files" | grep -Eq ' (bin|usr/bin|sbin)/(sh|bash|ash|busybox)$'; then
+    fail "has no shell"
 else
-    fail "runs as a non-root user ($user)"
+    pass "has no shell"
 fi
 
-if [ -z "$(in_image 'command -v apk || true')" ]; then
-    pass "has no package manager"
-else
+if printf '%s\n' "$files" | grep -Eq '/(apk|apt|apt-get|dpkg|rpm)$'; then
     fail "has no package manager"
+else
+    pass "has no package manager"
 fi
 
-setuid=$(in_image 'find / -xdev -perm /6000 -type f 2>/dev/null | wc -l')
-if [ "$setuid" -eq 0 ]; then
-    pass "has no setuid or setgid files"
+if printf '%s\n' "$files" | grep -Eq '^-..[sS]|^-.....[sS]'; then
+    fail "has no setuid or setgid files"
 else
-    fail "has no setuid or setgid files ($setuid found)"
+    pass "has no setuid or setgid files"
 fi
 
 docker run -d --name "$name" --read-only --cap-drop ALL --security-opt no-new-privileges \
@@ -49,7 +54,7 @@ docker run -d --name "$name" --read-only --cap-drop ALL --security-opt no-new-pr
 
 healthy=false
 for _ in $(seq 30); do
-    if docker exec "$name" lanlord healthcheck; then
+    if docker exec "$name" /lanlord healthcheck; then
         healthy=true
         break
     fi
