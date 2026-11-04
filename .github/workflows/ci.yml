@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  rust:
+    name: Format, lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.99.1
+          components: rustfmt, clippy
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Lint
+        run: cargo clippy --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+  dependencies:
+    name: Check dependencies (advisories, licenses, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Run cargo-deny
+        uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25
+        with:
+          command: check advisories bans licenses sources
+
+  secrets:
+    name: Scan for secrets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      # The full history, not only the pushed commits.
+      - name: Run TruffleHog
+        run: >-
+          docker run --rm -v "$PWD:/repo:ro" trufflesecurity/trufflehog:3.99.8
+          git file:///repo --results=verified,unknown --fail --no-update
+
+  hooks:
+    name: Pre-commit hooks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      # Rust and the secret scan run in their own jobs.
+      - name: Run pre-commit
+        env:
+          SKIP: cargo-fmt,cargo-clippy,trufflehog
+        run: |
+          python -m pip install pre-commit
+          pre-commit run --all-files --show-diff-on-failure
+
+  docker:
+    name: Build, smoke-test and scan the image
+    needs: rust
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
+
+      - name: Build image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc
+        with:
+          context: .
+          load: true
+          push: false
+          tags: lanlord:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start the container like on the server
+        run: |
+          docker run -d --name lanlord --read-only --cap-drop ALL \
+            --security-opt no-new-privileges lanlord:ci
+          for _ in $(seq 30); do
+            docker exec lanlord lanlord healthcheck && exit 0
+            sleep 1
+          done
+          docker logs lanlord
+          exit 1
+
+      - name: Scan the image for vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: lanlord:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
