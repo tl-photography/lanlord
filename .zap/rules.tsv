@@ -1,1 +1,2 @@
 10049	IGNORE	(Non-Storable Content: Cache-Control no-store is intended, pages show device data)
+10202	IGNORE	(Absence of Anti-CSRF Tokens: changes are protected by the Sec-Fetch-Site and Origin check in src/origin.rs, tested in tests/edit.rs)

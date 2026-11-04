@@ -2,10 +2,11 @@
 
 pub mod config;
 pub mod devices;
+mod edit;
 pub mod origin;
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use askama::Template;
 use axum::extract::State;
@@ -57,6 +58,8 @@ pub struct AppState {
 struct Inner {
     config: Config,
     devices_path: PathBuf,
+    /// Held while the device list is read, changed and written.
+    write_lock: Mutex<()>,
 }
 
 impl AppState {
@@ -70,7 +73,11 @@ impl AppState {
         let devices_path = data_dir.join("devices.toml");
         DeviceList::load(&devices_path, &config.group_names())?;
         Ok(Self {
-            inner: Arc::new(Inner { config, devices_path }),
+            inner: Arc::new(Inner {
+                config,
+                devices_path,
+                write_lock: Mutex::new(()),
+            }),
         })
     }
 
@@ -83,6 +90,9 @@ impl AppState {
 pub fn app(state: AppState) -> Router {
     let mut router = Router::new()
         .route("/", get(index))
+        .route("/devices", axum::routing::post(edit::create))
+        .route("/devices/new", get(edit::new_form))
+        .route("/devices/{name}", get(edit::edit_form).post(edit::update))
         .route("/style.css", get(style))
         .route("/healthz", get(healthz))
         .layer(axum::middleware::from_fn(origin::same_origin_only))
@@ -115,7 +125,7 @@ struct IndexPage {
     groups: Vec<GroupView>,
 }
 
-fn server_error(error: &impl std::fmt::Display) -> Response {
+pub(crate) fn server_error(error: &impl std::fmt::Display) -> Response {
     tracing::error!("{error}");
     (StatusCode::INTERNAL_SERVER_ERROR, "Internal error, see the log").into_response()
 }

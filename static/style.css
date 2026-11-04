@@ -19,3 +19,13 @@ code { font-size: 0.95em; }
   td:first-child { font-weight: 600; }
   td:empty { display: none; }
 }
+
+header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem 1rem; }
+a { color: inherit; }
+.button, button { display: inline-block; padding: 0.5rem 1rem; border: 1px solid #8888; border-radius: 0.4rem;
+  background: #8882; color: inherit; font: inherit; text-decoration: none; cursor: pointer; }
+form { display: grid; gap: 0.9rem; max-width: 32rem; }
+label { display: grid; gap: 0.25rem; }
+input, select { font: inherit; padding: 0.5rem; border: 1px solid #8888; border-radius: 0.4rem; background: transparent;
+  color: inherit; width: 100%; box-sizing: border-box; }
+.error { padding: 0.6rem 0.8rem; border: 1px solid #d33; border-radius: 0.4rem; background: #d332; }
