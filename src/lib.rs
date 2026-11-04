@@ -1,5 +1,6 @@
 //! lanlord: device list for a small OpenWrt network.
 
+pub mod config;
 pub mod devices;
 
 use axum::http::{HeaderName, HeaderValue, header};

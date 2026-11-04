@@ -1,0 +1,19 @@
+# Copy to the data directory as lanlord.toml.
+
+# Devices that are not in the list.
+default_group = "guest"
+
+[[group]]
+name = "lan"
+vlan = 1
+label = "LAN"
+
+[[group]]
+name = "iot"
+vlan = 20
+label = "IoT"
+
+[[group]]
+name = "guest"
+vlan = 30
+label = "Guests and new devices"
