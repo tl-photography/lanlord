@@ -100,16 +100,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Start the container like on the server
-        run: |
-          docker run -d --name lanlord --read-only --cap-drop ALL \
-            --security-opt no-new-privileges lanlord:ci
-          for _ in $(seq 30); do
-            docker exec lanlord lanlord healthcheck && exit 0
-            sleep 1
-          done
-          docker logs lanlord
-          exit 1
+      - name: Run the container security tests
+        run: tests/container.sh lanlord:ci
 
       - name: Scan the image for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
