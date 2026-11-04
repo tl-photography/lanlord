@@ -97,6 +97,17 @@ async fn style_sheet_is_served_as_css() {
 }
 
 #[tokio::test]
+async fn favicon_is_only_the_house_mark() {
+    let response = send("/favicon.svg").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "image/svg+xml");
+    let svg = response.into_body().collect().await.unwrap().to_bytes();
+    let svg = String::from_utf8(svg.to_vec()).unwrap();
+    assert!(svg.contains("M 12 56 L 54 18 L 96 56"));
+    assert!(!svg.contains("LANlord"));
+}
+
+#[tokio::test]
 async fn unknown_path_is_not_found() {
     assert_eq!(get("/nope").await.0, StatusCode::NOT_FOUND);
 }
@@ -131,7 +142,7 @@ async fn starts_without_groups_and_devices() {
 
 #[tokio::test]
 async fn every_response_has_the_security_headers() {
-    for path in ["/", "/healthz", "/style.css", "/nope"] {
+    for path in ["/", "/healthz", "/style.css", "/favicon.svg", "/nope"] {
         let response = send(path).await;
         let headers = response.headers();
         let csp = headers["content-security-policy"].to_str().unwrap();

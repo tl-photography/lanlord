@@ -55,6 +55,9 @@ const STYLE: &str = include_str!("../static/style.css");
 /// The logo, also used as icon.
 const LOGO: &str = include_str!("../assets/lanlord.svg");
 
+/// House mark used for the browser icon.
+const FAVICON: &str = include_str!("../assets/favicon.svg");
+
 /// Settings and data files, shared by all requests.
 #[derive(Clone)]
 pub struct AppState {
@@ -119,6 +122,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/style.css", get(style))
         .route("/logo.svg", get(logo))
+        .route("/favicon.svg", get(favicon))
         .route("/healthz", get(healthz))
         .layer(axum::middleware::from_fn(origin::same_origin_only))
         .with_state(state);
@@ -211,6 +215,10 @@ async fn style() -> impl IntoResponse {
 
 async fn logo() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "image/svg+xml")], LOGO)
+}
+
+async fn favicon() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/svg+xml")], FAVICON)
 }
 
 async fn healthz() -> &'static str {
