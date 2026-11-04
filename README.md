@@ -43,6 +43,7 @@ A leaked key can change these entries, but cannot run other commands.
 ```sh
 docker run -d --name lanlord \
    --restart unless-stopped \
+   --user "$(id -u):$(id -g)" \
    --read-only --cap-drop ALL --security-opt no-new-privileges \
    -p 127.0.0.1:8080:8080 \
    ghcr.io/tl-photography/lanlord:latest
@@ -52,13 +53,43 @@ lanlord has no login of its own.
 Run it behind a reverse proxy with authentication, and do not expose it to the internet.
 
 `LANLORD_LISTEN` sets the listen address, the default is `0.0.0.0:8080`.
-The container health check runs `lanlord healthcheck`.
+The container health check runs `/lanlord healthcheck`.
+
+### Docker Compose
+
+```yaml
+services:
+  lanlord:
+    image: ghcr.io/tl-photography/lanlord:latest
+    restart: unless-stopped
+    user: "${PUID}:${PGID}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+```
+
+### User and permissions
+
+The image runs as uid and gid 10001 by default.
+Any other `uid:gid` works with `--user` or `user:`, lanlord needs no entry in `/etc/passwd`.
+Use the owner of the data directory, so the SSH key in it can stay readable for that user only.
+Root and the `PUID`/`PGID` environment variables of other images are not supported, the container never runs as root.
+
+### Hardening
+
+- One static binary on an empty base image: no shell, no package manager, no libraries, about 2 MB.
+- Runs with a read-only file system, without capabilities and with `no-new-privileges`.
+- Strict response headers on every page (Content Security Policy, no frames, no caching).
+- Base images pinned by digest, the binary carries its dependency list for scanners (cargo-auditable).
+- Integer overflow checks also in release builds.
 
 ## Docker Releases
 
 Publishing a GitHub release builds the image and pushes it to GitHub Container Registry as
-`ghcr.io/tl-photography/lanlord:<release-tag>`, with an SBOM and build provenance.
+`ghcr.io/tl-photography/lanlord:<release-tag>`, with an SBOM and build provenance in the registry.
 `latest` follows the most recent release that is not a prerelease.
+
+Every release also has two SBOM files attached: the image (SPDX) and the Rust dependencies (CycloneDX).
 
 ## Running From Source
 
@@ -88,7 +119,13 @@ CI runs on every push and pull request:
 | Dependencies          | `cargo-deny`: known vulnerabilities, licenses, crate sources                            |
 | Secrets               | TruffleHog over the whole history                                                       |
 | Pre-commit hooks      | whitespace, YAML, TOML, private keys, actionlint, hadolint, shellcheck                  |
-| Image                 | build, start with a read-only file system and no capabilities, health check, Trivy scan |
+| Image                 | build, [container tests](tests/container.sh), Trivy, Dockle, ZAP                        |
+
+The container tests check the image from outside: no root, no shell, no package manager, no setuid files, a start
+read-only, without capabilities and as an arbitrary uid, the response headers and a clean stop on SIGTERM.
+Trivy scans the image for known vulnerabilities and the Dockerfile for misconfigurations, Dockle checks the image
+against the CIS Docker Benchmark, and a ZAP baseline scan tests the running web interface.
+Accepted ZAP findings are listed with a reason in [.zap/rules.tsv](.zap/rules.tsv).
 
 A weekly run checks new advisories for the dependencies and the base images.
 Dependabot keeps the crates, the actions and the base images up to date.
