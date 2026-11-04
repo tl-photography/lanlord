@@ -79,17 +79,12 @@ struct EditPage {
 
 fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: String) -> Response {
     let groups = state
-        .inner
-        .config
+        .groups()
         .groups
         .iter()
         .map(|group| GroupOption {
             name: group.name.clone(),
-            label: if group.label.is_empty() {
-                group.name.clone()
-            } else {
-                group.label.clone()
-            },
+            label: group.title().to_owned(),
         })
         .collect();
     let (title, action) = match original {
@@ -117,7 +112,7 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
 /// Form for a new device, in the default group.
 pub async fn new_form(State(state): State<AppState>) -> Response {
     let form = DeviceForm {
-        group: state.inner.config.default_group.clone(),
+        group: state.groups().default_group,
         ..DeviceForm::default()
     };
     page(&state, None, form, String::new())
@@ -174,7 +169,7 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
         },
         None => list.devices.push(device),
     }
-    match list.save(&state.inner.devices_path, &state.inner.config.group_names()) {
+    match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => Redirect::to("/").into_response(),
         Err(Error::Invalid(message)) => page(state, original, form, message),
         Err(error) => server_error(&error),

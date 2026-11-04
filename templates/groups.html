@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Groups - lanlord</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header><h1>Groups</h1><a href="/">Back to the list</a></header>
+  {% if !error.is_empty() %}
+  <p class="error" role="alert">{{ error }}</p>
+  {% endif %}
+  {% if groups.is_empty() %}
+  <p class="notice">No groups yet. Every group is a VLAN; add one for each, for example LAN, IoT and guests.</p>
+  {% else %}
+  <table>
+    <thead><tr><th>Group</th><th>Name</th><th>VLAN</th><th>Devices</th><th></th></tr></thead>
+    <tbody>
+      {% for group in groups %}
+      <tr>
+        <td data-label="Group"><span>{{ group.title }}{% if group.is_default %} <small>(default)</small>{% endif %}</span></td>
+        <td data-label="Name"><code>{{ group.name }}</code></td>
+        <td data-label="VLAN">{{ group.vlan }}</td>
+        <td data-label="Devices">{{ group.devices }}</td>
+        <td>
+          {% if group.devices == 0 %}
+          <form method="post" action="/groups/{{ group.name }}/delete" class="inline"><button type="submit">Delete</button></form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h2>Default group</h2>
+  <p>Devices that are not in the list land in this group.</p>
+  <form method="post" action="/groups/default" class="row">
+    <select name="group" aria-label="Default group">
+      {% for group in groups %}
+      <option value="{{ group.name }}"{% if group.is_default %} selected{% endif %}>{{ group.title }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Save</button>
+  </form>
+  {% endif %}
+  <h2>Add a group</h2>
+  <form method="post" action="/groups">
+    <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="iot"></label>
+    <label>VLAN <input name="vlan" value="{{ form.vlan }}" required inputmode="numeric" pattern="[0-9]{1,4}" placeholder="20"></label>
+    <label>Label <input name="label" value="{{ form.label }}" maxlength="100" placeholder="optional, for example IoT"></label>
+    <button type="submit">Add</button>
+  </form>
+</body>
+</html>

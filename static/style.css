@@ -29,3 +29,8 @@ label { display: grid; gap: 0.25rem; }
 input, select { font: inherit; padding: 0.5rem; border: 1px solid #8888; border-radius: 0.4rem; background: transparent;
   color: inherit; width: 100%; box-sizing: border-box; }
 .error { padding: 0.6rem 0.8rem; border: 1px solid #d33; border-radius: 0.4rem; background: #d332; }
+nav { display: flex; gap: 1rem; align-items: baseline; }
+.notice { padding: 0.6rem 0.8rem; border: 1px solid #8886; border-radius: 0.4rem; background: #8881; }
+form.inline { display: inline; }
+form.row { display: flex; gap: 0.5rem; max-width: 32rem; }
+form.row select { flex: 1; }

@@ -86,6 +86,26 @@ pub fn is_valid_name(name: &str) -> bool {
         && !name.ends_with('-')
 }
 
+/// Writes a file readable for the owner only: first to a temporary file next to it, then renames it, so the
+/// file is never half written.
+///
+/// # Errors
+///
+/// If the file cannot be written.
+pub fn write_private(path: &Path, content: &str) -> Result<(), Error> {
+    let temporary = path.with_extension("toml.tmp");
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .mode(0o600)
+        .open(&temporary)?;
+    file.write_all(content.as_bytes())?;
+    file.sync_all()?;
+    fs::rename(&temporary, path)?;
+    Ok(())
+}
+
 impl DeviceList {
     /// Reads the device list. A missing file is an empty list.
     ///
@@ -104,8 +124,7 @@ impl DeviceList {
         Ok(list)
     }
 
-    /// Writes the device list: first to a temporary file next to it, then renames it, so the file is never
-    /// half written. The file is readable for the owner only.
+    /// Checks and writes the device list, readable for the owner only.
     ///
     /// # Errors
     ///
@@ -114,17 +133,7 @@ impl DeviceList {
         self.validate(groups)?;
         let content =
             toml::to_string_pretty(self).map_err(|error| Error::Invalid(format!("cannot write: {error}")))?;
-        let temporary = path.with_extension("toml.tmp");
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .mode(0o600)
-            .open(&temporary)?;
-        file.write_all(content.as_bytes())?;
-        file.sync_all()?;
-        fs::rename(&temporary, path)?;
-        Ok(())
+        write_private(path, &content)
     }
 
     /// Checks every device and that names, MAC addresses and IP addresses are unique.

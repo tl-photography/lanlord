@@ -4,10 +4,11 @@ pub mod compare;
 pub mod config;
 pub mod devices;
 mod edit;
+mod groups;
 pub mod origin;
 
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 
 use askama::Template;
 use axum::extract::State;
@@ -57,33 +58,45 @@ pub struct AppState {
 }
 
 struct Inner {
-    config: Config,
+    groups: RwLock<Config>,
+    groups_path: PathBuf,
     devices_path: PathBuf,
     /// Held while the device list is read, changed and written.
     write_lock: Mutex<()>,
 }
 
 impl AppState {
-    /// Reads `lanlord.toml` and checks `devices.toml` in the data directory.
+    /// Reads `groups.toml` and checks `devices.toml` in the data directory. Both may be missing: lanlord then
+    /// starts without groups and devices.
     ///
     /// # Errors
     ///
-    /// If the settings are missing or invalid, or the device list is invalid.
+    /// If a file cannot be read or is invalid.
     pub fn load(data_dir: &Path) -> Result<Self, Error> {
-        let config = Config::load(&data_dir.join("lanlord.toml"))?;
+        let groups_path = data_dir.join("groups.toml");
+        let groups = Config::load(&groups_path)?;
         let devices_path = data_dir.join("devices.toml");
-        DeviceList::load(&devices_path, &config.group_names())?;
+        DeviceList::load(&devices_path, &groups.group_names())?;
         Ok(Self {
             inner: Arc::new(Inner {
-                config,
+                groups: RwLock::new(groups),
+                groups_path,
                 devices_path,
                 write_lock: Mutex::new(()),
             }),
         })
     }
 
+    /// The current groups.
+    pub(crate) fn groups(&self) -> Config {
+        self.inner
+            .groups
+            .read()
+            .map_or_else(|poisoned| poisoned.into_inner().clone(), |groups| groups.clone())
+    }
+
     fn devices(&self) -> Result<DeviceList, Error> {
-        DeviceList::load(&self.inner.devices_path, &self.inner.config.group_names())
+        DeviceList::load(&self.inner.devices_path, &self.groups().group_names())
     }
 }
 
@@ -94,6 +107,9 @@ pub fn app(state: AppState) -> Router {
         .route("/devices", axum::routing::post(edit::create))
         .route("/devices/new", get(edit::new_form))
         .route("/devices/{name}", get(edit::edit_form).post(edit::update))
+        .route("/groups", get(groups::list).post(groups::create))
+        .route("/groups/default", axum::routing::post(groups::set_default))
+        .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/style.css", get(style))
         .route("/healthz", get(healthz))
         .layer(axum::middleware::from_fn(origin::same_origin_only))
@@ -126,6 +142,12 @@ struct IndexPage {
     groups: Vec<GroupView>,
 }
 
+impl IndexPage {
+    fn has_groups(&self) -> bool {
+        !self.groups.is_empty()
+    }
+}
+
 pub(crate) fn server_error(error: &impl std::fmt::Display) -> Response {
     tracing::error!("{error}");
     (StatusCode::INTERNAL_SERVER_ERROR, "Internal error, see the log").into_response()
@@ -137,8 +159,7 @@ async fn index(State(state): State<AppState>) -> Response {
         Err(error) => return server_error(&error),
     };
     let groups = state
-        .inner
-        .config
+        .groups()
         .groups
         .iter()
         .map(|group| {
@@ -155,11 +176,7 @@ async fn index(State(state): State<AppState>) -> Response {
                 .collect();
             devices.sort_by_key(|device| device.name.to_ascii_lowercase());
             GroupView {
-                label: if group.label.is_empty() {
-                    group.name.clone()
-                } else {
-                    group.label.clone()
-                },
+                label: group.title().to_owned(),
                 vlan: group.vlan,
                 devices,
             }

@@ -28,8 +28,8 @@ group = "iot"
 /// A data directory with the example settings and two devices; kept alive as long as the router.
 fn app() -> (TempDir, Router) {
     let data = tempfile::tempdir().unwrap();
-    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/lanlord.toml");
-    std::fs::copy(example, data.path().join("lanlord.toml")).unwrap();
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/groups.toml");
+    std::fs::copy(example, data.path().join("groups.toml")).unwrap();
     std::fs::write(data.path().join("devices.toml"), DEVICES).unwrap();
     let state = lanlord::AppState::load(data.path()).unwrap();
     (data, lanlord::app(state))
@@ -96,20 +96,31 @@ async fn unknown_path_is_not_found() {
 }
 
 #[tokio::test]
-async fn invalid_settings_or_devices_stop_the_start() {
+async fn devices_in_unknown_groups_stop_the_start() {
     let data = tempfile::tempdir().unwrap();
-    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/lanlord.toml");
-    std::fs::copy(example, data.path().join("lanlord.toml")).unwrap();
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/groups.toml");
+    std::fs::copy(example, data.path().join("groups.toml")).unwrap();
     std::fs::write(
         data.path().join("devices.toml"),
         DEVICES.replace("\"iot\"", "\"office\""),
     )
     .unwrap();
-    assert!(lanlord::AppState::load(data.path()).is_err(), "unknown group");
-    assert!(
-        lanlord::AppState::load(&data.path().join("missing")).is_err(),
-        "no settings"
-    );
+    assert!(lanlord::AppState::load(data.path()).is_err());
+}
+
+#[tokio::test]
+async fn starts_without_groups_and_devices() {
+    let data = tempfile::tempdir().unwrap();
+    let app = lanlord::app(lanlord::AppState::load(data.path()).unwrap());
+    let response = app
+        .oneshot(Request::get("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let page = String::from_utf8(body.to_vec()).unwrap();
+    assert!(page.contains("No groups yet"), "{page}");
+    assert!(page.contains(r#"href="/groups""#));
 }
 
 #[tokio::test]

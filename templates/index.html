@@ -7,7 +7,10 @@
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header><h1>lanlord</h1><a class="button" href="/devices/new">Add device</a></header>
+  <header><h1>lanlord</h1><nav><a href="/groups">Groups</a> <a class="button" href="/devices/new">Add device</a></nav></header>
+  {% if !has_groups() %}
+  <p class="notice">No groups yet. <a href="/groups">Set up the groups</a> first, every device belongs to one.</p>
+  {% endif %}
   {% for group in groups %}
   <section>
     <h2>{{ group.label }} <small>VLAN {{ group.vlan }}, {{ group.devices.len() }} devices</small></h2>

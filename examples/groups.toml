@@ -1,4 +1,4 @@
-# Copy to the data directory as lanlord.toml.
+# Example groups; lanlord writes groups.toml in the data directory when the groups are set up.
 
 # Devices that are not in the list.
 default_group = "guest"

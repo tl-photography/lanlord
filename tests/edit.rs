@@ -26,8 +26,8 @@ group = "lan"
 
 fn data() -> TempDir {
     let data = tempfile::tempdir().unwrap();
-    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/lanlord.toml");
-    std::fs::copy(example, data.path().join("lanlord.toml")).unwrap();
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/groups.toml");
+    std::fs::copy(example, data.path().join("groups.toml")).unwrap();
     std::fs::write(data.path().join("devices.toml"), DEVICES).unwrap();
     data
 }

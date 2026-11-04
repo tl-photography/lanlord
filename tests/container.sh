@@ -15,11 +15,11 @@ fail() {
     failed=1
 }
 
-# Data directory with the example settings, readable for any uid.
+# Data directory with the example groups, readable for any uid.
 data=$(mktemp -d)
-cp "$(dirname "$0")/../examples/lanlord.toml" "$data/lanlord.toml"
+cp "$(dirname "$0")/../examples/groups.toml" "$data/groups.toml"
 chmod 755 "$data"
-chmod 644 "$data/lanlord.toml"
+chmod 644 "$data/groups.toml"
 
 cleanup() {
     docker rm -f "$name" > /dev/null 2>&1 || true
