@@ -70,6 +70,7 @@ struct GroupOption {
 #[derive(Template)]
 #[template(path = "edit.html")]
 struct EditPage {
+    nav: &'static str,
     title: String,
     action: String,
     form: DeviceForm,
@@ -97,6 +98,7 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
         StatusCode::UNPROCESSABLE_ENTITY
     };
     let page = EditPage {
+        nav: "devices",
         title,
         action,
         form,

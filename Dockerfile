@@ -7,6 +7,7 @@ COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY src ./src
 COPY templates ./templates
 COPY static ./static
+COPY assets ./assets
 RUN cargo auditable build --release --locked
 
 FROM scratch

@@ -1,32 +1,32 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>lanlord</title>
-  <link rel="stylesheet" href="/style.css">
-</head>
-<body>
-  <header><h1>lanlord</h1><nav><a href="/groups">Groups</a> <a class="button" href="/devices/new">Add device</a></nav></header>
-  {% if !has_groups() %}
-  <p class="notice">No groups yet. <a href="/groups">Set up the groups</a> first, every device belongs to one.</p>
-  {% endif %}
+{% extends "base.html" %}
+{% block title %}Devices{% endblock %}
+{% block content %}
+{% if !has_groups() %}
+<p class="notice">No groups yet. <a href="/groups">Set up the groups</a> first, every device belongs to one.</p>
+{% endif %}
+<div class="columns">
   {% for group in groups %}
-  <section>
-    <h2>{{ group.label }} <small>VLAN {{ group.vlan }}, {{ group.devices.len() }} devices</small></h2>
+  <section class="group">
+    <h2>{{ group.label }} <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.devices.len() }} {% if group.devices.len() == 1 %}device{% else %}devices{% endif %}</span></h2>
     {% if group.devices.is_empty() %}
     <p class="empty">No devices.</p>
     {% else %}
-    <table>
-      <thead><tr><th>Name</th><th>MAC address</th><th>IP address</th><th>Note</th></tr></thead>
-      <tbody>
-        {% for device in group.devices %}
-        <tr><td data-label="Name"><a href="/devices/{{ device.name }}">{{ device.name }}</a></td><td data-label="MAC address"><code>{{ device.mac }}</code></td><td data-label="IP address">{{ device.ip }}</td><td data-label="Note">{{ device.note }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <ul class="cards">
+      {% for device in group.devices %}
+      <li>
+        <a class="card" href="/devices/{{ device.name }}">
+          <span class="avatar" aria-hidden="true">{{ device.initial }}</span>
+          <span class="text">
+            <strong>{{ device.name }}</strong>
+            <span class="meta">{% if !device.ip.is_empty() %}{{ device.ip }} · {% endif %}<code>{{ device.mac }}</code></span>
+            {% if !device.note.is_empty() %}<span class="note">{{ device.note }}</span>{% endif %}
+          </span>
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
     {% endif %}
   </section>
   {% endfor %}
-</body>
-</html>
+</div>
+{% endblock %}

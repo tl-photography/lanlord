@@ -52,6 +52,9 @@ const SECURITY_HEADERS: [(HeaderName, &str); 9] = [
 /// Styles as a file, the Content Security Policy does not allow inline styles.
 const STYLE: &str = include_str!("../static/style.css");
 
+/// The logo, also used as icon.
+const LOGO: &str = include_str!("../assets/lanlord.svg");
+
 /// Settings and data files, shared by all requests.
 #[derive(Clone)]
 pub struct AppState {
@@ -112,6 +115,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/style.css", get(style))
+        .route("/logo.svg", get(logo))
         .route("/healthz", get(healthz))
         .layer(axum::middleware::from_fn(origin::same_origin_only))
         .with_state(state);
@@ -125,6 +129,7 @@ pub fn app(state: AppState) -> Router {
 }
 
 struct DeviceRow {
+    initial: char,
     name: String,
     mac: String,
     ip: String,
@@ -140,6 +145,7 @@ struct GroupView {
 #[derive(Template)]
 #[template(path = "index.html")]
 struct IndexPage {
+    nav: &'static str,
     groups: Vec<GroupView>,
 }
 
@@ -169,6 +175,7 @@ async fn index(State(state): State<AppState>) -> Response {
                 .iter()
                 .filter(|device| device.group == group.name)
                 .map(|device| DeviceRow {
+                    initial: device.name.chars().next().unwrap_or('?').to_ascii_uppercase(),
                     name: device.name.clone(),
                     mac: device.mac.clone(),
                     ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
@@ -183,7 +190,11 @@ async fn index(State(state): State<AppState>) -> Response {
             }
         })
         .collect();
-    match (IndexPage { groups }).render() {
+    let page = IndexPage {
+        nav: "devices",
+        groups,
+    };
+    match page.render() {
         Ok(html) => Html(html).into_response(),
         Err(error) => server_error(&error),
     }
@@ -191,6 +202,10 @@ async fn index(State(state): State<AppState>) -> Response {
 
 async fn style() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/css; charset=utf-8")], STYLE)
+}
+
+async fn logo() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "image/svg+xml")], LOGO)
 }
 
 async fn healthz() -> &'static str {

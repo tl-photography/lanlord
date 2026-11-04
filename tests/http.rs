@@ -58,8 +58,8 @@ async fn healthz_answers_ok() {
 async fn index_lists_the_devices_by_group() {
     let (status, body) = get("/").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("IoT <small>VLAN 20, 2 devices</small>"));
-    assert!(body.contains("LAN <small>VLAN 1, 0 devices</small>"));
+    assert!(body.contains(r#"IoT <span class="badge">VLAN 20</span> <span class="count">2 devices</span>"#));
+    assert!(body.contains(r#"LAN <span class="badge">VLAN 1</span> <span class="count">0 devices</span>"#));
     let alpha = body.find("alpha").unwrap();
     let zeta = body.find("zeta").unwrap();
     assert!(alpha < zeta, "devices are sorted by name");
@@ -71,8 +71,8 @@ async fn page_is_made_for_phones_too() {
     let (_, body) = get("/").await;
     assert!(body.contains(r#"name="viewport" content="width=device-width, initial-scale=1""#));
     assert!(
-        body.contains(r#"data-label="MAC address""#),
-        "labels for the card layout"
+        body.contains(r#"class="card" href="/devices/alpha""#),
+        "one card per device"
     );
 }
 

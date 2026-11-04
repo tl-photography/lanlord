@@ -37,6 +37,7 @@ struct GroupRow {
 #[derive(Template)]
 #[template(path = "groups.html")]
 struct GroupsPage {
+    nav: &'static str,
     groups: Vec<GroupRow>,
     form: GroupForm,
     error: String,
@@ -64,7 +65,13 @@ fn page(state: &AppState, form: GroupForm, error: String) -> Response {
     } else {
         StatusCode::UNPROCESSABLE_ENTITY
     };
-    match (GroupsPage { groups, form, error }).render() {
+    let page = GroupsPage {
+        nav: "groups",
+        groups,
+        form,
+        error,
+    };
+    match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
         Err(error) => server_error(&error),
     }

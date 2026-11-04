@@ -1,29 +1,22 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ title }} - lanlord</title>
-  <link rel="stylesheet" href="/style.css">
-</head>
-<body>
-  <header><h1>{{ title }}</h1><a href="/">Back to the list</a></header>
-  {% if !error.is_empty() %}
-  <p class="error" role="alert">{{ error }}</p>
-  {% endif %}
-  <form method="post" action="{{ action }}">
-    <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false"></label>
-    <label>MAC address <input name="mac" value="{{ form.mac }}" required autocapitalize="off" spellcheck="false" placeholder="aa:bb:cc:dd:ee:ff"></label>
-    <label>Group
-      <select name="group">
-        {% for group in groups %}
-        <option value="{{ group.name }}"{% if group.name == form.group %} selected{% endif %}>{{ group.label }}</option>
-        {% endfor %}
-      </select>
-    </label>
-    <label>IP address <input name="ip" value="{{ form.ip }}" inputmode="decimal" placeholder="optional"></label>
-    <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
-    <button type="submit">Save</button>
-  </form>
-</body>
-</html>
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+{% if !error.is_empty() %}
+<p class="error" role="alert">{{ error }}</p>
+{% endif %}
+<form method="post" action="{{ action }}">
+  <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false"></label>
+  <label>MAC address <input name="mac" value="{{ form.mac }}" required autocapitalize="off" spellcheck="false" placeholder="aa:bb:cc:dd:ee:ff"></label>
+  <label>Group
+    <select name="group">
+      {% for group in groups %}
+      <option value="{{ group.name }}"{% if group.name == form.group %} selected{% endif %}>{{ group.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>IP address <input name="ip" value="{{ form.ip }}" inputmode="decimal" placeholder="optional"></label>
+  <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
+  <button type="submit">Save</button>
+</form>
+{% endblock %}
