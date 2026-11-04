@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/lanlord.svg" alt="lanlord: every device needs a lease" width="400"></p>
+
 # lanlord
 
 A device list for small OpenWrt networks.

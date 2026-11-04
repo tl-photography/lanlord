@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 120" width="400" height="120" role="img" aria-labelledby="title">
+  <title id="title">lanlord: every device needs a lease</title>
+  <defs>
+    <style>
+      .line { fill: none; stroke: #0284c7; }
+      .net { fill: none; stroke: #0ea5e9; }
+      .node { fill: #0ea5e9; }
+      .lan { fill: #0284c7; }
+      .lord { fill: #0f172a; }
+      .cursor { fill: #0ea5e9; }
+      .tagline { fill: #64748b; }
+
+      @media (prefers-color-scheme: dark) {
+        .line { stroke: #38bdf8; }
+        .net { stroke: #7dd3fc; }
+        .node, .cursor { fill: #7dd3fc; }
+        .lan { fill: #38bdf8; }
+        .lord { fill: #f8fafc; }
+        .tagline { fill: #94a3b8; }
+      }
+
+      .cursor { animation: blink 1.2s steps(1) infinite; }
+      @keyframes blink { 50% { opacity: 0; } }
+      @media (prefers-reduced-motion: reduce) { .cursor { animation: none; } }
+    </style>
+  </defs>
+
+  <!-- House: roof and walls as outlines, the network inside -->
+  <g transform="translate(8, 6)">
+    <path d="M 12 56 L 54 18 L 96 56" class="line" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 22 54 L 22 92 A 6 6 0 0 0 28 98 L 80 98 A 6 6 0 0 0 86 92 L 86 54" class="line" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M 36 80 L 54 50 L 72 80 Z" class="net" stroke-width="3" stroke-linejoin="round" />
+    <circle cx="54" cy="50" r="5" class="node" />
+    <circle cx="36" cy="80" r="4.5" class="node" />
+    <circle cx="72" cy="80" r="4.5" class="node" />
+  </g>
+
+  <!-- One text, so LAN, lord and the cursor stay together in every font -->
+  <text x="124" y="66" font-family="ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace" font-size="52" letter-spacing="-1"><tspan class="lan" font-weight="800">LAN</tspan><tspan class="lord" font-weight="400">lord</tspan><tspan class="cursor" font-weight="800">_</tspan></text>
+
+  <text x="126" y="94" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="15" font-weight="500" letter-spacing="0.5" class="tagline">every device needs a lease</text>
+</svg>
