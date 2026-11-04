@@ -1,12 +1,45 @@
 //! lanlord: device list for a small OpenWrt network.
 
+use axum::http::{HeaderName, HeaderValue, header};
 use axum::{Router, response::Html, routing::get};
+use tower_http::set_header::SetResponseHeaderLayer;
+
+/// Headers on every response: no external content, no frames, no caching of device data.
+const SECURITY_HEADERS: [(HeaderName, &str); 8] = [
+    (
+        header::CONTENT_SECURITY_POLICY,
+        "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    ),
+    (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+    (header::X_FRAME_OPTIONS, "DENY"),
+    (header::REFERRER_POLICY, "no-referrer"),
+    (header::CACHE_CONTROL, "no-store"),
+    (
+        HeaderName::from_static("permissions-policy"),
+        "camera=(), microphone=(), geolocation=()",
+    ),
+    (
+        HeaderName::from_static("cross-origin-opener-policy"),
+        "same-origin",
+    ),
+    (
+        HeaderName::from_static("cross-origin-resource-policy"),
+        "same-origin",
+    ),
+];
 
 /// Routes of the web interface.
 pub fn app() -> Router {
-    Router::new()
+    let mut router = Router::new()
         .route("/", get(index))
-        .route("/healthz", get(healthz))
+        .route("/healthz", get(healthz));
+    for (name, value) in SECURITY_HEADERS {
+        router = router.layer(SetResponseHeaderLayer::overriding(
+            name,
+            HeaderValue::from_static(value),
+        ));
+    }
+    router
 }
 
 async fn index() -> Html<&'static str> {
