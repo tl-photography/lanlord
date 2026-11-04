@@ -95,6 +95,26 @@ async fn device_can_move_and_be_renamed() {
 }
 
 #[tokio::test]
+async fn move_menu_changes_only_the_device_group() {
+    let data = data();
+    let response = post(&data, "/devices/alpha/move", "group=guest").await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let list: lanlord::devices::DeviceList = toml::from_str(&devices(&data)).unwrap();
+    let moved = list.devices.iter().find(|device| device.name == "alpha").unwrap();
+    assert_eq!(moved.group, "guest");
+    assert_eq!(moved.mac, "00:00:00:00:00:01");
+    assert_eq!(moved.note, "say \"hi\"");
+}
+
+#[tokio::test]
+async fn move_menu_rejects_unknown_groups_without_writing() {
+    let data = data();
+    let response = post(&data, "/devices/alpha/move", "group=unknown").await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(devices(&data), DEVICES);
+}
+
+#[tokio::test]
 async fn invalid_input_shows_the_form_again_and_changes_nothing() {
     for (form, message) in [
         ("name=gamma&mac=nope&group=lan", "Invalid MAC address"),
@@ -147,6 +167,10 @@ async fn edit_form_shows_the_device_escaped() {
 async fn unknown_devices_are_not_found() {
     let data = data();
     assert_eq!(get(&data, "/devices/nope").await.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        post(&data, "/devices/nope/move", "group=guest").await.status(),
+        StatusCode::NOT_FOUND
+    );
     let response = post(
         &data,
         "/devices/nope",

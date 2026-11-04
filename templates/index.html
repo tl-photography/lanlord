@@ -9,14 +9,14 @@
 {% endif %}
 <div class="columns">
   {% for group in groups %}
-  <section class="group">
+  <section class="group" data-group="{{ group.name }}">
     <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.devices.len() }} {% if group.devices.len() == 1 %}device{% else %}devices{% endif %}</span></h2>
     {% if group.devices.is_empty() %}
     <p class="empty">No devices.</p>
     {% else %}
     <ul class="cards">
       {% for device in group.devices %}
-      <li>
+      <li class="device-item" data-device="{{ device.name }}" draggable="false">
         <a class="card" href="/devices/{{ device.name }}">
           <span class="avatar" aria-hidden="true">{{ device.initial }}</span>
           <span class="text">
@@ -25,6 +25,19 @@
             {% if !device.note.is_empty() %}<span class="note">{{ device.note }}</span>{% endif %}
           </span>
         </a>
+        <details class="move-menu">
+          <summary aria-label="Move {{ device.name }}">Move</summary>
+          <div class="move-options">
+            {% for target in device.move_groups %}
+            {% if target.name != device.group %}
+            <form method="post" action="/devices/{{ device.name }}/move" data-move-group="{{ target.name }}">
+              <input type="hidden" name="group" value="{{ target.name }}">
+              <button type="submit">Move to {{ target.label }}</button>
+            </form>
+            {% endif %}
+            {% endfor %}
+          </div>
+        </details>
       </li>
       {% endfor %}
     </ul>

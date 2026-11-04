@@ -68,9 +68,9 @@ code { font-size: 0.9em; }
 .brand-name b { color: #38bdf8; font-weight: 800; }
 .topbar nav { display: flex; gap: 0.25rem; overflow-x: auto; flex: 1; }
 .topbar nav a {
-  color: var(--topbar-text); text-decoration: none; padding: 0.5rem 0.8rem; border-radius: 0.4rem; white-space: nowrap; opacity: 0.85;
+  color: var(--topbar-text); text-decoration: none; padding: 0.5rem 0.8rem; border: 1px solid transparent; border-radius: 0.4rem; white-space: nowrap; opacity: 0.85;
 }
-.topbar nav a:hover { opacity: 1; background: rgba(255, 255, 255, 0.08); }
+.topbar nav a:hover { opacity: 1; border-color: var(--accent); background: rgba(255, 255, 255, 0.08); }
 .topbar nav a[aria-current="page"] { opacity: 1; background: rgba(255, 255, 255, 0.14); font-weight: 600; }
 
 .button, button {
@@ -87,13 +87,43 @@ code { font-size: 0.9em; }
 .count { margin-left: auto; font-size: 0.85rem; }
 .badge { font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 1rem; background: var(--accent-soft); color: var(--accent); }
 .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.device-item {
+  position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem; align-items: center;
+}
+.device-item.dragging { opacity: 0.55; }
+.group.drop-target { outline: 2px dashed var(--accent); outline-offset: 0.25rem; }
 .card {
   display: flex; gap: 0.8rem; align-items: center; padding: 0.75rem 0.9rem; border-radius: 0.8rem;
   background: var(--surface); border: 1px solid var(--border); box-shadow: var(--shadow);
-  color: var(--text); text-decoration: none; transition: transform 0.12s, border-color 0.12s;
+  color: var(--text); text-decoration: none; transition: border-color 0.12s;
 }
-.card:hover { transform: translateY(-1px); border-color: var(--accent); }
-@media (prefers-reduced-motion: reduce) { .card { transition: none; } .card:hover { transform: none; } }
+.card:hover { border-color: var(--accent); }
+@media (prefers-reduced-motion: reduce) { .card { transition: none; } }
+.move-menu { position: relative; display: none; }
+.move-menu[open] { display: block; }
+.move-menu summary {
+  cursor: pointer; list-style: none; padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 0.45rem;
+  color: var(--text); white-space: nowrap;
+}
+.move-menu summary::-webkit-details-marker { display: none; }
+.move-menu summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.move-options {
+  position: absolute; z-index: 2; top: calc(100% + 0.3rem); right: 0; min-width: max-content; display: grid; gap: 0.25rem;
+  padding: 0.4rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--surface); box-shadow: var(--shadow);
+}
+.move-options form { display: block; max-width: none; }
+.move-options button {
+  display: block; width: 100%; padding: 0.45rem 0.6rem; border-color: transparent; background: transparent; color: var(--text);
+  text-align: left; font-weight: normal;
+}
+.move-options button:hover { border-color: var(--border); background: var(--field); }
+.plugin-search { max-width: 32rem; margin-bottom: 1rem; }
+.plugin-entry { padding: 1rem 0; border-top: 1px solid var(--border); }
+.plugin-entry h2 { margin: 0; font-size: 1.15rem; }
+.plugin-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+.plugin-toggle { display: flex; align-items: center; gap: 0.4rem; }
+.plugin-toggle input { width: auto; }
+.plugin-config { margin-top: 0.8rem; }
 .avatar {
   flex: 0 0 2.4rem; height: 2.4rem; display: grid; place-items: center; border-radius: 0.6rem;
   background: var(--accent-soft); color: var(--accent); font-weight: 700;
@@ -119,7 +149,7 @@ input, select {
 }
 /* The open list of a select uses these colors in most browsers. */
 option { background: var(--field); color: var(--text); }
-input:focus, select:focus, button:focus, a:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+input:focus, select:focus, button:focus, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .notice { padding: 0.7rem 0.9rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--surface); box-shadow: var(--shadow); }
 .error { padding: 0.7rem 0.9rem; border: 1px solid var(--error); border-radius: 0.6rem; background: var(--error-surface); color: var(--error); }
 

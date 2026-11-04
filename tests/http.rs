@@ -74,6 +74,10 @@ async fn page_is_made_for_phones_too() {
         body.contains(r#"class="card" href="/devices/alpha""#),
         "one card per device"
     );
+    assert!(body.contains(r#"class="move-menu""#));
+    assert!(body.contains(r#"data-move-group="lan""#));
+    assert!(body.contains(r#"<script src="/app.js" defer></script>"#));
+    assert!(body.contains(r#"<link rel="icon" href="/favicon.svg" type="image/svg+xml">"#));
 }
 
 #[tokio::test]
@@ -94,6 +98,13 @@ async fn style_sheet_is_served_as_css() {
     let response = send("/style.css").await;
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()["content-type"], "text/css; charset=utf-8");
+    let css = response.into_body().collect().await.unwrap().to_bytes();
+    let css = String::from_utf8(css.to_vec()).unwrap();
+    assert!(css.contains(".move-menu { position: relative; display: none; }"));
+    assert!(css.contains(".move-menu[open] { display: block; }"));
+    assert!(css.contains("a:focus-visible"));
+    assert!(css.contains(".topbar nav a:hover { opacity: 1; border-color: var(--accent);"));
+    assert!(!css.contains("transform: translateY(-1px)"));
 }
 
 #[tokio::test]
@@ -142,7 +153,7 @@ async fn starts_without_groups_and_devices() {
 
 #[tokio::test]
 async fn every_response_has_the_security_headers() {
-    for path in ["/", "/healthz", "/style.css", "/favicon.svg", "/nope"] {
+    for path in ["/", "/healthz", "/style.css", "/app.js", "/favicon.svg", "/nope"] {
         let response = send(path).await;
         let headers = response.headers();
         let csp = headers["content-security-policy"].to_str().unwrap();

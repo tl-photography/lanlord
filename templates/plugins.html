@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Plugins{% endblock %}
+{% block content %}
+<h1>Plugins</h1>
+{% if !error.is_empty() %}
+<p class="error" role="alert">{{ error }}</p>
+{% endif %}
+<label class="plugin-search">Search plugins <input id="plugin-search" type="search" autocomplete="off"></label>
+{% if plugins.is_empty() %}
+<p class="notice">No plugins configured.</p>
+{% else %}
+<div class="plugin-list">
+  {% for plugin in plugins %}
+  <section class="plugin-entry" data-search="{{ plugin.search }}">
+    <div class="plugin-heading">
+      <h2>{{ plugin.name }}</h2>
+      <span class="badge">{{ plugin.title }}</span>
+      <form class="plugin-toggle" method="post" action="/plugins/{{ plugin.name }}/enabled">
+        <label><input type="checkbox" name="enabled" value="true"{% if plugin.enabled %} checked{% endif %}> Enabled</label>
+        <noscript><button type="submit">Save</button></noscript>
+      </form>
+    </div>
+    <details class="plugin-config">
+      <summary>Configuration</summary>
+      <form method="post" action="/plugins/{{ plugin.name }}">
+        <label>Lease file path <input name="path" value="{{ plugin.path }}" required></label>
+        <button type="submit">Save configuration</button>
+      </form>
+    </details>
+  </section>
+  {% endfor %}
+</div>
+{% endif %}
+<h2>Add plugin</h2>
+<form method="post" action="/plugins">
+  <label>Type
+    <select name="kind" required>
+      <option value="leases-file"{% if form.kind == "leases-file" %} selected{% endif %}>DHCP leases file</option>
+    </select>
+  </label>
+  <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="router"></label>
+  <label>Lease file path <input name="path" value="{{ form.path }}" required placeholder="/data/dhcp.leases"></label>
+  <button type="submit">Add plugin</button>
+</form>
+{% endblock %}

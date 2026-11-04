@@ -6,6 +6,7 @@ pub mod devices;
 mod edit;
 mod groups;
 pub mod origin;
+mod plugin_ui;
 pub mod plugins;
 
 use std::path::{Path, PathBuf};
@@ -52,6 +53,9 @@ const SECURITY_HEADERS: [(HeaderName, &str); 9] = [
 /// Styles as a file, the Content Security Policy does not allow inline styles.
 const STYLE: &str = include_str!("../static/style.css");
 
+/// Drag and drop and the long-press menu; everything also works without it.
+const SCRIPT: &str = include_str!("../static/app.js");
+
 /// The logo, also used as icon.
 const LOGO: &str = include_str!("../assets/lanlord.svg");
 
@@ -65,7 +69,8 @@ pub struct AppState {
 }
 
 struct Inner {
-    plugins: Vec<Arc<dyn plugins::Plugin>>,
+    plugins: RwLock<Vec<Arc<dyn plugins::Plugin>>>,
+    plugins_path: PathBuf,
     groups: RwLock<Config>,
     groups_path: PathBuf,
     devices_path: PathBuf,
@@ -85,10 +90,12 @@ impl AppState {
         let groups = Config::load(&groups_path)?;
         let devices_path = data_dir.join("devices.toml");
         DeviceList::load(&devices_path, &groups.group_names())?;
-        let plugins = plugins::load(&data_dir.join("lanlord.toml"))?;
+        let plugins_path = data_dir.join("lanlord.toml");
+        let plugins = plugins::load(&plugins_path)?;
         Ok(Self {
             inner: Arc::new(Inner {
-                plugins,
+                plugins: RwLock::new(plugins),
+                plugins_path,
                 groups: RwLock::new(groups),
                 groups_path,
                 devices_path,
@@ -117,12 +124,17 @@ pub fn app(state: AppState) -> Router {
         .route("/devices", axum::routing::post(edit::create))
         .route("/devices/new", get(edit::new_form))
         .route("/devices/{name}", get(edit::edit_form).post(edit::update))
+        .route("/devices/{name}/move", axum::routing::post(edit::move_device))
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
+        .route("/plugins", get(plugin_ui::list).post(plugin_ui::create))
+        .route("/plugins/{name}/enabled", axum::routing::post(plugin_ui::toggle))
+        .route("/plugins/{name}", axum::routing::post(plugin_ui::update))
         .route("/style.css", get(style))
         .route("/logo.svg", get(logo))
         .route("/favicon.svg", get(favicon))
+        .route("/app.js", get(script))
         .route("/healthz", get(healthz))
         .layer(axum::middleware::from_fn(origin::same_origin_only))
         .with_state(state);
@@ -138,12 +150,21 @@ pub fn app(state: AppState) -> Router {
 struct DeviceRow {
     initial: char,
     name: String,
+    group: String,
     mac: String,
     ip: String,
     note: String,
+    move_groups: Vec<MoveGroup>,
+}
+
+#[derive(Clone)]
+struct MoveGroup {
+    name: String,
+    label: String,
 }
 
 struct GroupView {
+    name: String,
     label: String,
     vlan: u16,
     devices: Vec<DeviceRow>,
@@ -173,6 +194,15 @@ async fn index(State(state): State<AppState>) -> Response {
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
+    let config = state.groups();
+    let move_groups: Vec<MoveGroup> = config
+        .groups
+        .iter()
+        .map(|group| MoveGroup {
+            name: group.name.clone(),
+            label: group.title().to_owned(),
+        })
+        .collect();
     let groups = state
         .groups()
         .groups
@@ -185,23 +215,30 @@ async fn index(State(state): State<AppState>) -> Response {
                 .map(|device| DeviceRow {
                     initial: device.name.chars().next().unwrap_or('?').to_ascii_uppercase(),
                     name: device.name.clone(),
+                    group: device.group.clone(),
                     mac: device.mac.clone(),
                     ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
                     note: device.note.clone(),
+                    move_groups: move_groups.clone(),
                 })
                 .collect();
             devices.sort_by_key(|device| device.name.to_ascii_lowercase());
             GroupView {
+                name: group.name.clone(),
                 label: group.title().to_owned(),
                 vlan: group.vlan,
                 devices,
             }
         })
         .collect();
+    let has_targets = state.inner.plugins.read().map_or_else(
+        |poisoned| poisoned.into_inner().iter().any(|plugin| plugin.is_target()),
+        |plugins| plugins.iter().any(|plugin| plugin.is_target()),
+    );
     let page = IndexPage {
         nav: "devices",
         groups,
-        has_targets: state.inner.plugins.iter().any(|plugin| plugin.is_target()),
+        has_targets,
     };
     match page.render() {
         Ok(html) => Html(html).into_response(),
@@ -211,6 +248,10 @@ async fn index(State(state): State<AppState>) -> Response {
 
 async fn style() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/css; charset=utf-8")], STYLE)
+}
+
+async fn script() -> impl IntoResponse {
+    ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], SCRIPT)
 }
 
 async fn logo() -> impl IntoResponse {

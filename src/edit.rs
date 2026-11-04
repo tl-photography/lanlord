@@ -151,6 +151,32 @@ pub async fn update(
     save(&state, Some(&name), form)
 }
 
+/// Field of the move menu and of drag and drop.
+#[derive(Debug, Deserialize)]
+pub struct MoveForm {
+    group: String,
+}
+
+/// Moves a device to another group, keeps everything else.
+pub async fn move_device(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Form(target): Form<MoveForm>,
+) -> Response {
+    let list = match state.devices() {
+        Ok(list) => list,
+        Err(error) => return server_error(&error),
+    };
+    let Some(device) = list.devices.iter().find(|device| device.name == name) else {
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
+    };
+    let form = DeviceForm {
+        group: target.group,
+        ..DeviceForm::from_device(device)
+    };
+    save(&state, Some(&name), form)
+}
+
 fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response {
     let device = match form.to_device() {
         Ok(device) => device,
