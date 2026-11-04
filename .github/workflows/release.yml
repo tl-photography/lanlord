@@ -15,6 +15,10 @@ jobs:
   publish:
     needs: checks
     runs-on: ubuntu-latest
+    permissions:
+      # contents: write attaches the SBOM files to the release.
+      contents: write
+      packages: write
     steps:
       - name: Check out release
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -60,3 +64,19 @@ jobs:
           provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Attach the SBOM of the image to the release
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+        with:
+          image: ghcr.io/${{ github.repository }}:${{ github.event.release.tag_name }}
+          format: spdx-json
+          artifact-name: lanlord-${{ github.event.release.tag_name }}-image.spdx.json
+          upload-release-assets: true
+
+      - name: Attach the SBOM of the Rust dependencies to the release
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: lanlord-${{ github.event.release.tag_name }}-dependencies.cdx.json
+          upload-release-assets: true
