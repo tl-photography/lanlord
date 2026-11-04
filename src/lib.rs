@@ -6,6 +6,7 @@ pub mod devices;
 mod edit;
 mod groups;
 pub mod origin;
+pub mod plugins;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
