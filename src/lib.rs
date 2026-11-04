@@ -62,6 +62,7 @@ pub struct AppState {
 }
 
 struct Inner {
+    plugins: Vec<Arc<dyn plugins::Plugin>>,
     groups: RwLock<Config>,
     groups_path: PathBuf,
     devices_path: PathBuf,
@@ -70,8 +71,8 @@ struct Inner {
 }
 
 impl AppState {
-    /// Reads `groups.toml` and checks `devices.toml` in the data directory. Both may be missing: lanlord then
-    /// starts without groups and devices.
+    /// Reads `groups.toml`, `devices.toml` and the plugins in `lanlord.toml` from the data directory. All may be
+    /// missing: lanlord then starts without groups, devices and plugins.
     ///
     /// # Errors
     ///
@@ -81,8 +82,10 @@ impl AppState {
         let groups = Config::load(&groups_path)?;
         let devices_path = data_dir.join("devices.toml");
         DeviceList::load(&devices_path, &groups.group_names())?;
+        let plugins = plugins::load(&data_dir.join("lanlord.toml"))?;
         Ok(Self {
             inner: Arc::new(Inner {
+                plugins,
                 groups: RwLock::new(groups),
                 groups_path,
                 devices_path,
@@ -147,6 +150,7 @@ struct GroupView {
 struct IndexPage {
     nav: &'static str,
     groups: Vec<GroupView>,
+    has_targets: bool,
 }
 
 impl IndexPage {
@@ -193,6 +197,7 @@ async fn index(State(state): State<AppState>) -> Response {
     let page = IndexPage {
         nav: "devices",
         groups,
+        has_targets: state.inner.plugins.iter().any(|plugin| plugin.is_target()),
     };
     match page.render() {
         Ok(html) => Html(html).into_response(),

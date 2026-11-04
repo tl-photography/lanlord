@@ -26,6 +26,10 @@ pub trait Plugin: Send + Sync {
     fn kind(&self) -> &'static str;
     /// Reads what the plugin sees and keeps.
     fn observe(&self) -> BoxFuture<'_, Result<Observation, String>>;
+    /// Whether the plugin writes changes to the network (a target), not only reports them.
+    fn is_target(&self) -> bool {
+        false
+    }
 }
 
 /// The `[[plugin]]` tables of `lanlord.toml`; their fields depend on the type.

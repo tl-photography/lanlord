@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Devices{% endblock %}
 {% block content %}
+{% if has_groups() && !has_targets %}
+<p class="notice">Changes are only saved in lanlord. No router or Pi-hole is connected yet, nothing is applied to the network.</p>
+{% endif %}
 {% if !has_groups() %}
 <p class="notice">No groups yet. <a href="/groups">Set up the groups</a> first, every device belongs to one.</p>
 {% endif %}

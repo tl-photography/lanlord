@@ -77,6 +77,12 @@ async fn page_is_made_for_phones_too() {
 }
 
 #[tokio::test]
+async fn without_targets_the_page_says_nothing_is_applied() {
+    let (_, body) = get("/").await;
+    assert!(body.contains("nothing is applied to the network"));
+}
+
+#[tokio::test]
 async fn notes_are_escaped() {
     let (_, body) = get("/").await;
     assert!(!body.contains("<script>"));
