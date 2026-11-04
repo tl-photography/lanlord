@@ -2,6 +2,7 @@
 
 pub mod config;
 pub mod devices;
+pub mod origin;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -84,6 +85,7 @@ pub fn app(state: AppState) -> Router {
         .route("/", get(index))
         .route("/style.css", get(style))
         .route("/healthz", get(healthz))
+        .layer(axum::middleware::from_fn(origin::same_origin_only))
         .with_state(state);
     for (name, value) in SECURITY_HEADERS {
         router = router.layer(SetResponseHeaderLayer::overriding(
