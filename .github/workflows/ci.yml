@@ -103,6 +103,26 @@ jobs:
       - name: Run the container security tests
         run: tests/container.sh lanlord:ci
 
+      - name: Start the container for the web scan
+        run: |
+          docker run -d --name lanlord-zap --read-only --cap-drop ALL \
+            --security-opt no-new-privileges -p 127.0.0.1:8080:8080 lanlord:ci
+          for _ in $(seq 30); do
+            docker exec lanlord-zap /lanlord healthcheck && exit 0
+            sleep 1
+          done
+          exit 1
+
+      # Passive scan of the running web interface; accepted findings are in .zap/rules.tsv.
+      - name: Scan the web interface with ZAP
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25
+        with:
+          target: http://127.0.0.1:8080/
+          rules_file_name: .zap/rules.tsv
+          fail_action: true
+          allow_issue_writing: false
+          artifact_name: zap-report
+
       - name: Scan the image for vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
