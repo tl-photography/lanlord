@@ -111,7 +111,8 @@ Install the hooks once with `pre-commit install`.
 They check formatting and lints, scan for secrets and lint the Dockerfile, the workflows and shell scripts.
 Without a local Rust installation, pre-commit installs the pinned toolchain itself.
 
-CI runs on every push and pull request:
+CI runs on every push and pull request, but only the checks the change needs. Releases and manual runs
+check everything:
 
 | Job                   | Checks                                                                                  |
 | --------------------- | --------------------------------------------------------------------------------------- |

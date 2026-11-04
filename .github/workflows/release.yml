@@ -7,10 +7,14 @@ on:
 permissions:
   contents: read
   packages: write
+  # Needed by the path filter in ci.yml, which may not ask for more than this workflow allows.
+  pull-requests: read
 
 jobs:
   checks:
     uses: ./.github/workflows/ci.yml
+    with:
+      full: true
 
   publish:
     needs: checks

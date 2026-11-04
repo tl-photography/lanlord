@@ -3,7 +3,13 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
   workflow_call:
+    inputs:
+      full:
+        description: Run every check, whatever changed
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -12,8 +18,68 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  # Only the checks a change needs; releases and manual runs check everything.
+  changes:
+    name: Find the checks to run
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      rust: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.rust == 'true' }}
+      dependencies: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.dependencies == 'true' }}
+      image: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.image == 'true' }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Decide whether to run everything
+        id: full
+        env:
+          FULL: ${{ inputs.full == true || github.event_name == 'workflow_dispatch' || github.event_name == 'release' }}
+        run: echo "all=$FULL" >> "$GITHUB_OUTPUT"
+
+      - name: List the changed areas
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+        with:
+          filters: |
+            rust:
+              - 'src/**'
+              - 'tests/**.rs'
+              - 'templates/**'
+              - 'static/**'
+              - 'examples/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'rustfmt.toml'
+              - 'clippy.toml'
+              - '.github/workflows/**'
+            dependencies:
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'deny.toml'
+              - '.github/workflows/**'
+            image:
+              - 'src/**'
+              - 'templates/**'
+              - 'static/**'
+              - 'examples/**'
+              - 'Cargo.toml'
+              - 'Cargo.lock'
+              - 'rust-toolchain.toml'
+              - 'Dockerfile'
+              - '.dockerignore'
+              - '.hadolint.yaml'
+              - 'tests/container.sh'
+              - '.zap/**'
+              - '.github/workflows/**'
+
   rust:
     name: Format, lint and test
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -39,6 +105,8 @@ jobs:
 
   coverage:
     name: Test coverage
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -82,6 +150,8 @@ jobs:
 
   dependencies:
     name: Check dependencies (advisories, licenses, sources)
+    needs: changes
+    if: needs.changes.outputs.dependencies == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -124,7 +194,11 @@ jobs:
 
   docker:
     name: Build, smoke-test and scan the image
-    needs: rust
+    needs: [changes, rust]
+    # Also when only the Dockerfile changed and the Rust job was skipped, but not after it failed.
+    if: >-
+      !cancelled() && needs.changes.outputs.image == 'true'
+      && needs.rust.result != 'failure'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
