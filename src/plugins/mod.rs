@@ -10,7 +10,7 @@ use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::compare::Observation;
 use crate::devices::{Error, is_valid_name};
@@ -33,11 +33,12 @@ pub trait Plugin: Send + Sync {
 }
 
 /// The `[[plugin]]` tables of `lanlord.toml`; their fields depend on the type.
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
-struct Settings {
+pub struct Settings {
+    /// Configured plugin instances.
     #[serde(default, rename = "plugin")]
-    plugins: Vec<toml::Table>,
+    pub plugins: Vec<toml::Table>,
 }
 
 /// Reads the plugins from `lanlord.toml`. A missing file means no plugins.
@@ -46,16 +47,38 @@ struct Settings {
 ///
 /// If the file is invalid, a type is unknown, a plugin's settings are wrong or a name is used twice.
 pub fn load(path: &Path) -> Result<Vec<Arc<dyn Plugin>>, Error> {
+    build(read_settings(path)?.plugins)
+}
+
+/// Reads the configured plugin tables. A missing file means no plugins.
+///
+/// # Errors
+///
+/// If the file cannot be read or is not valid TOML.
+pub fn read_settings(path: &Path) -> Result<Settings, Error> {
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(Error::Parse(format!("{}: {error}", path.display()))),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Settings::default()),
+        Err(error) => return Err(Error::Io(error)),
     };
-    let settings: Settings =
-        toml::from_str(&content).map_err(|error| Error::Parse(format!("{}: {error}", path.display())))?;
+    toml::from_str(&content).map_err(|error| Error::Parse(format!("{}: {error}", path.display())))
+}
+
+/// Validates and atomically saves plugin settings with owner-only permissions.
+///
+/// # Errors
+///
+/// If a plugin is invalid or the file cannot be written.
+pub fn save_settings(path: &Path, settings: &Settings) -> Result<(), Error> {
+    build(settings.plugins.clone())?;
+    let content = toml::to_string_pretty(settings).map_err(|error| Error::Invalid(error.to_string()))?;
+    crate::devices::write_private(path, &content)
+}
+
+fn build(tables: Vec<toml::Table>) -> Result<Vec<Arc<dyn Plugin>>, Error> {
     let mut names = HashSet::new();
     let mut plugins = Vec::new();
-    for mut table in settings.plugins {
+    for mut table in tables {
         let kind = take_string(&mut table, "type")?;
         let name = take_string(&mut table, "name")?;
         if !is_valid_name(&name) {
@@ -64,11 +87,14 @@ pub fn load(path: &Path) -> Result<Vec<Arc<dyn Plugin>>, Error> {
         if !names.insert(name.clone()) {
             return Err(Error::Invalid(format!("duplicate plugin name: {name}")));
         }
+        let enabled = take_bool(&mut table, "enabled")?;
         let plugin: Arc<dyn Plugin> = match kind.as_str() {
             "leases-file" => Arc::new(leases_file::LeasesFile::new(name, table)?),
             other => return Err(Error::Invalid(format!("{name}: unknown plugin type {other}"))),
         };
-        plugins.push(plugin);
+        if enabled {
+            plugins.push(plugin);
+        }
     }
     Ok(plugins)
 }
@@ -78,6 +104,14 @@ fn take_string(table: &mut toml::Table, key: &str) -> Result<String, Error> {
         Some(toml::Value::String(value)) => Ok(value),
         Some(_) => Err(Error::Invalid(format!("plugin field {key} must be text"))),
         None => Err(Error::Invalid(format!("plugin without {key}"))),
+    }
+}
+
+fn take_bool(table: &mut toml::Table, key: &str) -> Result<bool, Error> {
+    match table.remove(key) {
+        Some(toml::Value::Boolean(value)) => Ok(value),
+        Some(_) => Err(Error::Invalid(format!("plugin field {key} must be a boolean"))),
+        None => Ok(true),
     }
 }
 
@@ -119,6 +153,34 @@ mod tests {
     }
 
     #[test]
+    fn disabled_plugins_are_not_loaded() {
+        let plugins = load_text(
+            "[[plugin]]\ntype = \"leases-file\"\nname = \"router\"\nenabled = false\npath = \"/data/dhcp.leases\"\n",
+        )
+        .unwrap();
+        assert!(plugins.is_empty());
+    }
+
+    #[test]
+    fn settings_round_trip_with_private_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("lanlord.toml");
+        let settings = Settings {
+            plugins: vec![toml::from_str(
+                "type = \"leases-file\"\nname = \"router\"\nenabled = false\npath = \"/data/dhcp.leases\"\n",
+            )
+            .unwrap()],
+        };
+
+        save_settings(&path, &settings).unwrap();
+
+        assert_eq!(read_settings(&path).unwrap().plugins, settings.plugins);
+        assert_eq!(fs::metadata(path).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+
+    #[test]
     fn invalid_plugin_settings_are_rejected() {
         for (text, reason) in [
             ("[[plugin]]\ntype = \"telepathy\"\nname = \"a\"\n", "unknown type"),
@@ -135,6 +197,10 @@ mod tests {
             (
                 "[[plugin]]\ntype = \"leases-file\"\nname = \"a\"\npath = \"x\"\nport = 1\n",
                 "unknown field",
+            ),
+            (
+                "[[plugin]]\ntype = \"leases-file\"\nname = \"a\"\nenabled = \"no\"\npath = \"x\"\n",
+                "enabled must be boolean",
             ),
             (
                 "[[plugin]]\ntype = \"leases-file\"\nname = \"a\"\npath = \"x\"\n\
