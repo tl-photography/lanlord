@@ -52,15 +52,15 @@ fi
 docker run -d --name "$name" --read-only --cap-drop ALL --security-opt no-new-privileges \
     -p "127.0.0.1:$port:8080" "$image" > /dev/null
 
-healthy=false
-for _ in $(seq 30); do
-    if docker exec "$name" /lanlord healthcheck; then
-        healthy=true
-        break
-    fi
-    sleep 1
-done
-if $healthy; then
+wait_healthy() {
+    for _ in $(seq 30); do
+        docker exec "$1" /lanlord healthcheck && return 0
+        sleep 1
+    done
+    return 1
+}
+
+if wait_healthy "$name"; then
     pass "starts read-only, without capabilities and new privileges"
 else
     fail "starts read-only, without capabilities and new privileges"
@@ -83,6 +83,16 @@ if [ "$duration" -le 3 ] && [ "$exit_code" -eq 0 ]; then
     pass "stops on SIGTERM within 3 s with exit code 0"
 else
     fail "stops on SIGTERM within 3 s with exit code 0 (${duration} s, exit $exit_code)"
+fi
+
+# Like docker run --user or PUID/PGID in compose files: no passwd entry for this uid.
+docker rm "$name" > /dev/null
+docker run -d --name "$name" --read-only --cap-drop ALL --security-opt no-new-privileges \
+    --user 12345:12345 "$image" > /dev/null
+if wait_healthy "$name"; then
+    pass "runs as an arbitrary uid:gid"
+else
+    fail "runs as an arbitrary uid:gid"
 fi
 
 if [ "$failed" -ne 0 ]; then
