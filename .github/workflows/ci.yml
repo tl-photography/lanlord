@@ -37,6 +37,49 @@ jobs:
       - name: Test
         run: cargo test --locked
 
+  coverage:
+    name: Test coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: 1.99.1
+          components: llvm-tools-preview
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b
+        with:
+          tool: cargo-llvm-cov@0.9.1
+
+      # Targets and the exclusion of src/main.rs are explained in TESTING.md.
+      - name: Measure coverage
+        run: >-
+          cargo llvm-cov --locked --ignore-filename-regex 'src/main\.rs'
+          --fail-under-lines 90 --fail-under-regions 90 --lcov --output-path lcov.info
+
+      - name: Show the coverage summary
+        if: always()
+        run: |
+          {
+            echo '```'
+            cargo llvm-cov report --ignore-filename-regex 'src/main\.rs' --summary-only
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the coverage report
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: coverage-lcov
+          path: lcov.info
+
   dependencies:
     name: Check dependencies (advisories, licenses, sources)
     runs-on: ubuntu-latest
