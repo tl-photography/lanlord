@@ -1,4 +1,4 @@
-//! Plugin `leases-file`: reads a dnsmasq lease file, as OpenWrt (`/tmp/dhcp.leases`) and Pi-hole write it, and
+//! Plugin `leases-file`: reads a dnsmasq lease file, as `OpenWrt` (`/tmp/dhcp.leases`) and Pi-hole write it, and
 //! reports the devices in it as seen.
 
 use std::net::Ipv4Addr;

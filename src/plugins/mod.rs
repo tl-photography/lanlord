@@ -90,6 +90,8 @@ fn settings<T: serde::de::DeserializeOwned>(name: &str, table: toml::Table) -> R
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::unwrap_used)]
+
     use super::*;
 
     fn load_text(text: &str) -> Result<Vec<Arc<dyn Plugin>>, Error> {

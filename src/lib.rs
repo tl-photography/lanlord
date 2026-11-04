@@ -1,4 +1,4 @@
-//! lanlord: device list for a small OpenWrt network.
+//! lanlord: device list for a small `OpenWrt` network.
 
 pub mod compare;
 pub mod config;
