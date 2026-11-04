@@ -15,8 +15,15 @@ fail() {
     failed=1
 }
 
+# Data directory with the example settings, readable for any uid.
+data=$(mktemp -d)
+cp "$(dirname "$0")/../examples/lanlord.toml" "$data/lanlord.toml"
+chmod 755 "$data"
+chmod 644 "$data/lanlord.toml"
+
 cleanup() {
     docker rm -f "$name" > /dev/null 2>&1 || true
+    rm -rf "$data"
 }
 trap cleanup EXIT
 
@@ -50,7 +57,7 @@ else
 fi
 
 docker run -d --name "$name" --read-only --cap-drop ALL --security-opt no-new-privileges \
-    -p "127.0.0.1:$port:8080" "$image" > /dev/null
+    -v "$data:/data:ro" -p "127.0.0.1:$port:8080" "$image" > /dev/null
 
 wait_healthy() {
     for _ in $(seq 30); do
@@ -88,7 +95,7 @@ fi
 # Like docker run --user or PUID/PGID in compose files: no passwd entry for this uid.
 docker rm "$name" > /dev/null
 docker run -d --name "$name" --read-only --cap-drop ALL --security-opt no-new-privileges \
-    --user 12345:12345 "$image" > /dev/null
+    -v "$data:/data:ro" --user 12345:12345 "$image" > /dev/null
 if wait_healthy "$name"; then
     pass "runs as an arbitrary uid:gid"
 else

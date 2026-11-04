@@ -8,6 +8,7 @@ repository = "https://github.com/tl-photography/lanlord"
 publish = false
 
 [dependencies]
+askama = "0.16.1"
 axum = "0.8.9"
 serde = { version = "1.0.229", features = ["derive"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "signal"] }

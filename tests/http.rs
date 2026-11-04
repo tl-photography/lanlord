@@ -2,16 +2,48 @@
 
 #![allow(clippy::unwrap_used)]
 
+use std::path::Path;
+
+use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use http_body_util::BodyExt;
+use tempfile::TempDir;
 use tower::ServiceExt;
 
-async fn get(path: &str) -> (StatusCode, String) {
-    let response = lanlord::app()
-        .oneshot(Request::get(path).body(Body::empty()).unwrap())
+const DEVICES: &str = r#"
+[[device]]
+name = "zeta"
+mac = "00:00:00:00:00:02"
+group = "iot"
+ip = "192.0.2.20"
+note = "<script>alert(1)</script>"
+
+[[device]]
+name = "alpha"
+mac = "00:00:00:00:00:01"
+group = "iot"
+"#;
+
+/// A data directory with the example settings and two devices; kept alive as long as the router.
+fn app() -> (TempDir, Router) {
+    let data = tempfile::tempdir().unwrap();
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/lanlord.toml");
+    std::fs::copy(example, data.path().join("lanlord.toml")).unwrap();
+    std::fs::write(data.path().join("devices.toml"), DEVICES).unwrap();
+    let state = lanlord::AppState::load(data.path()).unwrap();
+    (data, lanlord::app(state))
+}
+
+async fn send(path: &str) -> axum::response::Response {
+    let (_data, app) = app();
+    app.oneshot(Request::get(path).body(Body::empty()).unwrap())
         .await
-        .unwrap();
+        .unwrap()
+}
+
+async fn get(path: &str) -> (StatusCode, String) {
+    let response = send(path).await;
     let status = response.status();
     let body = response.into_body().collect().await.unwrap().to_bytes();
     (status, String::from_utf8(body.to_vec()).unwrap())
@@ -23,10 +55,39 @@ async fn healthz_answers_ok() {
 }
 
 #[tokio::test]
-async fn index_shows_the_name() {
+async fn index_lists_the_devices_by_group() {
     let (status, body) = get("/").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("<h1>lanlord</h1>"));
+    assert!(body.contains("IoT <small>VLAN 20, 2 devices</small>"));
+    assert!(body.contains("LAN <small>VLAN 1, 0 devices</small>"));
+    let alpha = body.find("alpha").unwrap();
+    let zeta = body.find("zeta").unwrap();
+    assert!(alpha < zeta, "devices are sorted by name");
+    assert!(body.contains("192.0.2.20"));
+}
+
+#[tokio::test]
+async fn page_is_made_for_phones_too() {
+    let (_, body) = get("/").await;
+    assert!(body.contains(r#"name="viewport" content="width=device-width, initial-scale=1""#));
+    assert!(
+        body.contains(r#"data-label="MAC address""#),
+        "labels for the card layout"
+    );
+}
+
+#[tokio::test]
+async fn notes_are_escaped() {
+    let (_, body) = get("/").await;
+    assert!(!body.contains("<script>"));
+    assert!(body.contains("&#60;script&#62;") || body.contains("&lt;script&gt;"));
+}
+
+#[tokio::test]
+async fn style_sheet_is_served_as_css() {
+    let response = send("/style.css").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "text/css; charset=utf-8");
 }
 
 #[tokio::test]
@@ -35,12 +96,26 @@ async fn unknown_path_is_not_found() {
 }
 
 #[tokio::test]
+async fn invalid_settings_or_devices_stop_the_start() {
+    let data = tempfile::tempdir().unwrap();
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/lanlord.toml");
+    std::fs::copy(example, data.path().join("lanlord.toml")).unwrap();
+    std::fs::write(
+        data.path().join("devices.toml"),
+        DEVICES.replace("\"iot\"", "\"office\""),
+    )
+    .unwrap();
+    assert!(lanlord::AppState::load(data.path()).is_err(), "unknown group");
+    assert!(
+        lanlord::AppState::load(&data.path().join("missing")).is_err(),
+        "no settings"
+    );
+}
+
+#[tokio::test]
 async fn every_response_has_the_security_headers() {
-    for path in ["/", "/healthz", "/nope"] {
-        let response = lanlord::app()
-            .oneshot(Request::get(path).body(Body::empty()).unwrap())
-            .await
-            .unwrap();
+    for path in ["/", "/healthz", "/style.css", "/nope"] {
+        let response = send(path).await;
         let headers = response.headers();
         let csp = headers["content-security-policy"].to_str().unwrap();
         assert!(csp.contains("default-src 'self'"), "{path}: {csp}");

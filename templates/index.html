@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>lanlord</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <h1>lanlord</h1>
+  {% for group in groups %}
+  <section>
+    <h2>{{ group.label }} <small>VLAN {{ group.vlan }}, {{ group.devices.len() }} devices</small></h2>
+    {% if group.devices.is_empty() %}
+    <p class="empty">No devices.</p>
+    {% else %}
+    <table>
+      <thead><tr><th>Name</th><th>MAC address</th><th>IP address</th><th>Note</th></tr></thead>
+      <tbody>
+        {% for device in group.devices %}
+        <tr><td data-label="Name">{{ device.name }}</td><td data-label="MAC address"><code>{{ device.mac }}</code></td><td data-label="IP address">{{ device.ip }}</td><td data-label="Note">{{ device.note }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+  {% endfor %}
+</body>
+</html>

@@ -39,7 +39,8 @@ impl Config {
     ///
     /// If the file cannot be read, is not valid TOML, or the groups are invalid.
     pub fn load(path: &Path) -> Result<Self, Error> {
-        let content = fs::read_to_string(path)?;
+        let content =
+            fs::read_to_string(path).map_err(|error| Error::Parse(format!("{}: {error}", path.display())))?;
         let config: Self =
             toml::from_str(&content).map_err(|error| Error::Parse(format!("{}: {error}", path.display())))?;
         config.validate()?;

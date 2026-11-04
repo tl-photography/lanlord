@@ -6,6 +6,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 const DEFAULT_LISTEN: &str = "0.0.0.0:8080";
+const DEFAULT_DATA: &str = "/data";
 
 fn listen_address() -> String {
     std::env::var("LANLORD_LISTEN").unwrap_or_else(|_| DEFAULT_LISTEN.to_owned())
@@ -57,6 +58,14 @@ async fn main() -> ExitCode {
     }
 
     tracing_subscriber::fmt::init();
+    let data_dir = std::env::var("LANLORD_DATA").unwrap_or_else(|_| DEFAULT_DATA.to_owned());
+    let state = match lanlord::AppState::load(std::path::Path::new(&data_dir)) {
+        Ok(state) => state,
+        Err(error) => {
+            tracing::error!("cannot start: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     let listen = listen_address();
     let listener = match tokio::net::TcpListener::bind(&listen).await {
         Ok(listener) => listener,
@@ -66,7 +75,7 @@ async fn main() -> ExitCode {
         }
     };
     tracing::info!("listening on {listen}");
-    if let Err(error) = axum::serve(listener, lanlord::app())
+    if let Err(error) = axum::serve(listener, lanlord::app(state))
         .with_graceful_shutdown(shutdown_signal())
         .await
     {

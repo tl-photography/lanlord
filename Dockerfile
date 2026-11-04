@@ -5,12 +5,16 @@ RUN cargo install cargo-auditable@0.7.7 --locked
 WORKDIR /src
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY src ./src
+COPY templates ./templates
+COPY static ./static
 RUN cargo auditable build --release --locked
 
 FROM scratch
 COPY --from=build /src/target/release/lanlord /lanlord
 # Any other uid:gid works too (--user), lanlord needs no passwd entry.
 USER 10001:10001
+ENV LANLORD_DATA=/data
+VOLUME /data
 EXPOSE 8080
 HEALTHCHECK --interval=5m --timeout=5s --start-period=30s --start-interval=5s CMD ["/lanlord", "healthcheck"]
 ENTRYPOINT ["/lanlord"]
