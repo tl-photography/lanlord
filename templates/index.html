@@ -7,7 +7,7 @@
 <div class="columns">
   {% for group in groups %}
   <section class="group">
-    <h2>{{ group.label }} <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.devices.len() }} {% if group.devices.len() == 1 %}device{% else %}devices{% endif %}</span></h2>
+    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.devices.len() }} {% if group.devices.len() == 1 %}device{% else %}devices{% endif %}</span></h2>
     {% if group.devices.is_empty() %}
     <p class="empty">No devices.</p>
     {% else %}

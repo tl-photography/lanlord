@@ -81,7 +81,9 @@ code { font-size: 0.9em; }
 
 /* Device list, like Homer: one column per group, one card per device. */
 .columns { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr)); align-items: start; }
-.group h2 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 0.5rem; margin: 0 0 0.75rem; }
+.group h2 { display: flex; align-items: baseline; gap: 0.5rem; margin: 0 0 0.75rem; }
+.group h2 .title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge, .count { flex: 0 0 auto; white-space: nowrap; }
 .count { margin-left: auto; font-size: 0.85rem; }
 .badge { font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 1rem; background: var(--accent-soft); color: var(--accent); }
 .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
