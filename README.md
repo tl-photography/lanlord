@@ -32,6 +32,7 @@ differences.
 | Type          | Reports                                                                 | Applies                                  |
 | ------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
 | `openwrt`     | DHCP leases, static leases and Wi-Fi VLANs per MAC of an OpenWrt device | static leases, if the device serves DHCP |
+| `pihole`      | the devices in Pi-hole's network table                                  | client groups per lanlord group          |
 | `leases-file` | the devices in a dnsmasq lease file in the data directory               | -                                        |
 
 File settings, like password files, are file names in the data directory. Paths outside it are rejected.
@@ -79,6 +80,23 @@ openssl s_client -connect router.lan:443 </dev/null 2>/dev/null | openssl x509 -
 
 Assigning VLANs per Wi-Fi device needs the full `wpad` variant (`wpad-mbedtls` or `wpad-openssl`) on every access
 point; the basic variants cannot.
+
+### Pi-hole
+
+lanlord uses the REST API of Pi-hole v6. It adds a Pi-hole group for every lanlord group of a device with a fixed
+address, and a client for that address in `Default` and that group. Blocklists assigned to a group then apply to its
+devices. Clients lanlord adds have the comment `lanlord: <device>`; lanlord changes and removes only those. Groups are
+never deleted, other clients never touched: a device whose address already has another client is listed as left out.
+
+Pi-hole has no rollback: lanlord makes the changes one by one, reads Pi-hole again and reports anything missing.
+
+The plugin needs the HTTPS address, the name of a file in the data directory with an app password (mode `0600`;
+create it in Pi-hole under Settings, Web interface / API, "Configure app password") and the SHA-256 fingerprint of
+Pi-hole's certificate:
+
+```sh
+openssl s_client -connect pi.hole:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
+```
 
 ### Login
 

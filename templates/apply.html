@@ -2,8 +2,9 @@
 {% block title %}Apply{% endblock %}
 {% block content %}
 <h1>Apply</h1>
-<p>Changes of the device list that are not on the network yet. Applying is protected by a rollback: if lanlord cannot
-read the changes back and confirm them within 30 seconds, the router undoes them.</p>
+<p>Changes of the device list that are not on the network yet. After applying, lanlord reads every target again.
+On OpenWrt the changes are applied with rollback: if lanlord cannot confirm them within 30 seconds, the router undoes
+them. Pi-hole has no rollback; lanlord reports what is missing.</p>
 {% if !message.is_empty() %}
 <p class="notice" role="status">{{ message }}</p>
 {% endif %}
