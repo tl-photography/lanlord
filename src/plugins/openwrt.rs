@@ -173,15 +173,20 @@ impl OpenWrt {
         Ok(clients)
     }
 
-    /// The static leases and the networks the device serves with DHCP.
+    /// The static leases and the networks the device serves with DHCP. A device without a DHCP pool, like an access
+    /// point, is not asked for its interfaces: its ACL does not need to allow that.
     async fn lease_state(&self, session: &str) -> Result<(Vec<HostSection>, Vec<Network>), String> {
         let dhcp = self
             .call(session, "uci", "get", &json!({ "config": leases::CONFIG }))
             .await?;
+        let served = served_interfaces(&dhcp);
+        if served.is_empty() {
+            return Ok((host_sections(&dhcp), Vec::new()));
+        }
         let dump = self
             .call(session, "network.interface", "dump", &json!({}))
             .await?;
-        Ok((host_sections(&dhcp), served_networks(&dhcp, &dump)))
+        Ok((host_sections(&dhcp), served_networks(&served, &dump)))
     }
 
     async fn plan_in(&self, session: &str, devices: &DeviceList) -> Result<Option<Plan>, String> {
@@ -521,12 +526,16 @@ fn host_sections(dhcp: &Value) -> Vec<HostSection> {
         .collect()
 }
 
-/// The IPv4 networks of the interfaces with a DHCP pool that is not ignored.
-fn served_networks(dhcp: &Value, dump: &Value) -> Vec<Network> {
-    let served: Vec<String> = sections(dhcp)
+/// The interfaces with a DHCP pool that is not ignored.
+fn served_interfaces(dhcp: &Value) -> Vec<String> {
+    sections(dhcp)
         .filter(|section| text(section, ".type") == "dhcp" && text(section, "ignore") != "1")
         .map(|section| text(section, "interface"))
-        .collect();
+        .collect()
+}
+
+/// The IPv4 networks of these interfaces.
+fn served_networks(served: &[String], dump: &Value) -> Vec<Network> {
     dump.get("interface")
         .and_then(Value::as_array)
         .into_iter()

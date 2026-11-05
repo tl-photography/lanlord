@@ -321,6 +321,8 @@ async fn fake_target(fake: FakeUci) -> (String, Arc<std::sync::Mutex<FakeUci>>) 
             let method = params[2].as_str().unwrap_or_default();
             let result = match object {
                 "session" => json!([0, { "ubus_rpc_session": "session-1" }]),
+                // Like an access point's ACL: no interfaces for a device without DHCP.
+                "network.interface" if !state.lock().unwrap().serves_dhcp => json!([6]),
                 "network.interface" => json!([0, { "interface": [
                         { "interface": "lan", "ipv4-address": [{ "address": "192.0.2.1", "mask": 24 }] },
                         { "interface": "wan", "ipv4-address": [{ "address": "198.51.100.2", "mask": 24 }] }
