@@ -21,7 +21,9 @@ Working rules for lanlord. The project will be published: nothing in the repo de
   generic. File settings are file names in the data directory, never paths. A broken plugin entry is left out and
   shown, it never stops lanlord.
 - Secrets (passwords) live in `0600` files in the data directory, never in `lanlord.toml` or the log.
-- New code comes with tests; network plugins are tested against a small fake server in the test.
+- New code comes with tests; network plugins are tested against a small fake server in the test. Unit tests are
+  in `src/<module>/tests.rs` (`#[cfg(test)] mod tests;` at the end of the module), so they can test private code;
+  HTTP tests are in `tests/`.
 
 ## Commits
 
