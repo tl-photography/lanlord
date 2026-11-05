@@ -19,7 +19,8 @@ use serde_json::{Value, json};
 
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Entry, Observation, Seen};
-use crate::devices::{Error, normalize_mac};
+use crate::devices::{DeviceList, Error, normalize_mac};
+use crate::leases::{self, Change, HostSection, Network, Plan};
 
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -29,13 +30,16 @@ const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 const SESSION_TIMEOUT: u64 = 60;
 /// Session id for the login call.
 const NO_SESSION: &str = "00000000000000000000000000000000";
+/// Seconds after which the router undoes applied changes that lanlord has not confirmed.
+const ROLLBACK_SECONDS: u64 = 30;
 
 /// The type description for `lanlord.toml` and the web interface.
 pub(super) const TYPE: PluginType = PluginType {
     kind: "openwrt",
     title: "OpenWrt",
     description: "Reads the DHCP leases, static leases and Wi-Fi VLANs of an OpenWrt router or access point \
-                  through its ubus API, as its own rpcd user.",
+                  through its ubus API, as its own rpcd user, and applies the static leases of a router that serves \
+                  DHCP.",
     fields: &[
         Field {
             key: "url",
@@ -143,6 +147,104 @@ impl OpenWrt {
         Ok(observation(&leases, &hosts, &stations))
     }
 
+    /// The static leases and the networks the device serves with DHCP.
+    async fn lease_state(&self, session: &str) -> Result<(Vec<HostSection>, Vec<Network>), String> {
+        let dhcp = self
+            .call(session, "uci", "get", &json!({ "config": leases::CONFIG }))
+            .await?;
+        let dump = self
+            .call(session, "network.interface", "dump", &json!({}))
+            .await?;
+        Ok((host_sections(&dhcp), served_networks(&dhcp, &dump)))
+    }
+
+    async fn plan_in(&self, session: &str, devices: &DeviceList) -> Result<Option<Plan>, String> {
+        let (hosts, networks) = self.lease_state(session).await?;
+        Ok((!networks.is_empty()).then(|| leases::plan(devices, &hosts, &networks)))
+    }
+
+    async fn preview(&self, devices: DeviceList) -> Result<Option<Plan>, String> {
+        let password = read_password(&self.password_file).await?;
+        let session = self.login(&password).await?;
+        self.plan_in(&session, &devices).await
+    }
+
+    /// Stages the changes, applies them with rollback, reads the device again and confirms only if nothing is
+    /// left to change. Without the confirmation, the device undoes the changes after [`ROLLBACK_SECONDS`].
+    async fn write(&self, devices: DeviceList, digest: String) -> Result<usize, String> {
+        let password = read_password(&self.password_file).await?;
+        let session = self.login(&password).await?;
+        let plan = self
+            .plan_in(&session, &devices)
+            .await?
+            .ok_or_else(|| format!("{}: serves no DHCP, there is nothing to apply", self.name))?;
+        if plan.digest() != digest {
+            return Err(format!(
+                "{}: the device or the list changed since the preview, check the changes again",
+                self.name
+            ));
+        }
+        if plan.changes.is_empty() {
+            return Ok(0);
+        }
+        for change in &plan.changes {
+            if let Err(error) = self.stage(&session, change).await {
+                let _ = self
+                    .call(&session, "uci", "revert", &json!({ "config": leases::CONFIG }))
+                    .await;
+                return Err(error);
+            }
+        }
+        self.call(
+            &session,
+            "uci",
+            "apply",
+            &json!({ "rollback": true, "timeout": ROLLBACK_SECONDS }),
+        )
+        .await?;
+        let left = self.plan_in(&session, &devices).await;
+        if !matches!(&left, Ok(Some(after)) if after.changes.is_empty()) {
+            let _ = self.call(&session, "uci", "rollback", &json!({})).await;
+            return Err(format!(
+                "{}: the device does not show the changes after applying, they were rolled back",
+                self.name
+            ));
+        }
+        self.call(&session, "uci", "confirm", &json!({})).await?;
+        Ok(plan.changes.len())
+    }
+
+    async fn stage(&self, session: &str, change: &Change) -> Result<(), String> {
+        let values = |values: &[(String, String)]| -> serde_json::Map<String, Value> {
+            values
+                .iter()
+                .map(|(key, value)| (key.clone(), Value::String(value.clone())))
+                .collect()
+        };
+        let (method, arguments) = match change {
+            Change::Add {
+                section,
+                values: options,
+                ..
+            } => (
+                "add",
+                json!({ "config": leases::CONFIG, "type": "host", "name": section, "values": values(options) }),
+            ),
+            Change::Set {
+                section,
+                values: options,
+                ..
+            } => (
+                "set",
+                json!({ "config": leases::CONFIG, "section": section, "values": values(options) }),
+            ),
+            Change::Delete { section, .. } => {
+                ("delete", json!({ "config": leases::CONFIG, "section": section }))
+            }
+        };
+        self.call(session, "uci", method, &arguments).await.map(|_| ())
+    }
+
     async fn login(&self, password: &str) -> Result<String, String> {
         let arguments = json!({ "username": self.user, "password": password, "timeout": SESSION_TIMEOUT });
         let data = self
@@ -207,6 +309,18 @@ impl Plugin for OpenWrt {
 
     fn observe(&self) -> BoxFuture<'_, Result<Observation, String>> {
         Box::pin(self.read())
+    }
+
+    fn is_target(&self) -> bool {
+        true
+    }
+
+    fn plan(&self, devices: DeviceList) -> BoxFuture<'_, Result<Option<Plan>, String>> {
+        Box::pin(self.preview(devices))
+    }
+
+    fn apply(&self, devices: DeviceList, digest: String) -> BoxFuture<'_, Result<usize, String>> {
+        Box::pin(self.write(devices, digest))
     }
 }
 
@@ -340,6 +454,57 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
         seen,
         entries: Some(entries),
     }
+}
+
+fn text(section: &Value, key: &str) -> String {
+    section
+        .get(key)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
+}
+
+/// The `host` sections of the `dhcp` configuration.
+fn host_sections(dhcp: &Value) -> Vec<HostSection> {
+    sections(dhcp)
+        .filter(|section| text(section, ".type") == "host")
+        .map(|section| HostSection {
+            id: text(section, ".name"),
+            name: text(section, "name"),
+            macs: macs(section.get("mac")),
+            ip: text(section, "ip"),
+            dns: text(section, "dns"),
+        })
+        .collect()
+}
+
+/// The IPv4 networks of the interfaces with a DHCP pool that is not ignored.
+fn served_networks(dhcp: &Value, dump: &Value) -> Vec<Network> {
+    let served: Vec<String> = sections(dhcp)
+        .filter(|section| text(section, ".type") == "dhcp" && text(section, "ignore") != "1")
+        .map(|section| text(section, "interface"))
+        .collect();
+    dump.get("interface")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter(|interface| served.contains(&text(interface, "interface")))
+        .flat_map(|interface| {
+            interface
+                .get("ipv4-address")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+        })
+        .filter_map(|address| {
+            Some(Network {
+                address: address.get("address")?.as_str()?.parse().ok()?,
+                prefix: u8::try_from(address.get("mask")?.as_u64()?)
+                    .ok()
+                    .filter(|prefix| *prefix <= 32)?,
+            })
+        })
+        .collect()
 }
 
 /// Parses a SHA-256 fingerprint: 64 hex digits, with or without colons.
@@ -667,5 +832,205 @@ mod tests {
         drop(listener);
         let router = plugin(&format!("http://127.0.0.1:{port}"), data.path(), "secret", 0o600);
         assert!(router.observe().await.is_err());
+    }
+
+    /// A router like rpcd: uci changes are staged per session, `apply` commits them and keeps a snapshot until
+    /// `confirm`, `rollback` restores it. `lose_changes` makes `apply` keep the old state; `deny` refuses one method.
+    #[derive(Default)]
+    struct FakeUci {
+        committed: serde_json::Map<String, Value>,
+        staged: Vec<(String, Value)>,
+        snapshot: Option<serde_json::Map<String, Value>>,
+        calls: Vec<String>,
+        lose_changes: bool,
+        deny: &'static str,
+        serves_dhcp: bool,
+    }
+
+    impl FakeUci {
+        fn answer(&mut self, method: &str, arguments: &Value) -> Value {
+            match method {
+                "get" => {
+                    let mut values = self.committed.clone();
+                    let ignore = if self.serves_dhcp { "0" } else { "1" };
+                    values.insert(
+                        "lan".to_owned(),
+                        json!({ ".type": "dhcp", ".name": "lan", "interface": "lan", "ignore": ignore }),
+                    );
+                    values.insert(
+                        "wan".to_owned(),
+                        json!({ ".type": "dhcp", ".name": "wan", "interface": "wan", "ignore": "1" }),
+                    );
+                    return json!([0, { "values": values }]);
+                }
+                _ if method == self.deny => return json!([6]),
+                "add" | "set" | "delete" => self.staged.push((method.to_owned(), arguments.clone())),
+                "apply" => {
+                    self.snapshot = Some(self.committed.clone());
+                    for (method, arguments) in std::mem::take(&mut self.staged) {
+                        if !self.lose_changes {
+                            self.commit(&method, &arguments);
+                        }
+                    }
+                }
+                "confirm" => self.snapshot = None,
+                "rollback" => self.committed = self.snapshot.take().unwrap_or_default(),
+                "revert" => self.staged.clear(),
+                _ => return json!([3]),
+            }
+            self.calls.push(method.to_owned());
+            json!([0])
+        }
+
+        fn commit(&mut self, method: &str, arguments: &Value) {
+            let values = arguments["values"].as_object().cloned().unwrap_or_default();
+            match method {
+                "add" => {
+                    let name = arguments["name"].as_str().unwrap().to_owned();
+                    let mut section = values;
+                    section.insert(".type".to_owned(), json!("host"));
+                    section.insert(".name".to_owned(), json!(name));
+                    self.committed.insert(name, Value::Object(section));
+                }
+                "set" => {
+                    let section = arguments["section"].as_str().unwrap();
+                    self.committed[section].as_object_mut().unwrap().extend(values);
+                }
+                _ => {
+                    self.committed.remove(arguments["section"].as_str().unwrap());
+                }
+            }
+        }
+    }
+
+    async fn fake_target(fake: FakeUci) -> (String, Arc<std::sync::Mutex<FakeUci>>) {
+        use axum::{Json, Router, routing::post};
+        let state = Arc::new(std::sync::Mutex::new(fake));
+        let shared = state.clone();
+        let handler = move |Json(request): Json<Value>| {
+            let state = shared.clone();
+            async move {
+                let params = request["params"].as_array().cloned().unwrap_or_default();
+                let object = params[1].as_str().unwrap_or_default();
+                let method = params[2].as_str().unwrap_or_default();
+                let result = match object {
+                    "session" => json!([0, { "ubus_rpc_session": "session-1" }]),
+                    "network.interface" => json!([0, { "interface": [
+                        { "interface": "lan", "ipv4-address": [{ "address": "192.0.2.1", "mask": 24 }] },
+                        { "interface": "wan", "ipv4-address": [{ "address": "198.51.100.2", "mask": 24 }] }
+                    ] }]),
+                    "uci" => state.lock().unwrap().answer(method, &params[3]),
+                    _ => json!([3]),
+                };
+                Json(json!({ "jsonrpc": "2.0", "id": 1, "result": result }))
+            }
+        };
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, Router::new().route("/ubus", post(handler))).await });
+        (format!("http://127.0.0.1:{}", address.port()), state)
+    }
+
+    fn router_with_omv() -> FakeUci {
+        let mut fake = FakeUci {
+            serves_dhcp: true,
+            ..FakeUci::default()
+        };
+        fake.committed.insert(
+            "cfg01".to_owned(),
+            json!({ ".type": "host", ".name": "cfg01", "name": "OMV", "mac": "aa:bb:cc:00:00:01", "ip": "192.0.2.2", "dns": "1" }),
+        );
+        fake
+    }
+
+    fn devices() -> DeviceList {
+        let device = |name: &str, mac: &str, ip: [u8; 4]| crate::devices::Device {
+            name: name.to_owned(),
+            mac: mac.to_owned(),
+            group: "lan".to_owned(),
+            ip: Some(Ipv4Addr::from(ip)),
+            note: String::new(),
+        };
+        DeviceList {
+            devices: vec![
+                device("OMV", "aa:bb:cc:00:00:01", [192, 0, 2, 2]),
+                device("plug", "aa:bb:cc:00:00:02", [203, 0, 113, 20]),
+            ],
+        }
+    }
+
+    #[tokio::test]
+    async fn applies_static_leases_and_confirms_after_reading_them_back() {
+        let data = tempfile::tempdir().unwrap();
+        let (url, fake) = fake_target(router_with_omv()).await;
+        let router = plugin(&url, data.path(), "secret", 0o600);
+        assert!(router.is_target());
+
+        let plan = router.plan(devices()).await.unwrap().unwrap();
+        assert_eq!(plan.changes.len(), 2, "take over cfg01 as lanlord_omv");
+        assert!(plan.notes[0].starts_with("plug waits"));
+
+        assert_eq!(router.apply(devices(), plan.digest()).await.unwrap(), 2);
+        {
+            let fake = fake.lock().unwrap();
+            assert_eq!(fake.calls, ["delete", "add", "apply", "confirm"]);
+            assert!(fake.committed.contains_key("lanlord_omv"));
+            assert!(!fake.committed.contains_key("cfg01"));
+        }
+        assert_eq!(router.plan(devices()).await.unwrap().unwrap().changes, []);
+        assert_eq!(
+            router.apply(devices(), Plan::default().digest()).await.unwrap(),
+            0
+        );
+    }
+
+    #[tokio::test]
+    async fn changes_that_differ_from_the_preview_are_not_applied() {
+        let data = tempfile::tempdir().unwrap();
+        let (url, fake) = fake_target(router_with_omv()).await;
+        let router = plugin(&url, data.path(), "secret", 0o600);
+        let error = router.apply(devices(), "stale".to_owned()).await.unwrap_err();
+        assert!(error.contains("changed since the preview"), "{error}");
+        assert_eq!(fake.lock().unwrap().calls, Vec::<String>::new());
+    }
+
+    #[tokio::test]
+    async fn changes_the_router_does_not_show_are_rolled_back() {
+        let data = tempfile::tempdir().unwrap();
+        let (url, fake) = fake_target(FakeUci {
+            lose_changes: true,
+            ..router_with_omv()
+        })
+        .await;
+        let router = plugin(&url, data.path(), "secret", 0o600);
+        let digest = router.plan(devices()).await.unwrap().unwrap().digest();
+        let error = router.apply(devices(), digest).await.unwrap_err();
+        assert!(error.contains("rolled back"), "{error}");
+        assert_eq!(fake.lock().unwrap().calls, ["delete", "add", "apply", "rollback"]);
+    }
+
+    #[tokio::test]
+    async fn a_refused_change_discards_the_staged_ones() {
+        let data = tempfile::tempdir().unwrap();
+        let (url, fake) = fake_target(FakeUci {
+            deny: "add",
+            ..router_with_omv()
+        })
+        .await;
+        let router = plugin(&url, data.path(), "secret", 0o600);
+        let digest = router.plan(devices()).await.unwrap().unwrap().digest();
+        let error = router.apply(devices(), digest).await.unwrap_err();
+        assert!(error.contains("rpcd ACL"), "{error}");
+        assert_eq!(fake.lock().unwrap().calls, ["delete", "revert"]);
+    }
+
+    #[tokio::test]
+    async fn an_access_point_without_dhcp_has_nothing_to_apply() {
+        let data = tempfile::tempdir().unwrap();
+        let (url, _) = fake_target(FakeUci::default()).await;
+        let access_point = plugin(&url, data.path(), "secret", 0o600);
+        assert_eq!(access_point.plan(devices()).await.unwrap(), None);
+        let error = access_point.apply(devices(), String::new()).await.unwrap_err();
+        assert!(error.contains("serves no DHCP"), "{error}");
     }
 }
