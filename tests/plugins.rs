@@ -65,7 +65,9 @@ async fn page_offers_the_built_in_types() {
     assert!(page.contains(r#"aria-current="page">Plugins</a>"#));
     assert!(page.contains(r#"name="type" value="leases-file""#));
     assert!(page.contains(r#"name="type" value="openwrt""#));
-    assert!(!page.contains("pihole"));
+    assert!(page.contains(r#"name="type" value="pihole""#));
+    assert!(page.contains(r#"placeholder="pihole.password""#));
+    assert!(!page.contains("telepathy"));
 }
 
 #[tokio::test]
@@ -118,7 +120,7 @@ async fn invalid_settings_are_rejected_with_a_message() {
             "type=openwrt&name=a&url=https%3A%2F%2Frouter.lan&user=lanlord&password_file=p&certificate=1234",
             "must be 64 hex digits",
         ),
-        ("type=pihole&name=a", "Choose a supported plugin type"),
+        ("type=telepathy&name=a", "Choose a supported plugin type"),
         (
             "type=leases-file&name=a%20b&path=dhcp.leases",
             "invalid plugin name",

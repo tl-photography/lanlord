@@ -4,6 +4,7 @@
 
 mod leases_file;
 mod openwrt;
+mod pihole;
 
 use std::collections::HashSet;
 use std::fs;
@@ -88,7 +89,7 @@ pub struct PluginType {
 }
 
 /// All built-in plugin types.
-pub const TYPES: &[PluginType] = &[leases_file::TYPE, openwrt::TYPE];
+pub const TYPES: &[PluginType] = &[leases_file::TYPE, openwrt::TYPE, pihole::TYPE];
 
 /// The plugin type with this `type` value.
 #[must_use]
@@ -383,7 +384,7 @@ mod tests {
             assert!(!described.fields.is_empty(), "{}", described.kind);
             assert!(plugin_type(described.kind).is_some());
         }
-        assert!(plugin_type("pihole").is_none());
+        assert!(plugin_type("telepathy").is_none());
     }
 
     #[test]
