@@ -11,6 +11,7 @@ use serde::Deserialize;
 
 use crate::devices::{Device, Error, is_valid_name, normalize_mac};
 use crate::history;
+use crate::plugins;
 use crate::{AppState, server_error};
 
 /// Longest note that is accepted.
@@ -234,6 +235,49 @@ pub async fn move_device(
     save(&state, Some(&name), form)
 }
 
+/// Keeps the plugins linked to a device in step: a new name goes into their settings (logged), and they are built
+/// again, so an address taken from the device follows it. Called with the write lock held.
+fn follow_links(state: &AppState, old_name: Option<&str>, new_name: &str) {
+    let Ok(mut settings) = plugins::read_settings(&state.inner.plugins_path) else {
+        return;
+    };
+    let mut linked = false;
+    let mut renamed = Vec::new();
+    for table in &mut settings.plugins {
+        let device = table
+            .get("device")
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        if device == new_name {
+            linked = true;
+        }
+        if let Some(old) = old_name
+            && old != new_name
+            && device == old
+        {
+            let plugin = table
+                .get("name")
+                .and_then(toml::Value::as_str)
+                .unwrap_or_default()
+                .to_owned();
+            table.insert("device".to_owned(), toml::Value::String(new_name.to_owned()));
+            renamed.push(format!("Plugin {plugin} changed: device {old} → {new_name}"));
+            linked = true;
+        }
+    }
+    if !renamed.is_empty() {
+        if let Err(error) = plugins::save_settings(&state.inner.plugins_path, &settings) {
+            tracing::error!("cannot update the plugins linked to {new_name}: {error}");
+            return;
+        }
+        history::record(&state.inner.history_path, &renamed);
+    }
+    if linked {
+        state.reload_plugins();
+    }
+}
+
 fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response {
     let next = if form.then == "review" { "/apply" } else { "/" };
     let device = match form.to_device() {
@@ -261,6 +305,7 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
             if let Some(text) = history::device(before.as_ref(), &device) {
                 history::record(&state.inner.history_path, &[text]);
             }
+            follow_links(state, before.as_ref().map(|old| old.name.as_str()), &device.name);
             state.forget_pending();
             Redirect::to(next).into_response()
         }

@@ -172,6 +172,14 @@ impl AppState {
         }
     }
 
+    /// Builds the plugins again from `lanlord.toml`, for example after a linked device changed.
+    pub(crate) fn reload_plugins(&self) {
+        let loaded = plugins::load(&self.inner.plugins_path).plugins;
+        if let Ok(mut plugins) = self.inner.plugins.write() {
+            *plugins = loaded;
+        }
+    }
+
     /// Drops the count after a change, so the badge is counted again.
     pub(crate) fn forget_pending(&self) {
         if let Ok(mut pending) = self.inner.pending.lock() {
@@ -238,6 +246,8 @@ pub fn app(state: AppState) -> Router {
 struct DeviceRow {
     initial: char,
     name: String,
+    /// Plugins that talk to this device.
+    plugins: Vec<String>,
     group: String,
     mac: String,
     ip: String,
@@ -283,6 +293,9 @@ async fn index(State(state): State<AppState>) -> Response {
         Err(error) => return server_error(&error),
     };
     let config = state.groups();
+    let links = plugins::read_settings(&state.inner.plugins_path)
+        .map(|settings| plugins::linked_plugins(&settings))
+        .unwrap_or_default();
     let move_groups: Vec<MoveGroup> = config
         .groups
         .iter()
@@ -302,6 +315,7 @@ async fn index(State(state): State<AppState>) -> Response {
                 .filter(|device| device.group == group.name)
                 .map(|device| DeviceRow {
                     initial: device.name.chars().next().unwrap_or('?').to_ascii_uppercase(),
+                    plugins: links.get(&device.name).cloned().unwrap_or_default(),
                     name: device.name.clone(),
                     group: device.group.clone(),
                     mac: device.mac.clone(),

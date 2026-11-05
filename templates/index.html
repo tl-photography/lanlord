@@ -20,7 +20,7 @@
         <a class="card" href="/devices/{{ device.name }}">
           <span class="avatar" aria-hidden="true">{{ device.initial }}</span>
           <span class="text">
-            <strong>{{ device.name }}</strong>
+            <strong>{{ device.name }}</strong>{% for plugin in device.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
             <span class="meta">{% if !device.ip.is_empty() %}{{ device.ip }} · {% endif %}<code>{{ device.mac }}</code></span>
             {% if !device.note.is_empty() %}<span class="note">{{ device.note }}</span>{% endif %}
           </span>
