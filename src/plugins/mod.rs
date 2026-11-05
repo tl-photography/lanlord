@@ -70,6 +70,8 @@ pub enum FieldKind {
     Fingerprint,
     /// Yes or no, a checkbox; off when the form does not send it.
     Switch,
+    /// The name of a device in the list, chosen from a dropdown.
+    Device,
 }
 
 /// One setting of a plugin type.
@@ -154,6 +156,7 @@ pub fn field_value(field: &Field, value: &str) -> Result<toml::Value, String> {
                 field.label
             ))
         }
+        FieldKind::Device if !is_valid_name(value) => Err(format!("{} must be a device name", field.label)),
         FieldKind::DataFile if !is_data_file(value) => Err(format!(
             "{} must be a file name in the data directory, without / or ..",
             field.label
@@ -309,9 +312,71 @@ fn build_one(
                 .unwrap_or_default();
             field_value(field, &text).map_err(|message| Error::Invalid(format!("{name}: {message}")))?;
         }
+        if plugin_type
+            .fields
+            .iter()
+            .any(|field| field.kind == FieldKind::Device)
+        {
+            resolve_address(&name, &mut table, data_dir)?;
+        }
         let plugin = (plugin_type.build)(name, table, data_dir)?;
         Ok(enabled.then_some(plugin))
     }
+}
+
+/// Fills an empty `url` with the fixed address of the linked `device` from `devices.toml`.
+fn resolve_address(name: &str, table: &mut toml::Table, data_dir: &Path) -> Result<(), Error> {
+    let text = |key: &str| {
+        table
+            .get(key)
+            .and_then(toml::Value::as_str)
+            .unwrap_or_default()
+            .to_owned()
+    };
+    let (url, device) = (text("url"), text("device"));
+    if !url.is_empty() {
+        return Ok(());
+    }
+    if device.is_empty() {
+        return Err(Error::Invalid(format!(
+            "{name}: an address or a device is required"
+        )));
+    }
+    let content = fs::read_to_string(data_dir.join("devices.toml")).unwrap_or_default();
+    let list: crate::devices::DeviceList =
+        toml::from_str(&content).map_err(|error| Error::Invalid(format!("{name}: devices.toml: {error}")))?;
+    let ip = list
+        .devices
+        .iter()
+        .find(|entry| entry.name == device)
+        .ok_or_else(|| Error::Invalid(format!("{name}: device {device} is not in the list")))?
+        .ip
+        .ok_or_else(|| {
+            Error::Invalid(format!(
+                "{name}: device {device} has no fixed address, enter an address"
+            ))
+        })?;
+    table.insert("url".to_owned(), toml::Value::String(format!("https://{ip}")));
+    Ok(())
+}
+
+/// Names of the plugins linked to each device, from the `device` settings.
+#[must_use]
+pub fn linked_plugins(settings: &Settings) -> std::collections::HashMap<String, Vec<String>> {
+    let mut links: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    for table in &settings.plugins {
+        let text = |key: &str| {
+            table
+                .get(key)
+                .and_then(toml::Value::as_str)
+                .unwrap_or_default()
+                .to_owned()
+        };
+        if !text("device").is_empty() {
+            links.entry(text("device")).or_default().push(text("name"));
+        }
+    }
+    links
 }
 
 fn take_string(table: &mut toml::Table, key: &str) -> Result<String, Error> {

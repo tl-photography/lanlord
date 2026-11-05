@@ -39,7 +39,14 @@ pub(super) const TYPE: PluginType = PluginType {
             label: "Address",
             kind: FieldKind::Url,
             placeholder: "https://pi.hole",
-            optional: false,
+            optional: true,
+        },
+        Field {
+            key: "device",
+            label: "Device (optional, its fixed address is used when the address is empty)",
+            kind: FieldKind::Device,
+            placeholder: "",
+            optional: true,
         },
         Field {
             key: "password_file",
@@ -74,6 +81,9 @@ struct Settings {
     certificate: String,
     #[serde(default)]
     report_devices: bool,
+    /// Only used to fill an empty address and for the device page.
+    #[serde(default, rename = "device")]
+    _device: String,
 }
 
 /// A client entry of Pi-hole.
@@ -278,6 +288,7 @@ impl PiHole {
             password_file,
             certificate,
             report_devices,
+            ..
         } = settings(&name, table)?;
         let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
         let mut api = secure_url(&name, &url)?;

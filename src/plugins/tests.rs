@@ -115,3 +115,45 @@ fn invalid_plugin_settings_are_rejected() {
         assert!(load_text(text).is_err(), "{reason}");
     }
 }
+
+fn openwrt_table(url: &str, device: &str) -> toml::Table {
+    toml::from_str(&format!(
+        "type = \"openwrt\"\nname = \"ap\"\nenabled = true\nurl = \"{url}\"\nuser = \"lanlord\"\n\
+         password_file = \"ap.password\"\ncertificate = \"{}\"\ndevice = \"{device}\"\n",
+        "00".repeat(32)
+    ))
+    .unwrap()
+}
+
+#[test]
+fn an_empty_address_is_taken_from_the_linked_device() {
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(
+        data.path().join("devices.toml"),
+        "[[device]]\nname = \"ap\"\nmac = \"00:00:00:00:00:01\"\ngroup = \"lan\"\nip = \"192.0.2.5\"\n\n\
+         [[device]]\nname = \"plug\"\nmac = \"00:00:00:00:00:02\"\ngroup = \"lan\"\n",
+    )
+    .unwrap();
+    let problem =
+        |url: &str, device: &str| check(vec![openwrt_table(url, device)], data.path()).problems[0].clone();
+    assert_eq!(problem("", "ap"), None, "address from the device");
+    assert_eq!(problem("https://router.lan", ""), None, "own address, no device");
+    assert_eq!(problem("https://router.lan", "plug"), None, "own address wins");
+    assert!(problem("", "plug").unwrap().contains("has no fixed address"));
+    assert!(problem("", "gone").unwrap().contains("is not in the list"));
+    assert!(
+        problem("", "")
+            .unwrap()
+            .contains("an address or a device is required")
+    );
+}
+
+#[test]
+fn linked_plugins_are_listed_per_device() {
+    let settings = Settings {
+        plugins: vec![openwrt_table("", "ap"), openwrt_table("https://router.lan", "")],
+    };
+    let links = linked_plugins(&settings);
+    assert_eq!(links.len(), 1);
+    assert_eq!(links["ap"], ["ap"]);
+}

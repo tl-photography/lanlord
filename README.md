@@ -38,6 +38,9 @@ differences.
 | `ntfy`        | -                                                                       | notifications to an ntfy topic           |
 
 File settings, like password files, are file names in the data directory. Paths outside it are rejected.
+OpenWrt and Pi-hole plugins can be linked to the device they talk to. With a device and no address, lanlord uses
+the device's fixed address. The device card then shows the plugin, Wi-Fi clients name the device as access point,
+and renaming the device updates the plugin.
 
 ### OpenWrt
 

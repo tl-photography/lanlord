@@ -47,7 +47,14 @@ pub(super) const TYPE: PluginType = PluginType {
             label: "Address",
             kind: FieldKind::Url,
             placeholder: "https://router.lan",
-            optional: false,
+            optional: true,
+        },
+        Field {
+            key: "device",
+            label: "Device (optional, its fixed address is used when the address is empty)",
+            kind: FieldKind::Device,
+            placeholder: "",
+            optional: true,
         },
         Field {
             key: "user",
@@ -81,11 +88,15 @@ struct Settings {
     user: String,
     password_file: String,
     certificate: String,
+    #[serde(default)]
+    device: String,
 }
 
 /// One `OpenWrt` device.
 pub struct OpenWrt {
     name: String,
+    /// The linked device's name, or the plugin's; names the access point of Wi-Fi clients.
+    label: String,
     endpoint: Url,
     user: String,
     password_file: PathBuf,
@@ -99,6 +110,7 @@ impl OpenWrt {
             user,
             password_file,
             certificate,
+            device,
         } = settings(&name, table)?;
         let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
         let mut endpoint = secure_url(&name, &url)?;
@@ -108,6 +120,7 @@ impl OpenWrt {
             parse_fingerprint(&certificate).ok_or_else(|| invalid("invalid certificate fingerprint"))?;
         let client = client(fingerprint).map_err(|error| invalid(&error))?;
         Ok(Self {
+            label: if device.is_empty() { name.clone() } else { device },
             name,
             endpoint,
             user,
@@ -168,7 +181,7 @@ impl OpenWrt {
             let arguments = json!({ "device": device });
             let info = self.call(session, "iwinfo", "info", &arguments).await?;
             let associated = self.call(session, "iwinfo", "assoclist", &arguments).await?;
-            clients.extend(wifi(&access_point(&self.name, device, &info), &associated));
+            clients.extend(wifi(&access_point(&self.label, device, &info), &associated));
         }
         Ok(clients)
     }

@@ -494,3 +494,20 @@ fn bands_follow_the_frequency() {
     );
     assert_eq!(access_point("ap", "phy0-ap0", &json!({})), "ap: phy0-ap0");
 }
+
+#[tokio::test]
+async fn wifi_clients_name_the_linked_device() {
+    let data = tempfile::tempdir().unwrap();
+    let url = fake_router_with_wifi(json!([4]), json!([0, { "devices": ["phy0-ap0"] }])).await;
+    let path = data.path().join("router.password");
+    std::fs::write(&path, "secret").unwrap();
+    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+    let mut table = settings_table(&url);
+    table.insert(
+        "device".to_owned(),
+        toml::Value::String("LivingRoomAP".to_owned()),
+    );
+    let access_point = OpenWrt::new("router".to_owned(), table, data.path()).unwrap();
+    let observation = access_point.observe().await.unwrap();
+    assert_eq!(observation.wifi[0].access_point, "LivingRoomAP: Home (5 GHz)");
+}
