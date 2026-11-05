@@ -21,6 +21,7 @@ pub(super) const TYPE: PluginType = PluginType {
         label: "Lease file",
         kind: FieldKind::DataFile,
         placeholder: "dhcp.leases",
+        optional: false,
     }],
     build: |name, table, data_dir| Ok(Arc::new(LeasesFile::new(name, table, data_dir)?)),
 };

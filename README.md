@@ -34,6 +34,8 @@ differences.
 | `openwrt`     | DHCP leases, static leases and Wi-Fi VLANs per MAC of an OpenWrt device | static leases, if the device serves DHCP |
 | `pihole`      | the devices in Pi-hole's network table, if switched on                  | client groups per lanlord group          |
 | `leases-file` | the devices in a dnsmasq lease file in the data directory               | -                                        |
+| `webhook`     | -                                                                       | notifications as JSON to a URL           |
+| `ntfy`        | -                                                                       | notifications to an ntfy topic           |
 
 File settings, like password files, are file names in the data directory. Paths outside it are rejected.
 
@@ -100,6 +102,14 @@ Pi-hole's certificate:
 ```sh
 openssl s_client -connect pi.hole:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
 ```
+
+### Notifications
+
+Notification plugins send lanlord's messages: `webhook` posts `{"title", "text", "source"}` as JSON to a URL, `ntfy`
+posts to a topic on an ntfy server. Both take an optional token file in the data directory (mode `0600`), sent as
+bearer token; with a token, the address must use `https://` (plain `http://` only to the own host). Public
+servers are checked against the usual certificate authorities, built into lanlord. Each notification plugin has a
+"Send test notification" button on the Plugins page.
 
 ### Login
 

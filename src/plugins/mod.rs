@@ -3,8 +3,10 @@
 //! and the validation need no code per type.
 
 mod leases_file;
+mod ntfy;
 mod openwrt;
 mod pihole;
+pub(crate) mod webhook;
 
 use std::collections::HashSet;
 use std::fs;
@@ -17,6 +19,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::compare::Observation;
 use crate::devices::{DeviceList, Error, is_valid_name};
+use crate::notify::Notification;
 use crate::preview::Preview;
 
 /// A future that a plugin returns; boxed, so plugins can be stored as trait objects.
@@ -37,6 +40,14 @@ pub trait Plugin: Send + Sync {
     /// The changes a target would make for this device list; `None` if it has nothing to manage.
     fn plan(&self, _devices: DeviceList) -> BoxFuture<'_, Result<Option<Preview>, String>> {
         Box::pin(async { Ok(None) })
+    }
+    /// Whether the plugin sends notifications.
+    fn notifies(&self) -> bool {
+        false
+    }
+    /// Sends a notification.
+    fn notify(&self, _notification: Notification) -> BoxFuture<'_, Result<(), String>> {
+        Box::pin(async { Err("this plugin does not send notifications".to_owned()) })
     }
     /// Makes the changes, if they are still the ones with this digest; returns what was changed.
     fn apply(&self, _devices: DeviceList, _digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
@@ -72,6 +83,8 @@ pub struct Field {
     pub kind: FieldKind,
     /// Example shown in the empty field.
     pub placeholder: &'static str,
+    /// Whether the field may stay empty.
+    pub optional: bool,
 }
 
 /// Builds a plugin instance from its name, its settings and the data directory.
@@ -91,7 +104,13 @@ pub struct PluginType {
 }
 
 /// All built-in plugin types.
-pub const TYPES: &[PluginType] = &[leases_file::TYPE, openwrt::TYPE, pihole::TYPE];
+pub const TYPES: &[PluginType] = &[
+    leases_file::TYPE,
+    openwrt::TYPE,
+    pihole::TYPE,
+    webhook::TYPE,
+    ntfy::TYPE,
+];
 
 /// The plugin type with this `type` value.
 #[must_use]
@@ -108,6 +127,9 @@ pub fn field_value(field: &Field, value: &str) -> Result<toml::Value, String> {
     let value = value.trim();
     if field.kind == FieldKind::Switch {
         return Ok(toml::Value::Boolean(matches!(value, "true" | "on")));
+    }
+    if value.is_empty() && field.optional {
+        return Ok(toml::Value::String(String::new()));
     }
     if value.is_empty() {
         return Err(format!("{} is required", field.label));
@@ -274,6 +296,10 @@ fn build_one(
         };
         for field in plugin_type.fields {
             let Some(value) = table.get(field.key) else {
+                // A missing switch is off, a missing optional field is empty.
+                if field.kind == FieldKind::Switch || field.optional {
+                    continue;
+                }
                 return Err(Error::Invalid(format!("{name}: {} is required", field.label)));
             };
             let text = value
