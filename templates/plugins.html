@@ -6,6 +6,37 @@
 <p class="error" role="alert">{{ error }}</p>
 {% endif %}
 <label class="plugin-search">Search plugins <input id="plugin-search" type="search" autocomplete="off"></label>
+<form class="scan-plugins" method="post" action="/plugins/scan">
+  <button type="submit">Scan active plugins</button>
+</form>
+{% if has_scanned %}
+<h2>Scan results</h2>
+{% if scan_results.is_empty() %}
+<p class="notice">No active plugins to scan.</p>
+{% else %}
+<div class="plugin-results">
+  {% for result in scan_results %}
+  <section class="plugin-result">
+    <h3>{{ result.name }} <small>{{ result.kind }}</small></h3>
+    <p>{{ result.status }}</p>
+    {% if !result.error.is_empty() %}<p class="error" role="alert">{{ result.error }}</p>{% endif %}
+    {% if !result.findings.is_empty() %}
+    <ul>{% for finding in result.findings %}<li>{{ finding }}</li>{% endfor %}</ul>
+    {% endif %}
+    {% if can_import %}
+    {% for device in result.discoveries %}
+    <form method="post" action="/devices/discovered">
+      <input type="hidden" name="name" value="{{ device.name }}">
+      <input type="hidden" name="mac" value="{{ device.mac }}">
+      <button type="submit">Import {{ device.name }} ({{ device.mac }})</button>
+    </form>
+    {% endfor %}
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endif %}
+{% endif %}
 {% if plugins.is_empty() %}
 <p class="notice">No plugins configured.</p>
 {% else %}
@@ -20,26 +51,65 @@
         <noscript><button type="submit">Save</button></noscript>
       </form>
     </div>
-    <details class="plugin-config">
+    <details class="plugin-config"{% if plugin.kind == "pihole" %} open{% endif %}>
       <summary>Configuration</summary>
+      {% if plugin.kind == "leases-file" %}
       <form method="post" action="/plugins/{{ plugin.name }}">
         <label>Lease file path <input name="path" value="{{ plugin.path }}" required></label>
         <button type="submit">Save configuration</button>
       </form>
+      {% else if plugin.kind == "openwrt" %}
+      <form method="post" action="/plugins/{{ plugin.name }}">
+        <label>Host <input name="host" value="{{ plugin.host }}" required></label>
+        <label>SSH user <input name="user" value="{{ plugin.user }}" required></label>
+        <label>SSH port <input name="port" value="{{ plugin.port }}" required inputmode="numeric" pattern="[0-9]{1,5}"></label>
+        <label>Private key path <input name="key_file" value="{{ plugin.key_file }}" required></label>
+        <label>Pinned host key path <input name="host_key_file" value="{{ plugin.host_key_file }}" required></label>
+        <button type="submit">Save configuration</button>
+      </form>
+      {% else %}
+      <form method="post" action="/plugins/{{ plugin.name }}">
+        <label>API URL <input name="url" value="{{ plugin.url }}" required placeholder="http://pihole"></label>
+        <label>API password file <input name="password_file" value="{{ plugin.password_file }}" required placeholder="/data/ssh/pihole-api-password"></label>
+        <button type="submit">Save configuration</button>
+      </form>
+      {% endif %}
     </details>
   </section>
   {% endfor %}
 </div>
 {% endif %}
 <h2>Add plugin</h2>
-<form method="post" action="/plugins">
-  <label>Type
-    <select name="kind" required>
-      <option value="leases-file"{% if form.kind == "leases-file" %} selected{% endif %}>DHCP leases file</option>
-    </select>
-  </label>
-  <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="router"></label>
-  <label>Lease file path <input name="path" value="{{ form.path }}" required placeholder="/data/dhcp.leases"></label>
-  <button type="submit">Add plugin</button>
-</form>
+<details>
+  <summary>DHCP leases file</summary>
+  <form method="post" action="/plugins">
+    <input type="hidden" name="kind" value="leases-file">
+    <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="leases"></label>
+    <label>Lease file path <input name="path" value="{{ form.path }}" required placeholder="/data/dhcp.leases"></label>
+    <button type="submit">Add plugin</button>
+  </form>
+</details>
+<details>
+  <summary>OpenWrt</summary>
+  <form method="post" action="/plugins">
+    <input type="hidden" name="kind" value="openwrt">
+    <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="router"></label>
+    <label>Host <input name="host" value="{{ form.host }}" required placeholder="router.lan"></label>
+    <label>SSH user <input name="user" value="{{ form.user }}" required placeholder="root"></label>
+    <label>SSH port <input name="port" value="{% if form.port.is_empty() %}22{% else %}{{ form.port }}{% endif %}" required inputmode="numeric" pattern="[0-9]{1,5}"></label>
+    <label>Private key path <input name="key_file" value="{{ form.key_file }}" required placeholder="/data/ssh/router"></label>
+    <label>Pinned host key path <input name="host_key_file" value="{{ form.host_key_file }}" required placeholder="/data/ssh/router.pub"></label>
+    <button type="submit">Add plugin</button>
+  </form>
+</details>
+<details open>
+  <summary>Pi-hole</summary>
+  <form method="post" action="/plugins">
+    <input type="hidden" name="kind" value="pihole">
+    <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="pihole"></label>
+    <label>API URL <input name="url" value="{{ form.url }}" required placeholder="http://pihole"></label>
+    <label>API password file <input name="password_file" value="{{ form.password_file }}" required placeholder="/data/ssh/pihole-api-password"></label>
+    <button type="submit">Add plugin</button>
+  </form>
+</details>
 {% endblock %}

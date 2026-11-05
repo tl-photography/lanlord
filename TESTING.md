@@ -5,23 +5,23 @@ coverage measures).
 
 ## Test levels
 
-| Level       | What                                                          | Where                                   |
-| ----------- | ------------------------------------------------------------- | --------------------------------------- |
+| Level       | What                                                           | Where                                                 |
+| ----------- | -------------------------------------------------------------- | ----------------------------------------------------- |
 | Static      | formatting, lints, Dockerfile, workflows, shell scripts        | `rustfmt`, `clippy`, hadolint, actionlint, shellcheck |
-| Unit        | one module at a time: validation, comparison, origin check     | `#[cfg(test)]` in `src/`                |
-| Integration | the web interface through the router, without a network socket | `tests/*.rs`                            |
-| System      | the built image as it runs on a server                         | `tests/container.sh`, ZAP baseline scan |
-| Security    | dependencies, image, Dockerfile, secrets                       | cargo-deny, Trivy, Dockle, TruffleHog   |
+| Unit        | one module at a time: validation, comparison, origin check     | `#[cfg(test)]` in `src/`                              |
+| Integration | the web interface through the router, without a network socket | `tests/*.rs`                                          |
+| System      | the built image as it runs on a server                         | `tests/container.sh`, ZAP baseline scan               |
+| Security    | dependencies, image, Dockerfile, secrets                       | cargo-deny, Trivy, Dockle, TruffleHog                 |
 
 ## Coverage
 
 Measured with `cargo llvm-cov` over the unit and integration tests.
 
-| Measure                                | Target | Notes                                                                    |
-| -------------------------------------- | ------ | ------------------------------------------------------------------------ |
-| Statement coverage (as line coverage)  | 90 %   | lines of the library code                                                |
-| Region coverage                        | 90 %   | LLVM code regions, including the outcomes of each condition              |
-| Branch coverage (decision outcomes)    | -      | not measured: branch instrumentation is only available on nightly Rust   |
+| Measure                               | Target | Notes                                                                  |
+| ------------------------------------- | ------ | ---------------------------------------------------------------------- |
+| Statement coverage (as line coverage) | 90 %   | lines of the library code                                              |
+| Region coverage                       | 90 %   | LLVM code regions, including the outcomes of each condition            |
+| Branch coverage (decision outcomes)   | -      | not measured: branch instrumentation is only available on nightly Rust |
 
 CI fails below a target. Targets are only raised, never lowered.
 

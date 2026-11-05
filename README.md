@@ -3,21 +3,16 @@
 # lanlord
 
 A device list for small OpenWrt networks.
-Give every device a name and a group, lanlord writes the static DHCP leases and the Wi-Fi VLAN of each device to
-the OpenWrt router and access points.
-Devices that are not in the list show up as new and stay in the default group until you assign them.
+Give every device a name and a group, then compare the list with enabled network sources.
+Changes in lanlord are not applied to the router or Pi-hole yet.
 
 ## How it works
 
 - Groups map to VLANs, for example `lan`, `iot` and `guest`. The groups and their VLAN ids are configuration.
-- Discovery reads the DHCP leases of the router. A MAC address that is not in the list is shown as new, with the
-  host name it sent and the time it was first seen.
-- Wi-Fi devices keep their SSID and passphrase. The VLAN is assigned per MAC address on the access point
-  (`wifi-station` and `wifi-vlan` sections), so moving a device to another group needs no change on the device.
-  Unknown devices get the default network of the SSID.
-- Before anything is written, lanlord shows a preview of the changes per router and access point.
-- lanlord changes only the sections it owns (`lanlord_*` in `dhcp` and `wireless`). The VLAN interfaces, firewall
-  zones and SSIDs are set up separately, for example with Ansible or LuCI.
+- Devices and groups are stored in the data directory as `devices.toml` and `groups.toml`.
+- The Plugins page configures sources and scans them for unknown devices and discrepancies.
+- Moving a device changes its group in lanlord only. The router and access points are unchanged.
+- Pi-hole can report network devices, but OpenWrt remains the DHCP source of truth.
 
 ### Requirements on OpenWrt
 
@@ -36,9 +31,22 @@ command in `authorized_keys`:
 command="/usr/libexec/lanlord-apply",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA... lanlord
 ```
 
-`lanlord-apply read` prints the DHCP leases and the sections owned by lanlord.
-`lanlord-apply write` accepts only a checked list of leases and station VLANs on standard input.
-A leaked key can change these entries, but cannot run other commands.
+The OpenWrt plugin uses `host`, `user`, `port`, `key_file` and `host_key_file` settings. The private key and pinned
+host public key stay in files in the data directory. The private key file must be readable by the lanlord user and
+have mode `0600`.
+
+The restricted `lanlord-apply read` helper emits tab-separated records:
+
+```text
+lease<TAB>mac<TAB>ip<TAB>hostname
+entry<TAB>mac<TAB>name<TAB>ip-or--<TAB>vlan-or--
+```
+
+The current helper supports reads only. It rejects every other request and does not change router configuration.
+
+The Pi-hole plugin uses the v6 API's `/network/devices` endpoint. Set its API URL and a `password_file` path in the
+Plugins page. Store an application password in a mode-`0600` file, not in `lanlord.toml`. The URL must be reachable
+from the lanlord container.
 
 ## Container Quick Start
 
@@ -116,13 +124,13 @@ Without a local Rust installation, pre-commit installs the pinned toolchain itse
 CI runs on every push and pull request, but only the checks the change needs. Releases and manual runs
 check everything:
 
-| Job                   | Checks                                                                                  |
-| --------------------- | --------------------------------------------------------------------------------------- |
-| Format, lint and test | `rustfmt`, `clippy` with all warnings as errors, unit and HTTP tests                    |
-| Dependencies          | `cargo-deny`: known vulnerabilities, licenses, crate sources                            |
-| Secrets               | TruffleHog over the whole history                                                       |
-| Pre-commit hooks      | whitespace, YAML, TOML, private keys, actionlint, hadolint, shellcheck                  |
-| Image                 | build, [container tests](tests/container.sh), Trivy, Dockle, ZAP                        |
+| Job                   | Checks                                                                 |
+| --------------------- | ---------------------------------------------------------------------- |
+| Format, lint and test | `rustfmt`, `clippy` with all warnings as errors, unit and HTTP tests   |
+| Dependencies          | `cargo-deny`: known vulnerabilities, licenses, crate sources           |
+| Secrets               | TruffleHog over the whole history                                      |
+| Pre-commit hooks      | whitespace, YAML, TOML, private keys, actionlint, hadolint, shellcheck |
+| Image                 | build, [container tests](tests/container.sh), Trivy, Dockle, ZAP       |
 
 The container tests check the image from outside: no root, no shell, no package manager, no setuid files, a start
 read-only, without capabilities and as an arbitrary uid, the response headers and a clean stop on SIGTERM.

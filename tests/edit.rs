@@ -187,3 +187,40 @@ async fn new_form_uses_the_default_group() {
     let page = body(get(&data, "/devices/new").await).await;
     assert!(page.contains(r#"<option value="guest" selected>"#));
 }
+
+#[tokio::test]
+async fn discovered_device_seeds_an_empty_list_without_a_dynamic_ip() {
+    let data = tempfile::tempdir().unwrap();
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/groups.toml");
+    std::fs::copy(example, data.path().join("groups.toml")).unwrap();
+
+    let response = post(
+        &data,
+        "/devices/discovered",
+        "name=New+Phone&mac=AA-BB-CC-00-11-22",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let list: lanlord::devices::DeviceList = toml::from_str(&devices(&data)).unwrap();
+    assert_eq!(list.devices.len(), 1);
+    assert_eq!(list.devices[0].name, "new-phone");
+    assert_eq!(list.devices[0].mac, "aa:bb:cc:00:11:22");
+    assert_eq!(list.devices[0].group, "guest");
+    assert_eq!(list.devices[0].ip, None);
+}
+
+#[tokio::test]
+async fn discovered_device_import_rejects_a_nonempty_list_and_invalid_mac() {
+    let data = data();
+    let before = devices(&data);
+    let response = post(&data, "/devices/discovered", "name=phone&mac=00:11:22:33:44:55").await;
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    assert_eq!(devices(&data), before);
+
+    let empty = tempfile::tempdir().unwrap();
+    let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/groups.toml");
+    std::fs::copy(example, empty.path().join("groups.toml")).unwrap();
+    let response = post(&empty, "/devices/discovered", "name=phone&mac=invalid").await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(!empty.path().join("devices.toml").exists());
+}

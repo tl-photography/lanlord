@@ -2,6 +2,8 @@
 //! lanlord and enabled per instance in `lanlord.toml`.
 
 mod leases_file;
+mod openwrt;
+mod pihole;
 
 use std::collections::HashSet;
 use std::fs;
@@ -90,6 +92,8 @@ fn build(tables: Vec<toml::Table>) -> Result<Vec<Arc<dyn Plugin>>, Error> {
         let enabled = take_bool(&mut table, "enabled")?;
         let plugin: Arc<dyn Plugin> = match kind.as_str() {
             "leases-file" => Arc::new(leases_file::LeasesFile::new(name, table)?),
+            "openwrt" => Arc::new(openwrt::OpenWrt::new(name, table)?),
+            "pihole" => Arc::new(pihole::PiHole::new(name, table)?),
             other => return Err(Error::Invalid(format!("{name}: unknown plugin type {other}"))),
         };
         if enabled {
@@ -196,6 +200,10 @@ mod tests {
             ),
             (
                 "[[plugin]]\ntype = \"leases-file\"\nname = \"a\"\npath = \"x\"\nport = 1\n",
+                "unknown field",
+            ),
+            (
+                "[[plugin]]\ntype = \"openwrt\"\nname = \"router\"\nhost = \"router.lan\"\nuser = \"root\"\nkey_file = \"/data/key\"\nhost_key_file = \"/data/host.pub\"\nunknown = true\n",
                 "unknown field",
             ),
             (

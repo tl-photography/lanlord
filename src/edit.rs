@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
-use crate::devices::{Device, Error, normalize_mac};
+use crate::devices::{Device, Error, is_valid_name, normalize_mac};
 use crate::{AppState, server_error};
 
 /// Longest note that is accepted.
@@ -139,7 +139,7 @@ pub async fn edit_form(State(state): State<AppState>, Path(name): Path<String>) 
 
 /// Adds a device.
 pub async fn create(State(state): State<AppState>, Form(form): Form<DeviceForm>) -> Response {
-    save(&state, None, form)
+    save(&state, None, form, false)
 }
 
 /// Changes a device; the name may change too.
@@ -148,13 +148,63 @@ pub async fn update(
     Path(name): Path<String>,
     Form(form): Form<DeviceForm>,
 ) -> Response {
-    save(&state, Some(&name), form)
+    save(&state, Some(&name), form, false)
 }
 
 /// Field of the move menu and of drag and drop.
 #[derive(Debug, Deserialize)]
 pub struct MoveForm {
     group: String,
+}
+
+/// A discovered device to import into an empty list.
+#[derive(Debug, Deserialize)]
+pub struct DiscoveredForm {
+    name: String,
+    mac: String,
+}
+
+fn suggested_name(hostname: &str, mac: &str) -> String {
+    let mut name = String::new();
+    let mut separator = false;
+    for character in hostname.chars() {
+        if character.is_ascii_alphanumeric() {
+            if separator && !name.is_empty() {
+                name.push('-');
+            }
+            name.push(character.to_ascii_lowercase());
+            separator = false;
+        } else if !name.is_empty() {
+            separator = true;
+        }
+    }
+    if is_valid_name(&name) {
+        name
+    } else {
+        let suffix = mac.replace(':', "");
+        format!("device-{}", &suffix[suffix.len().saturating_sub(6)..])
+    }
+}
+
+/// Imports one discovered device only while the device list is empty.
+pub async fn add_discovered(
+    State(state): State<AppState>,
+    Form(discovered): Form<DiscoveredForm>,
+) -> Response {
+    let group = state.groups().default_group;
+    if group.is_empty() {
+        return (StatusCode::CONFLICT, "Create a group before importing devices").into_response();
+    }
+    let Some(mac) = normalize_mac(&discovered.mac) else {
+        return (StatusCode::UNPROCESSABLE_ENTITY, "Invalid MAC address").into_response();
+    };
+    let form = DeviceForm {
+        name: suggested_name(&discovered.name, &mac),
+        mac,
+        group,
+        ..DeviceForm::default()
+    };
+    save(&state, None, form, true)
 }
 
 /// Moves a device to another group, keeps everything else.
@@ -174,10 +224,10 @@ pub async fn move_device(
         group: target.group,
         ..DeviceForm::from_device(device)
     };
-    save(&state, Some(&name), form)
+    save(&state, Some(&name), form, false)
 }
 
-fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response {
+fn save(state: &AppState, original: Option<&str>, form: DeviceForm, require_empty: bool) -> Response {
     let device = match form.to_device() {
         Ok(device) => device,
         Err(message) => return page(state, original, form, message),
@@ -190,6 +240,9 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
+    if require_empty && !list.devices.is_empty() {
+        return (StatusCode::CONFLICT, "Devices were added before this import").into_response();
+    }
     match original {
         Some(name) => match list.devices.iter_mut().find(|existing| existing.name == name) {
             Some(existing) => *existing = device,
