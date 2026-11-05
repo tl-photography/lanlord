@@ -6,6 +6,7 @@ pub mod config;
 pub mod devices;
 mod edit;
 mod groups;
+pub mod leases;
 pub mod origin;
 mod plugin_ui;
 pub mod plugins;
