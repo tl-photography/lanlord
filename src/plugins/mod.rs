@@ -57,6 +57,8 @@ pub enum FieldKind {
     DataFile,
     /// A SHA-256 fingerprint: 64 hex digits, with or without colons.
     Fingerprint,
+    /// Yes or no, a checkbox; off when the form does not send it.
+    Switch,
 }
 
 /// One setting of a plugin type.
@@ -104,6 +106,9 @@ pub fn plugin_type(kind: &str) -> Option<&'static PluginType> {
 /// A message for the user if the value does not fit the field.
 pub fn field_value(field: &Field, value: &str) -> Result<toml::Value, String> {
     let value = value.trim();
+    if field.kind == FieldKind::Switch {
+        return Ok(toml::Value::Boolean(matches!(value, "true" | "on")));
+    }
     if value.is_empty() {
         return Err(format!("{} is required", field.label));
     }
