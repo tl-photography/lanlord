@@ -2,19 +2,34 @@
 //! reports the devices in it as seen.
 
 use std::net::Ipv4Addr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use serde::Deserialize;
 
-use super::{BoxFuture, Plugin, settings};
+use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Observation, Seen};
 use crate::devices::{Error, normalize_mac};
+
+/// The type description for `lanlord.toml` and the web interface.
+pub(super) const TYPE: PluginType = PluginType {
+    kind: "leases-file",
+    title: "DHCP lease file",
+    description: "Reports the devices in a dnsmasq lease file in the data directory, for example a copy of /tmp/dhcp.leases.",
+    fields: &[Field {
+        key: "path",
+        label: "Lease file",
+        kind: FieldKind::DataFile,
+        placeholder: "dhcp.leases",
+    }],
+    build: |name, table, data_dir| Ok(Arc::new(LeasesFile::new(name, table, data_dir)?)),
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Settings {
-    /// Path of the lease file, inside the container.
-    path: PathBuf,
+    /// File name of the lease file in the data directory.
+    path: String,
 }
 
 /// A lease file as source of seen devices.
@@ -24,9 +39,12 @@ pub struct LeasesFile {
 }
 
 impl LeasesFile {
-    pub(super) fn new(name: String, table: toml::Table) -> Result<Self, Error> {
+    fn new(name: String, table: toml::Table, data_dir: &Path) -> Result<Self, Error> {
         let Settings { path } = settings(&name, table)?;
-        Ok(Self { name, path })
+        Ok(Self {
+            name,
+            path: data_dir.join(path),
+        })
     }
 }
 

@@ -4,7 +4,7 @@ use std::fs;
 
 use std::net::Ipv4Addr;
 use std::os::unix::fs::PermissionsExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -15,25 +15,60 @@ use russh::keys::{
 use russh::{ChannelMsg, Disconnect};
 use serde::Deserialize;
 
-use super::{BoxFuture, Plugin, settings};
+use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Entry, Observation, Seen};
 use crate::devices::{Error, normalize_mac};
 
 const MAX_OUTPUT_BYTES: usize = 1024 * 1024;
 
+/// The type description for `lanlord.toml` and the web interface.
+pub(super) const TYPE: PluginType = PluginType {
+    kind: "openwrt",
+    title: "OpenWrt",
+    description: "Reads the DHCP leases and static leases of an OpenWrt router or access point.",
+    fields: &[
+        Field {
+            key: "host",
+            label: "Host",
+            kind: FieldKind::Word,
+            placeholder: "router.lan",
+        },
+        Field {
+            key: "port",
+            label: "SSH port",
+            kind: FieldKind::Port,
+            placeholder: "22",
+        },
+        Field {
+            key: "user",
+            label: "SSH user",
+            kind: FieldKind::Word,
+            placeholder: "root",
+        },
+        Field {
+            key: "key_file",
+            label: "Private key file",
+            kind: FieldKind::DataFile,
+            placeholder: "router.key",
+        },
+        Field {
+            key: "host_key_file",
+            label: "Pinned host key file",
+            kind: FieldKind::DataFile,
+            placeholder: "router.pub",
+        },
+    ],
+    build: |name, table, data_dir| Ok(Arc::new(OpenWrt::new(name, table, data_dir)?)),
+};
+
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Settings {
     host: String,
-    #[serde(default = "default_port")]
     port: u16,
     user: String,
-    key_file: PathBuf,
-    host_key_file: PathBuf,
-}
-
-fn default_port() -> u16 {
-    22
+    key_file: String,
+    host_key_file: String,
 }
 
 /// A read-only connection to one `OpenWrt` router or access point.
@@ -47,7 +82,7 @@ pub struct OpenWrt {
 }
 
 impl OpenWrt {
-    pub(super) fn new(name: String, table: toml::Table) -> Result<Self, Error> {
+    fn new(name: String, table: toml::Table, data_dir: &Path) -> Result<Self, Error> {
         let Settings {
             host,
             port,
@@ -64,7 +99,7 @@ impl OpenWrt {
         if user.is_empty() || user.chars().any(char::is_whitespace) {
             return Err(Error::Invalid(format!("{name}: invalid SSH user")));
         }
-        if key_file.as_os_str().is_empty() || host_key_file.as_os_str().is_empty() {
+        if key_file.is_empty() || host_key_file.is_empty() {
             return Err(Error::Invalid(format!(
                 "{name}: SSH key and pinned host key paths are required"
             )));
@@ -74,8 +109,8 @@ impl OpenWrt {
             host,
             port,
             user,
-            key_file,
-            host_key_file,
+            key_file: data_dir.join(key_file),
+            host_key_file: data_dir.join(host_key_file),
         })
     }
 

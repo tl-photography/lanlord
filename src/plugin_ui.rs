@@ -1,83 +1,50 @@
-//! Configuring built-in plugins.
+//! The plugins page: add, configure, enable and scan plugin instances. Fields and checks come from the type
+//! descriptions in `plugins`, so a new type needs no code here.
+
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::time::Duration;
 
 use askama::Template;
 use axum::Form;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use serde::Deserialize;
 
 use crate::compare::{self, Finding};
 use crate::devices::Error;
-use crate::plugins::{self, Settings};
+use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, Settings};
 use crate::{AppState, server_error};
 
-#[derive(Debug, Default, Deserialize)]
-pub struct PluginForm {
-    kind: String,
-    name: String,
-    #[serde(default)]
-    path: String,
-    #[serde(default)]
-    host: String,
-    #[serde(default)]
-    user: String,
-    #[serde(default)]
-    port: String,
-    #[serde(default)]
-    key_file: String,
-    #[serde(default)]
-    host_key_file: String,
-    #[serde(default)]
-    url: String,
-    #[serde(default)]
-    password_file: String,
-}
+/// Longest time one plugin may take for a scan.
+const SCAN_TIMEOUT: Duration = Duration::from_secs(20);
 
-#[derive(Debug, Deserialize)]
-pub struct PluginConfigForm {
-    #[serde(default)]
-    path: String,
-    #[serde(default)]
-    host: String,
-    #[serde(default)]
-    user: String,
-    #[serde(default)]
-    port: String,
-    #[serde(default)]
-    key_file: String,
-    #[serde(default)]
-    host_key_file: String,
-    #[serde(default)]
-    url: String,
-    #[serde(default)]
-    password_file: String,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub struct PluginToggleForm {
-    enabled: Option<bool>,
+struct FieldView {
+    key: &'static str,
+    label: &'static str,
+    value: String,
+    input: &'static str,
+    placeholder: &'static str,
 }
 
 struct PluginRow {
     name: String,
-    kind: String,
-    title: String,
-    path: String,
-    host: String,
-    user: String,
-    port: String,
-    key_file: String,
-    host_key_file: String,
-    url: String,
-    password_file: String,
-    search: String,
+    title: &'static str,
     enabled: bool,
+    search: String,
+    fields: Vec<FieldView>,
 }
 
-struct PluginScanRow {
+struct TypeView {
+    kind: &'static str,
+    title: &'static str,
+    description: &'static str,
+    fields: Vec<FieldView>,
+}
+
+struct ScanRow {
     name: String,
-    kind: String,
+    title: &'static str,
     status: String,
     error: String,
     findings: Vec<String>,
@@ -94,24 +61,42 @@ struct Discovery {
 struct PluginsPage {
     nav: &'static str,
     plugins: Vec<PluginRow>,
-    scan_results: Vec<PluginScanRow>,
+    types: Vec<TypeView>,
+    scan_results: Vec<ScanRow>,
     has_scanned: bool,
     can_import: bool,
-    form: PluginForm,
     error: String,
 }
 
-fn page(state: &AppState, form: PluginForm, error: String) -> Response {
-    page_with_scan(state, form, error, Vec::new(), false)
+fn input(field: &Field) -> &'static str {
+    match field.kind {
+        FieldKind::Url => "url",
+        _ => "text",
+    }
 }
 
-fn page_with_scan(
-    state: &AppState,
-    form: PluginForm,
-    error: String,
-    scan_results: Vec<PluginScanRow>,
-    has_scanned: bool,
-) -> Response {
+fn field_views(fields: &'static [Field], values: impl Fn(&str) -> String) -> Vec<FieldView> {
+    fields
+        .iter()
+        .map(|field| FieldView {
+            key: field.key,
+            label: field.label,
+            value: values(field.key),
+            input: input(field),
+            placeholder: field.placeholder,
+        })
+        .collect()
+}
+
+fn table_text(table: &toml::Table, key: &str) -> String {
+    match table.get(key) {
+        Some(toml::Value::String(text)) => text.clone(),
+        Some(toml::Value::Integer(number)) => number.to_string(),
+        _ => String::new(),
+    }
+}
+
+fn page(state: &AppState, scan_results: Vec<ScanRow>, has_scanned: bool, error: String) -> Response {
     let settings = match plugins::read_settings(&state.inner.plugins_path) {
         Ok(settings) => settings,
         Err(error) => return server_error(&error),
@@ -120,43 +105,31 @@ fn page_with_scan(
         .plugins
         .iter()
         .map(|table| {
-            let name = text(table, "name");
-            let kind = text(table, "type");
-            let path = text(table, "path");
-            let host = text(table, "host");
-            let user = text(table, "user");
-            let key_file = text(table, "key_file");
-            let host_key_file = text(table, "host_key_file");
-            let url = text(table, "url");
-            let password_file = text(table, "password_file");
-            let port = table
-                .get("port")
-                .and_then(toml::Value::as_integer)
-                .unwrap_or(22)
-                .to_string();
-            let title = match kind.as_str() {
-                "leases-file" => "DHCP leases file".to_owned(),
-                "openwrt" => "OpenWrt".to_owned(),
-                _ => "Unknown plugin".to_owned(),
-            };
+            let name = table_text(table, "name");
+            let kind = table_text(table, "type");
+            let plugin_type = plugins::plugin_type(&kind);
+            let fields = plugin_type.map_or_else(Vec::new, |plugin_type| {
+                field_views(plugin_type.fields, |key| table_text(table, key))
+            });
             PluginRow {
-                search: format!("{name} {kind} {path} {host} {user} {url}").to_ascii_lowercase(),
+                search: format!("{name} {kind}").to_ascii_lowercase(),
                 name,
-                kind,
-                title,
-                path,
-                host,
-                user,
-                port,
-                key_file,
-                host_key_file,
-                url,
-                password_file,
+                title: plugin_type.map_or("Unknown type", |plugin_type| plugin_type.title),
                 enabled: table
                     .get("enabled")
                     .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
+                fields,
             }
+        })
+        .collect();
+    let types = plugins::TYPES
+        .iter()
+        .map(|plugin_type| TypeView {
+            kind: plugin_type.kind,
+            title: plugin_type.title,
+            description: plugin_type.description,
+            fields: field_views(plugin_type.fields, |_| String::new()),
         })
         .collect();
     let status = if error.is_empty() {
@@ -167,13 +140,10 @@ fn page_with_scan(
     let page = PluginsPage {
         nav: "plugins",
         plugins: rows,
+        types,
         scan_results,
         has_scanned,
-        can_import: match state.devices() {
-            Ok(devices) => devices.devices.is_empty() && !state.groups().default_group.is_empty(),
-            Err(error) => return server_error(&error),
-        },
-        form,
+        can_import: !state.groups().default_group.is_empty(),
         error,
     };
     match page.render() {
@@ -182,225 +152,87 @@ fn page_with_scan(
     }
 }
 
-/// Scans every enabled source plugin without applying changes.
-pub async fn scan(State(state): State<AppState>) -> Response {
-    let devices = match state.devices() {
-        Ok(devices) => devices,
-        Err(error) => return server_error(&error),
-    };
-    let groups = state.groups().groups;
-    let active = match state.inner.plugins.read() {
-        Ok(plugins) => plugins.clone(),
-        Err(_) => return server_error(&"plugin lock poisoned"),
-    };
-    let mut scan_results = Vec::new();
-    for plugin in active {
-        let result = plugin.observe().await;
-        let (status, error, findings, discoveries) = match result {
-            Ok(observation) => {
-                let discrepancies = compare::compare(&devices, &groups, &observation);
-                let discoveries = discrepancies
-                    .iter()
-                    .filter_map(|finding| match finding {
-                        Finding::Unknown { mac, hostname, .. } => Some(Discovery {
-                            name: hostname.clone(),
-                            mac: mac.clone(),
-                        }),
-                        _ => None,
-                    })
-                    .collect();
-                let findings = discrepancies.iter().map(finding_text).collect::<Vec<_>>();
-                let status = if findings.is_empty() {
-                    "No discrepancies".to_owned()
-                } else {
-                    format!("{} discrepancies", findings.len())
-                };
-                (status, String::new(), findings, discoveries)
-            }
-            Err(error) => ("Scan failed".to_owned(), error, Vec::new(), Vec::new()),
-        };
-        scan_results.push(PluginScanRow {
-            name: plugin.name().to_owned(),
-            kind: plugin.kind().to_owned(),
-            status,
-            error,
-            findings,
-            discoveries,
-        });
-    }
-    page_with_scan(&state, PluginForm::default(), String::new(), scan_results, true)
-}
-
-fn finding_text(finding: &Finding) -> String {
-    match finding {
-        Finding::Unknown { mac, ip, hostname } => format!(
-            "Unknown device {} ({mac}, {})",
-            if hostname.is_empty() {
-                "without a hostname"
-            } else {
-                hostname
-            },
-            ip.map_or_else(|| "no IP address".to_owned(), |ip| ip.to_string())
-        ),
-        Finding::Missing { device } => format!("{device} has no matching entry"),
-        Finding::WrongName { device, actual } => format!("{device} is named {actual}"),
-        Finding::WrongIp {
-            device,
-            expected,
-            actual,
-        } => {
-            format!("{device} has IP {actual:?}, expected {expected:?}")
-        }
-        Finding::WrongVlan {
-            device,
-            expected,
-            actual,
-        } => {
-            format!("{device} is on VLAN {actual}, expected {expected}")
-        }
-        Finding::Foreign { mac, name } => format!("Unlisted entry {name} ({mac})"),
-    }
-}
-
-fn text(table: &toml::Table, key: &str) -> String {
-    table
-        .get(key)
-        .and_then(toml::Value::as_str)
-        .unwrap_or_default()
-        .to_owned()
-}
-
-/// Lists and searches configured plugin instances.
+/// Lists the configured plugins and the types that can be added.
 pub async fn list(State(state): State<AppState>) -> Response {
-    page(&state, PluginForm::default(), String::new())
+    page(&state, Vec::new(), false, String::new())
 }
 
-/// Adds a built-in plugin instance.
-pub async fn create(State(state): State<AppState>, Form(form): Form<PluginForm>) -> Response {
-    let form = PluginForm {
-        kind: form.kind.trim().to_owned(),
-        name: form.name.trim().to_owned(),
-        path: form.path.trim().to_owned(),
-        host: form.host.trim().to_owned(),
-        user: form.user.trim().to_owned(),
-        port: form.port.trim().to_owned(),
-        key_file: form.key_file.trim().to_owned(),
-        host_key_file: form.host_key_file.trim().to_owned(),
-        url: form.url.trim().to_owned(),
-        password_file: form.password_file.trim().to_owned(),
+/// Checks the submitted values for every field of a type and turns them into settings.
+fn settings_table(plugin_type: &PluginType, form: &HashMap<String, String>) -> Result<toml::Table, String> {
+    let mut table = toml::Table::new();
+    for field in plugin_type.fields {
+        let value = form.get(field.key).map_or("", String::as_str);
+        table.insert(field.key.to_owned(), plugins::field_value(field, value)?);
+    }
+    Ok(table)
+}
+
+/// Adds a plugin instance; the form has `type`, `name` and the fields of the type.
+pub async fn create(State(state): State<AppState>, Form(form): Form<HashMap<String, String>>) -> Response {
+    let kind = form.get("type").map_or("", |kind| kind.trim());
+    let Some(plugin_type) = plugins::plugin_type(kind) else {
+        return page(
+            &state,
+            Vec::new(),
+            false,
+            "Choose a supported plugin type".to_owned(),
+        );
     };
+    let name = form.get("name").map_or("", |name| name.trim()).to_owned();
     change(&state, |settings| {
-        let mut table = toml::Table::new();
-        table.insert("type".to_owned(), toml::Value::String(form.kind.clone()));
-        table.insert("name".to_owned(), toml::Value::String(form.name.clone()));
+        let mut table = settings_table(plugin_type, &form)?;
+        table.insert(
+            "type".to_owned(),
+            toml::Value::String(plugin_type.kind.to_owned()),
+        );
+        table.insert("name".to_owned(), toml::Value::String(name));
         table.insert("enabled".to_owned(), toml::Value::Boolean(true));
-        match form.kind.as_str() {
-            "leases-file" if !form.path.is_empty() => {
-                table.insert("path".to_owned(), toml::Value::String(form.path.clone()));
-            }
-            "openwrt" => {
-                let port = match form.port.parse::<u16>() {
-                    Ok(port) if port != 0 => port,
-                    _ => return Err("The SSH port must be from 1 to 65535".to_owned()),
-                };
-                table.insert("host".to_owned(), toml::Value::String(form.host.clone()));
-                table.insert("user".to_owned(), toml::Value::String(form.user.clone()));
-                table.insert("port".to_owned(), toml::Value::Integer(i64::from(port)));
-                table.insert("key_file".to_owned(), toml::Value::String(form.key_file.clone()));
-                table.insert(
-                    "host_key_file".to_owned(),
-                    toml::Value::String(form.host_key_file.clone()),
-                );
-            }
-            "pihole" if !form.url.is_empty() && !form.password_file.is_empty() => {
-                table.insert("url".to_owned(), toml::Value::String(form.url.clone()));
-                table.insert(
-                    "password_file".to_owned(),
-                    toml::Value::String(form.password_file.clone()),
-                );
-            }
-            "pihole" => return Err("The API URL and password file path are required".to_owned()),
-            "leases-file" => return Err("The lease file path is required".to_owned()),
-            _ => return Err("Choose a supported plugin type".to_owned()),
-        }
         settings.plugins.push(table);
         Ok(())
     })
 }
 
-/// Changes the settings for an existing plugin.
+fn find<'a>(settings: &'a mut Settings, name: &str) -> Result<&'a mut toml::Table, String> {
+    settings
+        .plugins
+        .iter_mut()
+        .find(|table| table_text(table, "name") == name)
+        .ok_or_else(|| format!("No plugin named {name}"))
+}
+
+/// Changes the settings of a plugin instance; its type and name stay.
 pub async fn update(
     State(state): State<AppState>,
     Path(name): Path<String>,
-    Form(form): Form<PluginConfigForm>,
+    Form(form): Form<HashMap<String, String>>,
 ) -> Response {
-    let path = form.path.trim().to_owned();
-    let host = form.host.trim().to_owned();
-    let user = form.user.trim().to_owned();
-    let key_file = form.key_file.trim().to_owned();
-    let host_key_file = form.host_key_file.trim().to_owned();
-    let url = form.url.trim().to_owned();
-    let password_file = form.password_file.trim().to_owned();
-    let port = form.port.trim().to_owned();
     change(&state, |settings| {
-        let Some(plugin) = settings
-            .plugins
-            .iter_mut()
-            .find(|table| text(table, "name") == name)
-        else {
-            return Err(format!("No plugin named {name}"));
+        let plugin = find(settings, &name)?;
+        let Some(plugin_type) = plugins::plugin_type(&table_text(plugin, "type")) else {
+            return Err("Unknown plugin type".to_owned());
         };
-        match text(plugin, "type").as_str() {
-            "leases-file" if !path.is_empty() => {
-                plugin.insert("path".to_owned(), toml::Value::String(path));
-            }
-            "openwrt" => {
-                let port = match port.parse::<u16>() {
-                    Ok(port) if port != 0 => port,
-                    _ => return Err("The SSH port must be from 1 to 65535".to_owned()),
-                };
-                plugin.insert("host".to_owned(), toml::Value::String(host));
-                plugin.insert("user".to_owned(), toml::Value::String(user));
-                plugin.insert("port".to_owned(), toml::Value::Integer(i64::from(port)));
-                plugin.insert("key_file".to_owned(), toml::Value::String(key_file));
-                plugin.insert("host_key_file".to_owned(), toml::Value::String(host_key_file));
-            }
-            "pihole" if !url.is_empty() && !password_file.is_empty() => {
-                plugin.insert("url".to_owned(), toml::Value::String(url));
-                plugin.insert("password_file".to_owned(), toml::Value::String(password_file));
-            }
-            "pihole" => return Err("The API URL and password file path are required".to_owned()),
-            "leases-file" => return Err("The lease file path is required".to_owned()),
-            _ => return Err("Unsupported plugin type".to_owned()),
+        for (key, value) in settings_table(plugin_type, &form)? {
+            plugin.insert(key, value);
         }
         Ok(())
     })
 }
 
-/// Enables or disables a plugin instance.
+/// Enables or disables a plugin instance; an unchecked box sends no value.
 pub async fn toggle(
     State(state): State<AppState>,
     Path(name): Path<String>,
-    Form(form): Form<PluginToggleForm>,
+    Form(form): Form<HashMap<String, String>>,
 ) -> Response {
+    let enabled = form.get("enabled").is_some_and(|value| value == "true");
     change(&state, |settings| {
-        let Some(plugin) = settings
-            .plugins
-            .iter_mut()
-            .find(|table| text(table, "name") == name)
-        else {
-            return Err(format!("No plugin named {name}"));
-        };
-        plugin.insert(
-            "enabled".to_owned(),
-            toml::Value::Boolean(form.enabled.unwrap_or(false)),
-        );
+        find(settings, &name)?.insert("enabled".to_owned(), toml::Value::Boolean(enabled));
         Ok(())
     })
 }
 
 fn change(state: &AppState, update: impl FnOnce(&mut Settings) -> Result<(), String>) -> Response {
-    let Ok(_guard) = state.inner.write_lock.lock() else {
+    let Ok(guard) = state.inner.write_lock.lock() else {
         return server_error(&"settings lock poisoned");
     };
     let mut settings = match plugins::read_settings(&state.inner.plugins_path) {
@@ -408,11 +240,15 @@ fn change(state: &AppState, update: impl FnOnce(&mut Settings) -> Result<(), Str
         Err(error) => return server_error(&error),
     };
     if let Err(message) = update(&mut settings) {
-        return page(state, PluginForm::default(), message);
+        drop(guard);
+        return page(state, Vec::new(), false, message);
     }
     match plugins::save_settings(&state.inner.plugins_path, &settings) {
         Ok(()) => {}
-        Err(Error::Invalid(message)) => return page(state, PluginForm::default(), message),
+        Err(Error::Invalid(message)) => {
+            drop(guard);
+            return page(state, Vec::new(), false, message);
+        }
         Err(error) => return server_error(&error),
     }
     let loaded = match plugins::load(&state.inner.plugins_path) {
@@ -424,4 +260,116 @@ fn change(state: &AppState, update: impl FnOnce(&mut Settings) -> Result<(), Str
         Err(_) => return server_error(&"plugin lock poisoned"),
     }
     Redirect::to("/plugins").into_response()
+}
+
+/// Scans every enabled plugin at the same time, each with a time limit, without changing anything.
+pub async fn scan(State(state): State<AppState>) -> Response {
+    let devices = match state.devices() {
+        Ok(devices) => devices,
+        Err(error) => return server_error(&error),
+    };
+    let groups = state.groups().groups;
+    let active: Vec<Arc<dyn Plugin>> = match state.inner.plugins.read() {
+        Ok(plugins) => plugins.clone(),
+        Err(_) => return server_error(&"plugin lock poisoned"),
+    };
+    let mut tasks = tokio::task::JoinSet::new();
+    for (index, plugin) in active.iter().cloned().enumerate() {
+        tasks.spawn(async move { (index, tokio::time::timeout(SCAN_TIMEOUT, plugin.observe()).await) });
+    }
+    let mut results = Vec::new();
+    while let Some(joined) = tasks.join_next().await {
+        if let Ok(result) = joined {
+            results.push(result);
+        }
+    }
+    results.sort_by_key(|(index, _)| *index);
+    let scan_results = results
+        .into_iter()
+        .map(|(index, result)| {
+            let plugin = &active[index];
+            let title =
+                plugins::plugin_type(plugin.kind()).map_or("Unknown type", |plugin_type| plugin_type.title);
+            let observation = match result {
+                Ok(Ok(observation)) => observation,
+                Ok(Err(error)) => return failed(plugin.name(), title, error),
+                Err(_) => {
+                    return failed(
+                        plugin.name(),
+                        title,
+                        format!("No answer within {} s", SCAN_TIMEOUT.as_secs()),
+                    );
+                }
+            };
+            let findings = compare::compare(&devices, &groups, &observation);
+            let discoveries = findings
+                .iter()
+                .filter_map(|finding| match finding {
+                    Finding::Unknown { mac, hostname, .. } => Some(Discovery {
+                        name: hostname.clone(),
+                        mac: mac.clone(),
+                    }),
+                    _ => None,
+                })
+                .collect();
+            ScanRow {
+                name: plugin.name().to_owned(),
+                title,
+                status: match findings.len() {
+                    0 => "No discrepancies".to_owned(),
+                    1 => "1 discrepancy".to_owned(),
+                    count => format!("{count} discrepancies"),
+                },
+                error: String::new(),
+                findings: findings.iter().map(finding_text).collect(),
+                discoveries,
+            }
+        })
+        .collect();
+    page(&state, scan_results, true, String::new())
+}
+
+fn failed(name: &str, title: &'static str, error: String) -> ScanRow {
+    ScanRow {
+        name: name.to_owned(),
+        title,
+        status: "Scan failed".to_owned(),
+        error,
+        findings: Vec::new(),
+        discoveries: Vec::new(),
+    }
+}
+
+fn address(ip: Option<std::net::Ipv4Addr>) -> String {
+    ip.map_or_else(|| "no address".to_owned(), |ip| ip.to_string())
+}
+
+fn finding_text(finding: &Finding) -> String {
+    match finding {
+        Finding::Unknown { mac, ip, hostname } => {
+            let name = if hostname.is_empty() {
+                "without a host name"
+            } else {
+                hostname
+            };
+            format!("Unknown device {name} ({mac}, {})", address(*ip))
+        }
+        Finding::Missing { device } => format!("{device} has no entry"),
+        Finding::WrongName { device, actual } => format!("{device} is named {actual}"),
+        Finding::WrongIp {
+            device,
+            expected,
+            actual,
+        } => format!(
+            "{device} has {}, expected {}",
+            address(*actual),
+            address(*expected)
+        ),
+        Finding::WrongVlan {
+            device,
+            expected,
+            actual,
+        } => format!("{device} is in VLAN {actual}, expected {expected}"),
+        Finding::Foreign { mac, name } => format!("Entry {name} ({mac}) is not in the list"),
+    }
 }

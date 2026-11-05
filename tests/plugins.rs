@@ -35,42 +35,37 @@ async fn get(data: &TempDir, path: &str) -> (StatusCode, String) {
 #[tokio::test]
 async fn plugins_can_be_added_configured_and_toggled() {
     let data = tempfile::tempdir().unwrap();
-    let response = post(
-        &data,
-        "/plugins",
-        "kind=leases-file&name=router&path=%2Fdata%2Fdhcp.leases",
-    )
-    .await;
+    let response = post(&data, "/plugins", "type=leases-file&name=router&path=dhcp.leases").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
 
     let settings_path = data.path().join("lanlord.toml");
-    let active = lanlord::plugins::load(&settings_path).unwrap();
-    assert_eq!(active.len(), 1);
+    assert_eq!(lanlord::plugins::load(&settings_path).unwrap().len(), 1);
 
     let response = post(&data, "/plugins/router/enabled", "").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     assert!(lanlord::plugins::load(&settings_path).unwrap().is_empty());
 
-    let response = post(&data, "/plugins/router", "path=%2Fdata%2Frouter.leases").await;
+    let response = post(&data, "/plugins/router", "path=router.leases").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     let settings = lanlord::plugins::read_settings(&settings_path).unwrap();
-    assert_eq!(settings.plugins[0]["path"].as_str(), Some("/data/router.leases"));
+    assert_eq!(settings.plugins[0]["path"].as_str(), Some("router.leases"));
     assert_eq!(settings.plugins[0]["enabled"].as_bool(), Some(false));
 
-    let page = get(&data, "/plugins").await;
-    assert_eq!(page.0, StatusCode::OK);
-    assert!(page.1.contains("router"));
-    assert!(page.1.contains("/data/router.leases"));
+    let (status, page) = get(&data, "/plugins").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(page.contains("router.leases"));
+    assert!(page.contains(r#"id="plugin-search""#));
 }
 
 #[tokio::test]
-async fn plugin_search_input_and_tab_are_rendered() {
+async fn page_offers_the_built_in_types() {
     let data = tempfile::tempdir().unwrap();
-    let page = get(&data, "/plugins").await;
-    assert_eq!(page.0, StatusCode::OK);
-    assert!(page.1.contains(r#"id="plugin-search""#));
-    assert!(page.1.contains(r#"aria-current="page">Plugins</a>"#));
-    assert!(page.1.contains("<details open>"));
+    let (status, page) = get(&data, "/plugins").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(page.contains(r#"aria-current="page">Plugins</a>"#));
+    assert!(page.contains(r#"name="type" value="leases-file""#));
+    assert!(page.contains(r#"name="type" value="openwrt""#));
+    assert!(!page.contains("pihole"));
 }
 
 #[tokio::test]
@@ -79,109 +74,118 @@ async fn openwrt_plugin_can_be_added_and_configured() {
     let response = post(
         &data,
         "/plugins",
-        "kind=openwrt&name=router&host=router.lan&user=root&port=22&key_file=%2Fdata%2Fssh%2Frouter&host_key_file=%2Fdata%2Fssh%2Frouter.pub",
+        "type=openwrt&name=router&host=router.lan&user=root&port=22&key_file=router.key&host_key_file=router.pub",
     )
     .await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-
     let settings_path = data.path().join("lanlord.toml");
     let active = lanlord::plugins::load(&settings_path).unwrap();
-    assert_eq!(active.len(), 1);
     assert_eq!(active[0].kind(), "openwrt");
 
     let response = post(
         &data,
         "/plugins/router",
-        "host=router2.lan&user=root&port=2222&key_file=%2Fdata%2Fssh%2Frouter&host_key_file=%2Fdata%2Fssh%2Frouter.pub",
+        "host=router2.lan&user=root&port=2222&key_file=router.key&host_key_file=router.pub",
     )
     .await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     let settings = lanlord::plugins::read_settings(&settings_path).unwrap();
     assert_eq!(settings.plugins[0]["host"].as_str(), Some("router2.lan"));
     assert_eq!(settings.plugins[0]["port"].as_integer(), Some(2222));
-
-    let page = get(&data, "/plugins").await;
-    assert_eq!(page.0, StatusCode::OK);
-    assert!(page.1.contains("router2.lan"));
-    assert!(page.1.contains("/data/ssh/router.pub"));
 }
 
 #[tokio::test]
-async fn pihole_plugin_can_be_configured_without_storing_a_password() {
+async fn invalid_settings_are_rejected_with_a_message() {
     let data = tempfile::tempdir().unwrap();
-    let response = post(
-        &data,
-        "/plugins",
-        "kind=pihole&name=pihole&url=http%3A%2F%2Fpihole&password_file=%2Fdata%2Fssh%2Fpihole-password",
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-
-    let settings_path = data.path().join("lanlord.toml");
-    let active = lanlord::plugins::load(&settings_path).unwrap();
-    assert_eq!(active.len(), 1);
-    assert_eq!(active[0].kind(), "pihole");
-    let saved = std::fs::read_to_string(settings_path).unwrap();
-    assert!(saved.contains("/data/ssh/pihole-password"));
-    assert!(!saved.contains("password ="));
-    let page = get(&data, "/plugins").await;
-    assert!(page.1.contains(r#"<details class="plugin-config" open>"#));
+    for (form, message) in [
+        (
+            "type=leases-file&name=a&path=%2Fetc%2Fpasswd",
+            "file name in the data directory",
+        ),
+        (
+            "type=leases-file&name=a&path=..%2Flanlord.toml",
+            "file name in the data directory",
+        ),
+        ("type=leases-file&name=a&path=", "Lease file is required"),
+        (
+            "type=openwrt&name=a&host=router.lan&user=root&port=0&key_file=k&host_key_file=h",
+            "SSH port must be a number",
+        ),
+        ("type=pihole&name=a", "Choose a supported plugin type"),
+        (
+            "type=leases-file&name=a%20b&path=dhcp.leases",
+            "invalid plugin name",
+        ),
+    ] {
+        let response = post(&data, "/plugins", form).await;
+        assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY, "{form}");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let page = String::from_utf8(body.to_vec()).unwrap();
+        assert!(page.contains(message), "{form}: {page}");
+    }
+    assert!(!data.path().join("lanlord.toml").exists());
 }
 
 #[tokio::test]
-async fn pihole_plugin_stores_only_the_password_file_path() {
-    let data = tempfile::tempdir().unwrap();
-    let response = post(
-        &data,
-        "/plugins",
-        "kind=pihole&name=pihole&url=http%3A%2F%2Fpihole&password_file=%2Fdata%2Fssh%2Fpihole-password",
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
-
-    let settings = lanlord::plugins::read_settings(&data.path().join("lanlord.toml")).unwrap();
-    assert_eq!(settings.plugins[0]["url"].as_str(), Some("http://pihole"));
-    assert_eq!(
-        settings.plugins[0]["password_file"].as_str(),
-        Some("/data/ssh/pihole-password")
-    );
-    assert!(!settings.plugins[0].contains_key("password"));
-}
-
-#[tokio::test]
-async fn scan_reports_unknown_devices_from_active_sources() {
+async fn scan_reports_unknown_devices_that_can_be_added() {
     let data = tempfile::tempdir().unwrap();
     let example = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/groups.toml");
     std::fs::copy(example, data.path().join("groups.toml")).unwrap();
-    let lease_path = data.path().join("dhcp.leases");
     std::fs::write(
-        &lease_path,
-        "1793900000 00:11:22:33:44:55 192.0.2.45 new-device *\n",
+        data.path().join("devices.toml"),
+        "[[device]]\nname = \"known\"\nmac = \"00:00:00:00:00:01\"\ngroup = \"lan\"\n",
     )
     .unwrap();
-    let mut plugin = toml::Table::new();
-    plugin.insert("type".to_owned(), toml::Value::String("leases-file".to_owned()));
-    plugin.insert("name".to_owned(), toml::Value::String("router".to_owned()));
-    plugin.insert("enabled".to_owned(), toml::Value::Boolean(true));
-    plugin.insert(
-        "path".to_owned(),
-        toml::Value::String(lease_path.display().to_string()),
+    std::fs::write(
+        data.path().join("dhcp.leases"),
+        "1793900000 00:11:22:33:44:55 192.0.2.45 new-device *\n1793900000 00:00:00:00:00:01 192.0.2.2 known *\n",
+    )
+    .unwrap();
+    assert_eq!(
+        post(&data, "/plugins", "type=leases-file&name=router&path=dhcp.leases")
+            .await
+            .status(),
+        StatusCode::SEE_OTHER
     );
-    lanlord::plugins::save_settings(
-        &data.path().join("lanlord.toml"),
-        &lanlord::plugins::Settings {
-            plugins: vec![plugin],
-        },
-    )
-    .unwrap();
 
     let response = post(&data, "/plugins/scan", "").await;
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let page = String::from_utf8(body.to_vec()).unwrap();
-    assert!(page.contains("Scan results"));
-    assert!(page.contains("Unknown device new-device"));
-    assert!(page.contains("00:11:22:33:44:55"));
-    assert!(page.contains(r#"action="/devices/discovered""#));
-    assert!(page.contains(r#"value="new-device""#));
+    assert!(page.contains("1 discrepancy"), "{page}");
+    assert!(page.contains("Unknown device new-device (00:11:22:33:44:55, 192.0.2.45)"));
+    assert!(
+        page.contains(r#"action="/devices/discovered""#),
+        "unknown devices can be added to a filled list"
+    );
+
+    let response = post(
+        &data,
+        "/devices/discovered",
+        "name=new-device&mac=00:11:22:33:44:55",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let devices = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
+    assert!(devices.contains("name = \"new-device\""), "{devices}");
+}
+
+#[tokio::test]
+async fn failing_plugins_are_reported_without_stopping_the_scan() {
+    let data = tempfile::tempdir().unwrap();
+    assert_eq!(
+        post(
+            &data,
+            "/plugins",
+            "type=leases-file&name=missing&path=nope.leases"
+        )
+        .await
+        .status(),
+        StatusCode::SEE_OTHER
+    );
+    let response = post(&data, "/plugins/scan", "").await;
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let page = String::from_utf8(body.to_vec()).unwrap();
+    assert!(page.contains("Scan failed"), "{page}");
+    assert!(page.contains("nope.leases"));
 }
