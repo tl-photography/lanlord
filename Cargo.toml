@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
 description = "Device list for a small OpenWrt network"
+license = "PolyForm-Noncommercial-1.0.0"
 repository = "https://github.com/tl-photography/lanlord"
 publish = false
 

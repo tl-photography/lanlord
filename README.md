@@ -169,3 +169,9 @@ Accepted ZAP findings are listed with a reason in [.zap/rules.tsv](.zap/rules.ts
 
 A weekly run checks new advisories for the dependencies and the base images.
 Dependabot keeps the crates, the actions and the base images up to date.
+
+## License
+
+lanlord is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE.md): free for personal use and other
+noncommercial purposes. Commercial use needs a separate commercial license from the author; ask through
+[GitHub](https://github.com/tl-photography/lanlord/issues).
