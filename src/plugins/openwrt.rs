@@ -21,6 +21,7 @@ use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Entry, Observation, Seen};
 use crate::devices::{DeviceList, Error, normalize_mac};
 use crate::leases::{self, Change, HostSection, Network, Plan};
+use crate::preview::Preview;
 
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -163,10 +164,10 @@ impl OpenWrt {
         Ok((!networks.is_empty()).then(|| leases::plan(devices, &hosts, &networks)))
     }
 
-    async fn preview(&self, devices: DeviceList) -> Result<Option<Plan>, String> {
+    async fn preview(&self, devices: DeviceList) -> Result<Option<Preview>, String> {
         let password = read_password(&self.password_file).await?;
         let session = self.login(&password).await?;
-        self.plan_in(&session, &devices).await
+        Ok(self.plan_in(&session, &devices).await?.map(|plan| plan.preview()))
     }
 
     /// Stages the changes, applies them with rollback, reads the device again and confirms only if nothing is
@@ -319,7 +320,7 @@ impl Plugin for OpenWrt {
         true
     }
 
-    fn plan(&self, devices: DeviceList) -> BoxFuture<'_, Result<Option<Plan>, String>> {
+    fn plan(&self, devices: DeviceList) -> BoxFuture<'_, Result<Option<Preview>, String>> {
         Box::pin(self.preview(devices))
     }
 
@@ -971,7 +972,7 @@ mod tests {
         assert!(router.is_target());
 
         let plan = router.plan(devices()).await.unwrap().unwrap();
-        assert_eq!(plan.changes.len(), 2, "take over cfg01 as lanlord_omv");
+        assert_eq!(plan.steps.len(), 2, "take over cfg01 as lanlord_omv");
         assert!(plan.notes[0].starts_with("plug waits"));
 
         assert_eq!(router.apply(devices(), plan.digest()).await.unwrap().len(), 2);
@@ -981,7 +982,7 @@ mod tests {
             assert!(fake.committed.contains_key("lanlord_omv"));
             assert!(!fake.committed.contains_key("cfg01"));
         }
-        assert_eq!(router.plan(devices()).await.unwrap().unwrap().changes, []);
+        assert_eq!(router.plan(devices()).await.unwrap().unwrap().steps, []);
         assert_eq!(
             router.apply(devices(), Plan::default().digest()).await.unwrap(),
             Vec::<String>::new()
