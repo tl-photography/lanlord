@@ -210,12 +210,16 @@ async fn discovered_device_seeds_an_empty_list_without_a_dynamic_ip() {
 }
 
 #[tokio::test]
-async fn discovered_device_import_rejects_a_nonempty_list_and_invalid_mac() {
+async fn discovered_devices_join_a_filled_list_and_invalid_macs_are_rejected() {
     let data = data();
-    let before = devices(&data);
     let response = post(&data, "/devices/discovered", "name=phone&mac=00:11:22:33:44:55").await;
-    assert_eq!(response.status(), StatusCode::CONFLICT);
-    assert_eq!(devices(&data), before);
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let file = devices(&data);
+    assert!(file.contains("name = \"phone\""), "{file}");
+    assert!(
+        file.contains("group = \"guest\""),
+        "lands in the default group: {file}"
+    );
 
     let empty = tempfile::tempdir().unwrap();
     let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/groups.toml");

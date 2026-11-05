@@ -139,7 +139,7 @@ pub async fn edit_form(State(state): State<AppState>, Path(name): Path<String>) 
 
 /// Adds a device.
 pub async fn create(State(state): State<AppState>, Form(form): Form<DeviceForm>) -> Response {
-    save(&state, None, form, false)
+    save(&state, None, form)
 }
 
 /// Changes a device; the name may change too.
@@ -148,7 +148,7 @@ pub async fn update(
     Path(name): Path<String>,
     Form(form): Form<DeviceForm>,
 ) -> Response {
-    save(&state, Some(&name), form, false)
+    save(&state, Some(&name), form)
 }
 
 /// Field of the move menu and of drag and drop.
@@ -186,7 +186,7 @@ fn suggested_name(hostname: &str, mac: &str) -> String {
     }
 }
 
-/// Imports one discovered device only while the device list is empty.
+/// Adds a device that a plugin reported as unknown, in the default group.
 pub async fn add_discovered(
     State(state): State<AppState>,
     Form(discovered): Form<DiscoveredForm>,
@@ -204,7 +204,7 @@ pub async fn add_discovered(
         group,
         ..DeviceForm::default()
     };
-    save(&state, None, form, true)
+    save(&state, None, form)
 }
 
 /// Moves a device to another group, keeps everything else.
@@ -224,10 +224,10 @@ pub async fn move_device(
         group: target.group,
         ..DeviceForm::from_device(device)
     };
-    save(&state, Some(&name), form, false)
+    save(&state, Some(&name), form)
 }
 
-fn save(state: &AppState, original: Option<&str>, form: DeviceForm, require_empty: bool) -> Response {
+fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response {
     let device = match form.to_device() {
         Ok(device) => device,
         Err(message) => return page(state, original, form, message),
@@ -240,9 +240,6 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm, require_empt
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
-    if require_empty && !list.devices.is_empty() {
-        return (StatusCode::CONFLICT, "Devices were added before this import").into_response();
-    }
     match original {
         Some(name) => match list.devices.iter_mut().find(|existing| existing.name == name) {
             Some(existing) => *existing = device,
