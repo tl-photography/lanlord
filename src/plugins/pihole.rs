@@ -556,7 +556,10 @@ fn observation(devices: &Value) -> Observation {
             })
         })
         .collect();
-    Observation { seen, entries: None }
+    Observation {
+        seen,
+        ..Observation::default()
+    }
 }
 
 impl Plugin for PiHole {

@@ -30,6 +30,17 @@ pub struct Entry {
     pub vlan: Option<u16>,
 }
 
+/// A device connected to a Wi-Fi interface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WifiClient {
+    /// MAC address, lowercase with colons.
+    pub mac: String,
+    /// Where it is connected, for example `router: Home (5 GHz)`.
+    pub access_point: String,
+    /// Signal in dBm, if known.
+    pub signal: Option<i64>,
+}
+
 /// What a plugin reports.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Observation {
@@ -37,6 +48,10 @@ pub struct Observation {
     pub seen: Vec<Seen>,
     /// Entries of a plugin that configures devices; `None` for plugins that only report.
     pub entries: Option<Vec<Entry>>,
+    /// Devices connected to the plugin's Wi-Fi.
+    pub wifi: Vec<WifiClient>,
+    /// Remarks of the plugin, for example data it could not read.
+    pub notes: Vec<String>,
 }
 
 /// One discrepancy between the device list and a plugin.

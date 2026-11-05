@@ -128,11 +128,16 @@ fn plain_http_is_only_allowed_to_the_own_host() {
     assert!(OpenWrt::new("router".to_owned(), table, data).is_err());
 }
 
-/// A small ubus API like `OpenWrt`'s: one password and the three calls lanlord makes.
+/// A small ubus API like `OpenWrt`'s: one password and the calls lanlord makes. `wifi` answers `iwinfo devices`.
 async fn fake_router(stations: Value) -> String {
+    fake_router_with_wifi(stations, json!([4])).await
+}
+
+async fn fake_router_with_wifi(stations: Value, wifi: Value) -> String {
     use axum::{Json, Router, routing::post};
     let handler = move |Json(request): Json<Value>| {
         let stations = stations.clone();
+        let wifi = wifi.clone();
         async move {
             let params = request["params"].as_array().cloned().unwrap_or_default();
             let object = params[1].as_str().unwrap_or_default();
@@ -149,6 +154,12 @@ async fn fake_router(stations: Value) -> String {
                         "cfg1": { "name": "tv", "mac": "aa:bb:cc:00:00:02", "ip": "192.0.2.20" }
                     } }]),
                 ("uci", "get") => stations,
+                ("iwinfo", "devices") => wifi,
+                ("iwinfo", "info") => json!([0, { "ssid": "Home", "frequency": 5180 }]),
+                ("iwinfo", "assoclist") => json!([0, { "results": [
+                        { "mac": "AA:BB:CC:00:00:01", "signal": -43 },
+                        { "mac": "aa:bb:cc:00:00:09", "signal": -71 }
+                    ] }]),
                 _ => json!([3]),
             };
             Json(json!({ "jsonrpc": "2.0", "id": 1, "result": result }))
@@ -427,4 +438,57 @@ async fn an_access_point_without_dhcp_has_nothing_to_apply() {
     assert_eq!(access_point.plan(devices()).await.unwrap(), None);
     let error = access_point.apply(devices(), String::new()).await.unwrap_err();
     assert!(error.contains("serves no DHCP"), "{error}");
+}
+
+#[tokio::test]
+async fn wifi_clients_are_reported_with_their_access_point() {
+    let data = tempfile::tempdir().unwrap();
+    let url = fake_router_with_wifi(json!([4]), json!([0, { "devices": ["phy0-ap0"] }])).await;
+    let observation = plugin(&url, data.path(), "secret", 0o600)
+        .observe()
+        .await
+        .unwrap();
+    assert_eq!(observation.wifi.len(), 2);
+    assert_eq!(observation.wifi[0].access_point, "router: Home (5 GHz)");
+    assert_eq!(observation.wifi[0].mac, "aa:bb:cc:00:00:01");
+    assert_eq!(observation.wifi[1].signal, Some(-71));
+    assert!(
+        observation
+            .seen
+            .iter()
+            .any(|seen| seen.mac == "aa:bb:cc:00:00:09" && seen.ip.is_none()),
+        "a Wi-Fi client without a lease is seen"
+    );
+    assert_eq!(observation.seen.len(), 2, "the leased phone is not added twice");
+    assert_eq!(observation.notes, Vec::<String>::new());
+}
+
+#[tokio::test]
+async fn missing_rights_for_wifi_become_a_note() {
+    let data = tempfile::tempdir().unwrap();
+    let url = fake_router_with_wifi(json!([4]), json!([6])).await;
+    let observation = plugin(&url, data.path(), "secret", 0o600)
+        .observe()
+        .await
+        .unwrap();
+    assert_eq!(observation.wifi, []);
+    assert!(
+        observation.notes[0].starts_with("Wi-Fi clients not read:"),
+        "{:?}",
+        observation.notes
+    );
+    assert!(observation.notes[0].contains("rpcd ACL"));
+}
+
+#[test]
+fn bands_follow_the_frequency() {
+    assert_eq!(
+        access_point("ap", "phy1-ap0", &json!({ "ssid": "Home", "frequency": 2412 })),
+        "ap: Home (2.4 GHz)"
+    );
+    assert_eq!(
+        access_point("ap", "phy2-ap0", &json!({ "ssid": "Home", "frequency": 5955 })),
+        "ap: Home (6 GHz)"
+    );
+    assert_eq!(access_point("ap", "phy0-ap0", &json!({})), "ap: phy0-ap0");
 }

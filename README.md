@@ -31,7 +31,7 @@ differences.
 
 | Type          | Reports                                                                 | Applies                                  |
 | ------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
-| `openwrt`     | DHCP leases, static leases and Wi-Fi VLANs per MAC of an OpenWrt device | static leases, if the device serves DHCP |
+| `openwrt`     | DHCP leases, static leases, Wi-Fi clients and Wi-Fi VLANs per MAC       | static leases, if the device serves DHCP |
 | `pihole`      | the devices in Pi-hole's network table, if switched on                  | client groups per lanlord group          |
 | `leases-file` | the devices in a dnsmasq lease file in the data directory               | -                                        |
 
@@ -47,7 +47,12 @@ user may read and change, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
   "lanlord": {
     "description": "lanlord device list",
     "read": {
-      "ubus": { "luci-rpc": ["getDHCPLeases"], "network.interface": ["dump"], "uci": ["get"] },
+      "ubus": {
+        "luci-rpc": ["getDHCPLeases"],
+        "network.interface": ["dump"],
+        "uci": ["get"],
+        "iwinfo": ["devices", "info", "assoclist"]
+      },
       "uci": ["dhcp", "wireless"]
     },
     "write": {

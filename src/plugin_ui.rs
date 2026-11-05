@@ -61,6 +61,14 @@ struct ScanRow {
     error: String,
     findings: Vec<String>,
     discoveries: Vec<Discovery>,
+    wifi: Vec<WifiRow>,
+    notes: Vec<String>,
+}
+
+struct WifiRow {
+    device: String,
+    access_point: String,
+    signal: String,
 }
 
 struct Discovery {
@@ -348,9 +356,28 @@ pub async fn scan(State(state): State<AppState>) -> Response {
                     _ => None,
                 })
                 .collect();
+            let mut wifi: Vec<WifiRow> = observation
+                .wifi
+                .iter()
+                .map(|client| WifiRow {
+                    device: devices
+                        .devices
+                        .iter()
+                        .find(|device| device.mac == client.mac)
+                        .map_or_else(|| client.mac.clone(), |device| device.name.clone()),
+                    access_point: client.access_point.clone(),
+                    signal: client
+                        .signal
+                        .map(|signal| format!("{signal} dBm"))
+                        .unwrap_or_default(),
+                })
+                .collect();
+            wifi.sort_by_key(|row| row.device.to_ascii_lowercase());
             ScanRow {
                 name: plugin.name().to_owned(),
                 title,
+                wifi,
+                notes: observation.notes.clone(),
                 status: match findings.len() {
                     0 => "No discrepancies".to_owned(),
                     1 => "1 discrepancy".to_owned(),
@@ -373,6 +400,8 @@ fn failed(name: &str, title: &'static str, error: String) -> ScanRow {
         error,
         findings: Vec::new(),
         discoveries: Vec::new(),
+        wifi: Vec::new(),
+        notes: Vec::new(),
     }
 }
 

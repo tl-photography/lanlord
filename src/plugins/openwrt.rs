@@ -18,7 +18,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
-use crate::compare::{Entry, Observation, Seen};
+use crate::compare::{Entry, Observation, Seen, WifiClient};
 use crate::devices::{DeviceList, Error, normalize_mac};
 use crate::leases::{self, Change, HostSection, Network, Plan};
 use crate::preview::Preview;
@@ -140,7 +140,33 @@ impl OpenWrt {
             Err(error) if error.ends_with("not found") || error.ends_with("no data") => json!({}),
             Err(error) => return Err(error),
         };
-        Ok(observation(&leases, &hosts, &stations))
+        let mut observation = observation(&leases, &hosts, &stations);
+        match self.wifi_clients(&session).await {
+            Ok(clients) => add_wifi(&mut observation, clients),
+            // No Wi-Fi hardware, no iwinfo.
+            Err(error) if error.ends_with("not found") => {}
+            Err(error) => observation.notes.push(format!("Wi-Fi clients not read: {error}")),
+        }
+        Ok(observation)
+    }
+
+    /// The devices connected to each Wi-Fi interface of the device.
+    async fn wifi_clients(&self, session: &str) -> Result<Vec<WifiClient>, String> {
+        let devices = self.call(session, "iwinfo", "devices", &json!({})).await?;
+        let mut clients = Vec::new();
+        for device in devices
+            .get("devices")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+        {
+            let arguments = json!({ "device": device });
+            let info = self.call(session, "iwinfo", "info", &arguments).await?;
+            let associated = self.call(session, "iwinfo", "assoclist", &arguments).await?;
+            clients.extend(wifi(&access_point(&self.name, device, &info), &associated));
+        }
+        Ok(clients)
     }
 
     /// The static leases and the networks the device serves with DHCP.
@@ -465,6 +491,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
     Observation {
         seen,
         entries: Some(entries),
+        ..Observation::default()
     }
 }
 
@@ -517,6 +544,49 @@ fn served_networks(dhcp: &Value, dump: &Value) -> Vec<Network> {
             })
         })
         .collect()
+}
+
+/// Where a client is connected: the plugin name, the network name and the band.
+fn access_point(plugin: &str, device: &str, info: &Value) -> String {
+    let ssid = info.get("ssid").and_then(Value::as_str).unwrap_or(device);
+    let band = match info.get("frequency").and_then(Value::as_u64) {
+        Some(frequency) if frequency < 3000 => " (2.4 GHz)",
+        Some(frequency) if frequency < 5925 => " (5 GHz)",
+        Some(_) => " (6 GHz)",
+        None => "",
+    };
+    format!("{plugin}: {ssid}{band}")
+}
+
+/// The clients of one Wi-Fi interface.
+fn wifi(access_point: &str, associated: &Value) -> Vec<WifiClient> {
+    associated
+        .get("results")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|client| {
+            Some(WifiClient {
+                mac: normalize_mac(client.get("mac")?.as_str()?)?,
+                access_point: access_point.to_owned(),
+                signal: client.get("signal").and_then(Value::as_i64),
+            })
+        })
+        .collect()
+}
+
+/// Adds the Wi-Fi clients; one without a DHCP lease, for example with a fixed address on the device, is seen too.
+fn add_wifi(observation: &mut Observation, clients: Vec<WifiClient>) {
+    for client in &clients {
+        if observation.seen.iter().all(|seen| seen.mac != client.mac) {
+            observation.seen.push(Seen {
+                mac: client.mac.clone(),
+                ip: None,
+                hostname: String::new(),
+            });
+        }
+    }
+    observation.wifi = clients;
 }
 
 /// Parses a SHA-256 fingerprint: 64 hex digits, with or without colons.

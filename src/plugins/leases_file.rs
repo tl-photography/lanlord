@@ -64,7 +64,7 @@ impl Plugin for LeasesFile {
                 .map_err(|error| format!("{}: {error}", self.path.display()))?;
             Ok(Observation {
                 seen: parse(&content),
-                entries: None,
+                ..Observation::default()
             })
         })
     }
