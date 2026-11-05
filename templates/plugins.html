@@ -71,6 +71,13 @@
         {% for field in plugin.fields %}
         {% if field.is_switch() %}
         <label class="switch"><input type="checkbox" name="{{ field.key }}" value="true"{% if field.checked() %} checked{% endif %}> {{ field.label }}</label>
+        {% else if field.input == "select" %}
+        <label>{{ field.label }}
+          <select name="{{ field.key }}">
+            <option value="">none</option>
+            {% for option in field.options %}<option value="{{ option }}"{% if option.as_str() == field.value.as_str() %} selected{% endif %}>{{ option }}</option>{% endfor %}
+          </select>
+        </label>
         {% else %}
         <label>{{ field.label }} <input type="{{ field.input }}" name="{{ field.key }}" value="{{ field.value }}"{% if !field.optional %} required{% endif %} placeholder="{{ field.placeholder }}" autocapitalize="off" spellcheck="false"></label>
         {% endif %}
@@ -102,6 +109,13 @@
     {% for field in plugin_type.fields %}
     {% if field.is_switch() %}
     <label class="switch"><input type="checkbox" name="{{ field.key }}" value="true"> {{ field.label }}</label>
+    {% else if field.input == "select" %}
+    <label>{{ field.label }}
+      <select name="{{ field.key }}">
+        <option value="">none</option>
+        {% for option in field.options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}
+      </select>
+    </label>
     {% else %}
     <label>{{ field.label }} <input type="{{ field.input }}" name="{{ field.key }}"{% if !field.optional %} required{% endif %} placeholder="{{ field.placeholder }}" autocapitalize="off" spellcheck="false"></label>
     {% endif %}

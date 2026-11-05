@@ -221,7 +221,10 @@ async fn broken_entries_are_left_out_without_stopping_lanlord() {
 
     let (status, page) = get(&data, "/plugins").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(page.contains("Left out: router: Address is required"), "{page}");
+    assert!(
+        page.contains("Left out: router: Password file is required"),
+        "{page}"
+    );
     assert!(page.contains(r#"action="/plugins/router/delete""#));
 }
 

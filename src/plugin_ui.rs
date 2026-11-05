@@ -28,6 +28,8 @@ struct FieldView {
     input: &'static str,
     placeholder: &'static str,
     optional: bool,
+    /// Choices of a dropdown, for device settings.
+    options: Vec<String>,
 }
 
 impl FieldView {
@@ -96,11 +98,16 @@ fn input(field: &Field) -> &'static str {
     match field.kind {
         FieldKind::Url => "url",
         FieldKind::Switch => "checkbox",
+        FieldKind::Device => "select",
         _ => "text",
     }
 }
 
-fn field_views(fields: &'static [Field], values: impl Fn(&str) -> String) -> Vec<FieldView> {
+fn field_views(
+    fields: &'static [Field],
+    devices: &[String],
+    values: impl Fn(&str) -> String,
+) -> Vec<FieldView> {
     fields
         .iter()
         .map(|field| FieldView {
@@ -110,6 +117,11 @@ fn field_views(fields: &'static [Field], values: impl Fn(&str) -> String) -> Vec
             input: input(field),
             placeholder: field.placeholder,
             optional: field.optional,
+            options: if field.kind == FieldKind::Device {
+                devices.to_vec()
+            } else {
+                Vec::new()
+            },
         })
         .collect()
 }
@@ -134,6 +146,11 @@ fn page_with_message(
     message: String,
     error: String,
 ) -> Response {
+    let mut device_names: Vec<String> = state
+        .devices()
+        .map(|list| list.devices.into_iter().map(|device| device.name).collect())
+        .unwrap_or_default();
+    device_names.sort_by_key(|name| name.to_ascii_lowercase());
     let notifiers: Vec<String> = state.inner.plugins.read().map_or_else(
         |_| Vec::new(),
         |plugins| {
@@ -163,7 +180,7 @@ fn page_with_message(
             let kind = table_text(table, "type");
             let plugin_type = plugins::plugin_type(&kind);
             let fields = plugin_type.map_or_else(Vec::new, |plugin_type| {
-                field_views(plugin_type.fields, |key| table_text(table, key))
+                field_views(plugin_type.fields, &device_names, |key| table_text(table, key))
             });
             PluginRow {
                 notifies: notifiers.contains(&name),
@@ -185,7 +202,7 @@ fn page_with_message(
             kind: plugin_type.kind,
             title: plugin_type.title,
             description: plugin_type.description,
-            fields: field_views(plugin_type.fields, |_| String::new()),
+            fields: field_views(plugin_type.fields, &device_names, |_| String::new()),
         })
         .collect();
     let status = if error.is_empty() {
