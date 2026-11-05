@@ -1,3 +1,4 @@
-# Integration tests use fixed passwords against fake servers.
+# Tests use fixed passwords against fake servers: integration tests and the unit tests next to each module.
 paths-ignore:
   - tests
+  - src/**/tests.rs
