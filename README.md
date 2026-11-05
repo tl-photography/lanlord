@@ -15,30 +15,40 @@ differences.
   `lanlord.toml`.
 - Plugins report what they see. A scan lists unknown devices, which can be added to the list, and differences:
   missing static leases, other addresses, names or VLANs.
+- The Apply page shows what a router would change, as uci commands like LuCI. Nothing changes before the Apply
+  button. lanlord applies with rollback and confirms only after reading the changes back; otherwise the router
+  undoes them after 30 seconds.
+- Static leases on a router are sections `dhcp.lanlord_<name>`. When lanlord sets a device's lease, it replaces an
+  unnamed entry of the same MAC address; other entries stay. A device whose address is not in a network the router
+  serves waits, its entry stays as it is.
 - A plugin entry that cannot be used, for example after a settings change, is left out and shown on the Plugins
   page; lanlord still starts.
 
 ### Plugins
 
-| Type          | Reports                                                                    |
-| ------------- | -------------------------------------------------------------------------- |
-| `openwrt`     | DHCP leases, static leases and Wi-Fi VLANs per MAC of an OpenWrt device     |
-| `leases-file` | the devices in a dnsmasq lease file in the data directory                   |
+| Type          | Reports                                                                 | Applies                                  |
+| ------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
+| `openwrt`     | DHCP leases, static leases and Wi-Fi VLANs per MAC of an OpenWrt device | static leases, if the device serves DHCP |
+| `leases-file` | the devices in a dnsmasq lease file in the data directory               | -                                        |
 
 File settings, like password files, are file names in the data directory. Paths outside it are rejected.
 
 ### OpenWrt
 
 lanlord uses the ubus JSON-RPC API that LuCI uses, as its own rpcd user. An ACL on the device decides what that
-user may read, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
+user may read and change, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
 
 ```json
 {
   "lanlord": {
     "description": "lanlord device list",
     "read": {
-      "ubus": { "luci-rpc": ["getDHCPLeases"], "uci": ["get"] },
+      "ubus": { "luci-rpc": ["getDHCPLeases"], "network.interface": ["dump"], "uci": ["get"] },
       "uci": ["dhcp", "wireless"]
+    },
+    "write": {
+      "ubus": { "uci": ["add", "set", "delete", "apply", "confirm", "rollback", "revert"] },
+      "uci": ["dhcp"]
     }
   }
 }
@@ -51,7 +61,10 @@ config login
 	option username 'lanlord'
 	option password '$1$...'
 	list read 'lanlord'
+	list write 'lanlord'
 ```
+
+Without the `write` part, lanlord only reads. An access point that serves no DHCP needs only the `read` part.
 
 The plugin needs the HTTPS address of the device, the user, the name of a file in the data directory with the
 password (mode `0600`) and the SHA-256 fingerprint of the device's certificate. lanlord trusts only that
