@@ -134,7 +134,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      code-quality: write
+      pull-requests: write
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -175,18 +175,25 @@ jobs:
           name: coverage-lcov
           path: lcov.info
 
-      - name: Write the coverage as Cobertura
-        run: cargo llvm-cov report --ignore-filename-regex 'src/main\.rs' --cobertura --output-path cobertura.xml
-
-      # Coverage on pull requests (GitHub Code Quality); a failed upload does not fail the job.
-      - name: Upload the coverage to GitHub
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52
-        with:
-          file: cobertura.xml
-          language: Rust
-          label: code-coverage/llvm-cov
-          fail-on-error: 'false'
+      # One comment per pull request, updated on every push; forks get no write token.
+      - name: Comment the coverage on the pull request
+        if: >-
+          github.event_name == 'pull_request'
+          && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          {
+            echo '### Test coverage'
+            echo
+            echo '```'
+            cargo llvm-cov report --ignore-filename-regex 'src/main\.rs' --summary-only
+            echo '```'
+            echo
+            echo 'Targets: 90 % lines and regions, see TESTING.md.'
+          } > coverage-comment.md
+          gh pr comment "$PR_NUMBER" --body-file coverage-comment.md --edit-last --create-if-none
 
   dependencies:
     name: Check dependencies (advisories, licenses, sources)

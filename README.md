@@ -185,8 +185,8 @@ Trivy scans the image for known vulnerabilities and the Dockerfile for misconfig
 against the CIS Docker Benchmark, and a ZAP baseline scan tests the running web interface.
 Accepted ZAP findings are listed with a reason in [.zap/rules.tsv](.zap/rules.tsv).
 
-Findings of CodeQL, clippy and Trivy go to GitHub code scanning; the coverage report goes to GitHub's code
-coverage on pull requests.
+Findings of CodeQL, clippy and Trivy go to GitHub code scanning. The coverage summary is posted as a comment on
+each pull request and updated with every push.
 
 A weekly run checks new advisories for the dependencies and the base images.
 Dependabot keeps the crates, the actions, the base images and the pre-commit hooks up to date.
