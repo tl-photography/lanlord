@@ -3,7 +3,7 @@ FROM rust:1.99.1-alpine3.24@sha256:27cd9befd4a05d6f6eb407c3e28365f5092f008bfc594
 # cargo-auditable embeds the dependency list, so scanners and SBOM tools see the crates in the binary.
 RUN cargo install cargo-auditable@0.7.7 --locked
 WORKDIR /src
-COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
+COPY Cargo.toml Cargo.lock rust-toolchain.toml rustfmt.toml clippy.toml ./
 RUN mkdir -p src && printf '//! Dependency cache placeholder.\nfn main() {}\n' > src/main.rs \
 	&& printf '//! Dependency cache placeholder.\n' > src/lib.rs \
 	&& cargo auditable build --release --locked
