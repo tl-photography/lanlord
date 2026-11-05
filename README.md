@@ -173,6 +173,8 @@ check everything:
 | Secrets               | TruffleHog over the whole history                                      |
 | Pre-commit hooks      | whitespace, YAML, TOML, private keys, actionlint, hadolint, shellcheck |
 | Image                 | build, [container tests](tests/container.sh), Trivy, Dockle, ZAP       |
+| Test coverage         | `cargo llvm-cov` with the targets in [TESTING.md](TESTING.md)          |
+| CodeQL                | security and quality queries for the Rust code and the workflows       |
 
 The container tests check the image from outside: no root, no shell, no package manager, no setuid files, a start
 read-only, without capabilities and as an arbitrary uid, the response headers and a clean stop on SIGTERM.
@@ -180,8 +182,11 @@ Trivy scans the image for known vulnerabilities and the Dockerfile for misconfig
 against the CIS Docker Benchmark, and a ZAP baseline scan tests the running web interface.
 Accepted ZAP findings are listed with a reason in [.zap/rules.tsv](.zap/rules.tsv).
 
+Findings of CodeQL, clippy and Trivy go to GitHub code scanning; the coverage report goes to GitHub's code
+coverage on pull requests.
+
 A weekly run checks new advisories for the dependencies and the base images.
-Dependabot keeps the crates, the actions and the base images up to date.
+Dependabot keeps the crates, the actions, the base images and the pre-commit hooks up to date.
 
 ## License
 

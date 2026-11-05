@@ -83,6 +83,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -102,6 +105,25 @@ jobs:
       - name: Lint
         run: cargo clippy --all-targets --locked -- -D warnings
 
+      - name: Install clippy-sarif
+        if: always()
+        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b
+        with:
+          tool: clippy-sarif@0.8.0
+
+      # The lints again as SARIF for code scanning; the step above decides the result.
+      - name: Write the lints as SARIF
+        if: always()
+        run: cargo clippy --all-targets --locked --message-format=json | clippy-sarif > clippy.sarif
+
+      # Pull requests from forks get no write token.
+      - name: Upload the lints to code scanning
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066
+        with:
+          sarif_file: clippy.sarif
+          category: clippy
+
       - name: Test
         run: cargo test --locked
 
@@ -110,6 +132,9 @@ jobs:
     needs: changes
     if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      code-quality: write
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -149,6 +174,19 @@ jobs:
         with:
           name: coverage-lcov
           path: lcov.info
+
+      - name: Write the coverage as Cobertura
+        run: cargo llvm-cov report --ignore-filename-regex 'src/main\.rs' --cobertura --output-path cobertura.xml
+
+      # Coverage on pull requests (GitHub Code Quality); a failed upload does not fail the job.
+      - name: Upload the coverage to GitHub
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/upload-code-coverage@2b21a77928be8d5168c2b9581a67f2adbebacc52
+        with:
+          file: cobertura.xml
+          language: Rust
+          label: code-coverage/llvm-cov
+          fail-on-error: 'false'
 
   dependencies:
     name: Check dependencies (advisories, licenses, sources)
@@ -202,6 +240,9 @@ jobs:
       !cancelled() && needs.changes.outputs.image == 'true'
       && needs.rust.result != 'failure'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -265,3 +306,36 @@ jobs:
           scan-ref: .
           severity: MEDIUM,HIGH,CRITICAL
           exit-code: '1'
+
+      # All findings for code scanning; the scans above decide the result.
+      - name: Write the image findings as SARIF
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          image-ref: lanlord:ci
+          ignore-unfixed: true
+          format: sarif
+          output: trivy-image.sarif
+
+      - name: Write the Dockerfile findings as SARIF
+        if: always()
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
+        with:
+          scan-type: config
+          scan-ref: .
+          format: sarif
+          output: trivy-config.sarif
+
+      - name: Upload the image findings to code scanning
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+      - name: Upload the Dockerfile findings to code scanning
+        if: always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@33d7b85da1a04171e211befe2c739303b9a4c066
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config

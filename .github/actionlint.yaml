@@ -1,0 +1,5 @@
+# Permission scopes that actionlint does not know yet.
+paths:
+  .github/workflows/ci.yml:
+    ignore:
+      - 'unknown permission scope "code-quality"'
