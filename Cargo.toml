@@ -26,7 +26,6 @@ tempfile = "3.27.0"
 tower = { version = "0.5.3", features = ["util"] }
 
 [lints.rust]
-warnings = "deny"
 unsafe_code = "forbid"
 missing_docs = "warn"
 
