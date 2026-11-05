@@ -8,7 +8,7 @@ coverage measures).
 | Level       | What                                                           | Where                                                 |
 | ----------- | -------------------------------------------------------------- | ----------------------------------------------------- |
 | Static      | formatting, lints, Dockerfile, workflows, shell scripts        | `rustfmt`, `clippy`, hadolint, actionlint, shellcheck |
-| Unit        | one module at a time: validation, comparison, origin check     | `#[cfg(test)]` in `src/`                              |
+| Unit        | one module at a time: validation, comparison, origin check     | `src/<module>/tests.rs`                               |
 | Integration | the web interface through the router, without a network socket | `tests/*.rs`                                          |
 | System      | the built image as it runs on a server                         | `tests/container.sh`, ZAP baseline scan               |
 | Security    | dependencies, image, Dockerfile, secrets                       | cargo-deny, Trivy, Dockle, TruffleHog                 |
