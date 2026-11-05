@@ -722,8 +722,21 @@ mod tests {
     }
 
     /// A Pi-hole like v6: one app password, sessions that must be ended, groups get ids on creation.
+    /// A new random password for each test, so no password is in the code.
+    fn random_password() -> String {
+        use ring::rand::{SecureRandom, SystemRandom};
+        let mut bytes = [0u8; 16];
+        SystemRandom::new().fill(&mut bytes).unwrap();
+        bytes.iter().fold(String::new(), |mut hex, byte| {
+            use std::fmt::Write as _;
+            let _ = write!(hex, "{byte:02x}");
+            hex
+        })
+    }
+
     #[derive(Default)]
     struct Fake {
+        password: String,
         groups: Vec<(String, u64)>,
         clients: Vec<Value>,
         sessions: usize,
@@ -753,7 +766,8 @@ mod tests {
             .route(
                 "/api/auth",
                 post(|State(fake): State<Shared>, Json(body): Json<Value>| async move {
-                    if body["password"] != "app-password" {
+                    let expected = fake.lock().unwrap().password.clone();
+                    if body["password"] != expected.as_str() {
                         let refused = json!({ "session": { "valid": false, "message": "password incorrect" } });
                         return (Status::UNAUTHORIZED, Json(refused));
                     }
@@ -844,8 +858,9 @@ mod tests {
         }
     }
 
-    fn with_old_client() -> Fake {
+    fn with_old_client(password: &str) -> Fake {
         Fake {
+            password: password.to_owned(),
             groups: vec![("Default".to_owned(), 0)],
             clients: vec![json!({ "client": "192.0.2.99", "comment": "lanlord: old", "groups": [0] })],
             ..Fake::default()
@@ -855,8 +870,9 @@ mod tests {
     #[tokio::test]
     async fn applies_groups_then_clients_and_always_logs_out() {
         let data = tempfile::tempdir().unwrap();
-        let (url, fake) = fake_pihole(with_old_client()).await;
-        let pihole = plugin(&url, data.path(), "app-password\n");
+        let password = random_password();
+        let (url, fake) = fake_pihole(with_old_client(&password)).await;
+        let pihole = plugin(&url, data.path(), &format!("{password}\n"));
         assert!(pihole.is_target());
         assert_eq!(pihole.kind(), "pihole");
 
@@ -883,7 +899,7 @@ mod tests {
             Observation::default(),
             "devices are only reported when switched on"
         );
-        let reporting = plugin_with(&url, data.path(), "app-password", "report_devices = true\n");
+        let reporting = plugin_with(&url, data.path(), &password, "report_devices = true\n");
         let seen = reporting.observe().await.unwrap().seen;
         assert_eq!(seen[0].hostname, "phone");
         assert_eq!(fake.lock().unwrap().sessions, 0);
@@ -892,14 +908,15 @@ mod tests {
     #[tokio::test]
     async fn stale_previews_wrong_passwords_and_refusals_are_reported() {
         let data = tempfile::tempdir().unwrap();
-        let (url, fake) = fake_pihole(with_old_client()).await;
-        let pihole = plugin(&url, data.path(), "app-password");
+        let password = random_password();
+        let (url, fake) = fake_pihole(with_old_client(&password)).await;
+        let pihole = plugin(&url, data.path(), &password);
         let error = pihole.apply(devices(), "stale".to_owned()).await.unwrap_err();
         assert!(error.contains("changed since the preview"), "{error}");
         assert_eq!(fake.lock().unwrap().calls, Vec::<String>::new());
 
         let other = tempfile::tempdir().unwrap();
-        let wrong = plugin(&url, other.path(), "wrong");
+        let wrong = plugin(&url, other.path(), &random_password());
         let error = wrong.plan(devices()).await.unwrap_err();
         assert!(
             error.contains("HTTP 401: password incorrect, check the app password"),
