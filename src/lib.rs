@@ -7,6 +7,8 @@ pub mod config;
 pub mod devices;
 mod edit;
 mod groups;
+pub mod history;
+mod history_ui;
 pub mod leases;
 pub mod origin;
 mod plugin_ui;
@@ -79,6 +81,8 @@ struct Inner {
     login_required: bool,
     password_path: PathBuf,
     sessions: auth::Sessions,
+    /// The change log.
+    history_path: PathBuf,
 }
 
 impl AppState {
@@ -124,6 +128,7 @@ impl AppState {
                 login_required,
                 password_path: data_dir.join("password.hash"),
                 sessions: auth::Sessions::default(),
+                history_path: data_dir.join("history.log"),
             }),
         })
     }
@@ -158,6 +163,7 @@ pub fn app(state: AppState) -> Router {
         .route("/plugins/{name}/enabled", axum::routing::post(plugin_ui::toggle))
         .route("/plugins/{name}/delete", axum::routing::post(plugin_ui::delete))
         .route("/plugins/{name}", axum::routing::post(plugin_ui::update))
+        .route("/history", get(history_ui::list))
         .route("/apply", get(apply::list))
         .route("/apply/{name}", axum::routing::post(apply::apply))
         .route("/style.css", get(style))

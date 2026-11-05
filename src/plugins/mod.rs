@@ -37,8 +37,8 @@ pub trait Plugin: Send + Sync {
     fn plan(&self, _devices: DeviceList) -> BoxFuture<'_, Result<Option<Plan>, String>> {
         Box::pin(async { Ok(None) })
     }
-    /// Makes the changes, if they are still the ones with this digest; returns how many were made.
-    fn apply(&self, _devices: DeviceList, _digest: String) -> BoxFuture<'_, Result<usize, String>> {
+    /// Makes the changes, if they are still the ones with this digest; returns what was changed.
+    fn apply(&self, _devices: DeviceList, _digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
         Box::pin(async { Err("this plugin does not change anything".to_owned()) })
     }
 }
@@ -146,7 +146,7 @@ pub fn is_data_file(name: &str) -> bool {
 }
 
 /// The `[[plugin]]` tables of `lanlord.toml`; their fields depend on the type.
-#[derive(Debug, Default, Deserialize, Serialize)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
     /// Configured plugin instances.

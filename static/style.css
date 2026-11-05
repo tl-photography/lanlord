@@ -181,3 +181,6 @@ input:focus, select:focus, button:focus, a:focus-visible { outline: 2px solid va
 .login { max-width: 24rem; margin: 12vh auto 0; padding: 1.5rem; background: var(--surface); border: 1px solid var(--border);
   border-radius: 0.8rem; box-shadow: var(--shadow); }
 .login img { display: block; margin: 0 auto 1rem; max-width: 100%; height: auto; }
+.history { width: 100%; border-collapse: collapse; }
+.history th, .history td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
+.history .time { white-space: nowrap; font-variant-numeric: tabular-nums; }

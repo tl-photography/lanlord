@@ -11,6 +11,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Response};
 
+use crate::history;
 use crate::leases::Plan;
 use crate::plugins::{self, Plugin};
 use crate::{AppState, server_error};
@@ -159,10 +160,19 @@ pub async fn apply(
         Ok(devices) => devices,
         Err(error) => return server_error(&error),
     };
+    let history = &state.inner.history_path;
     match tokio::time::timeout(APPLY_TIMEOUT, plugin.apply(devices, digest)).await {
-        Ok(Ok(0)) => page(&state, format!("{name}: nothing to apply"), String::new()).await,
-        Ok(Ok(count)) => {
+        Ok(Ok(applied)) if applied.is_empty() => {
+            page(&state, format!("{name}: nothing to apply"), String::new()).await
+        }
+        Ok(Ok(applied)) => {
+            let count = applied.len();
             tracing::info!("{name}: {count} changes applied");
+            let entries: Vec<String> = applied
+                .iter()
+                .map(|change| format!("Applied to {name}: {change}"))
+                .collect();
+            history::record(history, &entries);
             let changes = if count == 1 { "change" } else { "changes" };
             page(
                 &state,
@@ -173,6 +183,7 @@ pub async fn apply(
         }
         Ok(Err(error)) => {
             tracing::warn!("{name}: apply failed: {error}");
+            history::record(history, &[format!("Apply to {name} failed: {error}")]);
             page(&state, String::new(), error).await
         }
         Err(_) => {
@@ -181,6 +192,7 @@ pub async fn apply(
                 APPLY_TIMEOUT.as_secs()
             );
             tracing::warn!("{error}");
+            history::record(history, &[format!("Apply to {name} failed: {error}")]);
             page(&state, String::new(), error).await
         }
     }

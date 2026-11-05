@@ -10,6 +10,7 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
 use crate::devices::{Device, Error, is_valid_name, normalize_mac};
+use crate::history;
 use crate::{AppState, server_error};
 
 /// Longest note that is accepted.
@@ -240,15 +241,21 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
+    let mut before = None;
     match original {
         Some(name) => match list.devices.iter_mut().find(|existing| existing.name == name) {
-            Some(existing) => *existing = device,
+            Some(existing) => before = Some(std::mem::replace(existing, device.clone())),
             None => return (StatusCode::NOT_FOUND, "No such device").into_response(),
         },
-        None => list.devices.push(device),
+        None => list.devices.push(device.clone()),
     }
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
-        Ok(()) => Redirect::to("/").into_response(),
+        Ok(()) => {
+            if let Some(text) = history::device(before.as_ref(), &device) {
+                history::record(&state.inner.history_path, &[text]);
+            }
+            Redirect::to("/").into_response()
+        }
         Err(Error::Invalid(message)) => page(state, original, form, message),
         Err(error) => server_error(&error),
     }

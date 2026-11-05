@@ -23,6 +23,8 @@ differences.
   serves waits, its entry stays as it is.
 - A plugin entry that cannot be used, for example after a settings change, is left out and shown on the Plugins
   page; lanlord still starts.
+- Every change and every apply is appended to `history.log` in the data directory, with the time in UTC and the
+  values before and after, and shown on the History page.
 
 ### Plugins
 

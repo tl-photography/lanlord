@@ -171,7 +171,7 @@ impl OpenWrt {
 
     /// Stages the changes, applies them with rollback, reads the device again and confirms only if nothing is
     /// left to change. Without the confirmation, the device undoes the changes after [`ROLLBACK_SECONDS`].
-    async fn write(&self, devices: DeviceList, digest: String) -> Result<usize, String> {
+    async fn write(&self, devices: DeviceList, digest: String) -> Result<Vec<String>, String> {
         let password = read_password(&self.password_file).await?;
         let session = self.login(&password).await?;
         let plan = self
@@ -185,7 +185,7 @@ impl OpenWrt {
             ));
         }
         if plan.changes.is_empty() {
-            return Ok(0);
+            return Ok(Vec::new());
         }
         for change in &plan.changes {
             if let Err(error) = self.stage(&session, change).await {
@@ -211,7 +211,11 @@ impl OpenWrt {
             ));
         }
         self.call(&session, "uci", "confirm", &json!({})).await?;
-        Ok(plan.changes.len())
+        Ok(plan
+            .changes
+            .iter()
+            .map(|change| change.description().to_owned())
+            .collect())
     }
 
     async fn stage(&self, session: &str, change: &Change) -> Result<(), String> {
@@ -319,7 +323,7 @@ impl Plugin for OpenWrt {
         Box::pin(self.preview(devices))
     }
 
-    fn apply(&self, devices: DeviceList, digest: String) -> BoxFuture<'_, Result<usize, String>> {
+    fn apply(&self, devices: DeviceList, digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
         Box::pin(self.write(devices, digest))
     }
 }
@@ -970,7 +974,7 @@ mod tests {
         assert_eq!(plan.changes.len(), 2, "take over cfg01 as lanlord_omv");
         assert!(plan.notes[0].starts_with("plug waits"));
 
-        assert_eq!(router.apply(devices(), plan.digest()).await.unwrap(), 2);
+        assert_eq!(router.apply(devices(), plan.digest()).await.unwrap().len(), 2);
         {
             let fake = fake.lock().unwrap();
             assert_eq!(fake.calls, ["delete", "add", "apply", "confirm"]);
@@ -980,7 +984,7 @@ mod tests {
         assert_eq!(router.plan(devices()).await.unwrap().unwrap().changes, []);
         assert_eq!(
             router.apply(devices(), Plan::default().digest()).await.unwrap(),
-            0
+            Vec::<String>::new()
         );
     }
 

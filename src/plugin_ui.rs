@@ -13,6 +13,7 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 
 use crate::compare::{self, Finding};
 use crate::devices::Error;
+use crate::history;
 use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, Settings};
 use crate::{AppState, server_error};
 
@@ -261,12 +262,13 @@ fn change(state: &AppState, update: impl FnOnce(&mut Settings) -> Result<(), Str
         Ok(settings) => settings,
         Err(error) => return server_error(&error),
     };
+    let before = settings.clone();
     if let Err(message) = update(&mut settings) {
         drop(guard);
         return page(state, Vec::new(), false, message);
     }
     match plugins::save_settings(&state.inner.plugins_path, &settings) {
-        Ok(()) => {}
+        Ok(()) => history::record(&state.inner.history_path, &history::plugins(&before, &settings)),
         Err(Error::Invalid(message)) => {
             drop(guard);
             return page(state, Vec::new(), false, message);

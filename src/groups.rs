@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use crate::config::{Config, Group};
 use crate::devices::Error;
+use crate::history;
 use crate::{AppState, server_error};
 
 /// Fields of the form for a new group.
@@ -95,13 +96,15 @@ fn change(
         Ok(list) => list.devices,
         Err(error) => return server_error(&error),
     };
-    let mut config = state.groups();
+    let before = state.groups();
+    let mut config = before.clone();
     if let Err(message) = change(&mut config, &devices) {
         drop(guard);
         return page(state, form, message);
     }
     match config.save(&state.inner.groups_path) {
         Ok(()) => {
+            history::record(&state.inner.history_path, &history::groups(&before, &config));
             if let Ok(mut groups) = state.inner.groups.write() {
                 *groups = config;
             }
