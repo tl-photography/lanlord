@@ -101,6 +101,8 @@ code { font-size: 0.9em; }
 @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
 .move-menu { position: relative; display: none; }
 .move-menu[open] { display: block; }
+/* Keyboard users reach the menu by tabbing to the card. */
+.device-item:focus-within .move-menu { display: block; }
 .move-menu summary {
   cursor: pointer; list-style: none; padding: 0.45rem 0.6rem; border: 1px solid var(--border); border-radius: 0.45rem;
   color: var(--text); white-space: nowrap;
