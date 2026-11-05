@@ -1,0 +1,3 @@
+# Integration tests use fixed passwords against fake servers.
+paths-ignore:
+  - tests
