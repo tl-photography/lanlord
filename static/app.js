@@ -112,3 +112,17 @@ pluginSearch?.addEventListener("input", () => {
     plugin.hidden = !plugin.dataset.search.includes(query);
   }
 });
+
+// Number of open changes next to "Apply", like LuCI's unsaved changes; not on the apply page itself.
+const pendingBadge = document.getElementById("pending-count");
+if (pendingBadge && !document.querySelector('nav a[href="/apply"][aria-current]')) {
+  fetch("/apply/count", { credentials: "same-origin" })
+    .then((response) => (response.ok ? response.json() : null))
+    .then((data) => {
+      if (!data || !data.changes) return;
+      pendingBadge.textContent = String(data.changes);
+      pendingBadge.title = data.changes === 1 ? "1 change to apply" : `${data.changes} changes to apply`;
+      pendingBadge.hidden = false;
+    })
+    .catch(() => {});
+}

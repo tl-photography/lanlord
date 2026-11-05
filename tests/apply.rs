@@ -158,3 +158,49 @@ async fn without_targets_nothing_can_be_applied() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(page.contains("No target named router"));
 }
+
+#[tokio::test]
+async fn the_top_bar_counts_open_changes_and_the_form_leads_to_the_review() {
+    let data = data_with_router().await;
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+
+    let (status, count) = send(&app, get("/apply/count")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(count, r#"{"changes":1}"#);
+
+    let (_, page) = send(&app, get("/devices/OMV")).await;
+    assert!(page.contains("Save and review changes"));
+    let response = app
+        .clone()
+        .oneshot(post(
+            "/devices/OMV",
+            "name=OMV&mac=00:00:00:00:00:01&group=lan&ip=192.0.2.2&note=&then=review",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers()[header::LOCATION], "/apply");
+
+    let (_, page) = send(&app, get("/apply")).await;
+    let form = format!("digest={}", digest(&page));
+    send(&app, post("/apply/router", &form)).await;
+    assert_eq!(
+        send(&app, get("/apply/count")).await.1,
+        r#"{"changes":0}"#,
+        "counted again after applying"
+    );
+}
+
+#[tokio::test]
+async fn without_targets_the_form_has_no_review_button() {
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(
+        data.path().join("groups.toml"),
+        "default_group = \"lan\"\n[[group]]\nname = \"lan\"\nvlan = 1\n",
+    )
+    .unwrap();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let (_, page) = send(&app, get("/devices/new")).await;
+    assert!(!page.contains("Save and review changes"));
+    assert_eq!(send(&app, get("/apply/count")).await.1, r#"{"changes":0}"#);
+}

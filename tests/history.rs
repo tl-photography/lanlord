@@ -68,5 +68,5 @@ async fn changes_are_logged_and_shown_newest_first() {
         positions.windows(2).all(|pair| pair[0] < pair[1]),
         "newest first: {page}"
     );
-    assert!(!page.contains("bad"));
+    assert!(!page.contains("Device bad"));
 }

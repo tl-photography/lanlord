@@ -8,9 +8,10 @@ use std::time::Duration;
 use askama::Template;
 use axum::Form;
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 
+use crate::devices::DeviceList;
 use crate::history;
 use crate::leases::Plan;
 use crate::plugins::{self, Plugin};
@@ -87,14 +88,8 @@ fn view(plugin: &dyn Plugin, result: Result<Option<Plan>, String>) -> TargetView
     view
 }
 
-async fn page(state: &AppState, message: String, error: String) -> Response {
-    let devices = match state.devices() {
-        Ok(devices) => devices,
-        Err(error) => return server_error(&error),
-    };
-    let Some(active) = targets(state) else {
-        return server_error(&"plugin lock poisoned");
-    };
+/// The plan of every target, each with a time limit, in the order of the plugins.
+async fn previews(active: &[Arc<dyn Plugin>], devices: &DeviceList) -> Vec<Result<Option<Plan>, String>> {
     let mut tasks = tokio::task::JoinSet::new();
     for (index, plugin) in active.iter().cloned().enumerate() {
         let devices = devices.clone();
@@ -112,13 +107,28 @@ async fn page(state: &AppState, message: String, error: String) -> Response {
         }
     }
     results.sort_by_key(|(index, _)| *index);
-    let targets = results
+    results
         .into_iter()
-        .map(|(index, result)| {
-            let result =
-                result.unwrap_or_else(|_| Err(format!("No answer within {} s", PREVIEW_TIMEOUT.as_secs())));
-            view(active[index].as_ref(), result)
+        .map(|(_, result)| {
+            result.unwrap_or_else(|_| Err(format!("No answer within {} s", PREVIEW_TIMEOUT.as_secs())))
         })
+        .collect()
+}
+
+async fn page(state: &AppState, message: String, error: String) -> Response {
+    let devices = match state.devices() {
+        Ok(devices) => devices,
+        Err(error) => return server_error(&error),
+    };
+    let Some(active) = targets(state) else {
+        return server_error(&"plugin lock poisoned");
+    };
+    let results = previews(&active, &devices).await;
+    state.remember_pending(count_changes(&results));
+    let targets = active
+        .iter()
+        .zip(results)
+        .map(|(plugin, result)| view(plugin.as_ref(), result))
         .collect();
     let status = if error.is_empty() {
         StatusCode::OK
@@ -135,6 +145,39 @@ async fn page(state: &AppState, message: String, error: String) -> Response {
         Ok(html) => (status, Html(html)).into_response(),
         Err(error) => server_error(&error),
     }
+}
+
+fn count_changes(results: &[Result<Option<Plan>, String>]) -> usize {
+    results
+        .iter()
+        .filter_map(|result| result.as_ref().ok().and_then(Option::as_ref))
+        .map(|plan| plan.changes.len())
+        .sum()
+}
+
+/// How many changes the targets would make, as JSON for the badge in the top bar; cached for a short time.
+pub async fn count(State(state): State<AppState>) -> Response {
+    if let Some(changes) = state.pending() {
+        return count_json(changes);
+    }
+    let devices = match state.devices() {
+        Ok(devices) => devices,
+        Err(error) => return server_error(&error),
+    };
+    let Some(active) = targets(&state) else {
+        return server_error(&"plugin lock poisoned");
+    };
+    let changes = count_changes(&previews(&active, &devices).await);
+    state.remember_pending(changes);
+    count_json(changes)
+}
+
+fn count_json(changes: usize) -> Response {
+    (
+        [(header::CONTENT_TYPE, "application/json")],
+        format!("{{\"changes\":{changes}}}"),
+    )
+        .into_response()
 }
 
 /// Shows what every target would change.
@@ -161,6 +204,7 @@ pub async fn apply(
         Err(error) => return server_error(&error),
     };
     let history = &state.inner.history_path;
+    state.forget_pending();
     match tokio::time::timeout(APPLY_TIMEOUT, plugin.apply(devices, digest)).await {
         Ok(Ok(applied)) if applied.is_empty() => {
             page(&state, format!("{name}: nothing to apply"), String::new()).await

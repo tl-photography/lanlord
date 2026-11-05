@@ -268,7 +268,10 @@ fn change(state: &AppState, update: impl FnOnce(&mut Settings) -> Result<(), Str
         return page(state, Vec::new(), false, message);
     }
     match plugins::save_settings(&state.inner.plugins_path, &settings) {
-        Ok(()) => history::record(&state.inner.history_path, &history::plugins(&before, &settings)),
+        Ok(()) => {
+            history::record(&state.inner.history_path, &history::plugins(&before, &settings));
+            state.forget_pending();
+        }
         Err(Error::Invalid(message)) => {
             drop(guard);
             return page(state, Vec::new(), false, message);

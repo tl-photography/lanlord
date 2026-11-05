@@ -17,6 +17,9 @@
   </label>
   <label>IP address <input name="ip" value="{{ form.ip }}" inputmode="decimal" placeholder="optional"></label>
   <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
-  <button type="submit">Save</button>
+  <div class="actions">
+    <button type="submit">Save</button>
+    {% if has_targets %}<button type="submit" name="then" value="review" class="secondary">Save and review changes</button>{% endif %}
+  </div>
 </form>
 {% endblock %}

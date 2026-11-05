@@ -16,6 +16,7 @@ pub mod plugins;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
+use std::time::{Duration, Instant};
 
 use askama::Template;
 use axum::extract::State;
@@ -51,6 +52,9 @@ const SECURITY_HEADERS: [(HeaderName, &str); 8] = [
     ),
 ];
 
+/// How long a counted number of open changes is shown before it is counted again.
+const PENDING_LIFETIME: Duration = Duration::from_secs(30);
+
 /// Styles as a file, the Content Security Policy does not allow inline styles.
 const STYLE: &str = include_str!("../static/style.css");
 
@@ -83,6 +87,8 @@ struct Inner {
     sessions: auth::Sessions,
     /// The change log.
     history_path: PathBuf,
+    /// Number of changes the targets would make, and when it was counted.
+    pending: Mutex<Option<(Instant, usize)>>,
 }
 
 impl AppState {
@@ -129,6 +135,7 @@ impl AppState {
                 password_path: data_dir.join("password.hash"),
                 sessions: auth::Sessions::default(),
                 history_path: data_dir.join("history.log"),
+                pending: Mutex::new(None),
             }),
         })
     }
@@ -139,6 +146,35 @@ impl AppState {
             .groups
             .read()
             .map_or_else(|poisoned| poisoned.into_inner().clone(), |groups| groups.clone())
+    }
+
+    /// Whether a plugin can apply changes.
+    fn has_targets(&self) -> bool {
+        self.inner.plugins.read().map_or_else(
+            |poisoned| poisoned.into_inner().iter().any(|plugin| plugin.is_target()),
+            |plugins| plugins.iter().any(|plugin| plugin.is_target()),
+        )
+    }
+
+    /// The counted changes, if counted within [`PENDING_LIFETIME`].
+    fn pending(&self) -> Option<usize> {
+        let pending = self.inner.pending.lock().ok()?;
+        pending
+            .filter(|(counted, _)| counted.elapsed() < PENDING_LIFETIME)
+            .map(|(_, changes)| changes)
+    }
+
+    fn remember_pending(&self, changes: usize) {
+        if let Ok(mut pending) = self.inner.pending.lock() {
+            *pending = Some((Instant::now(), changes));
+        }
+    }
+
+    /// Drops the count after a change, so the badge is counted again.
+    pub(crate) fn forget_pending(&self) {
+        if let Ok(mut pending) = self.inner.pending.lock() {
+            *pending = None;
+        }
     }
 
     fn devices(&self) -> Result<DeviceList, Error> {
@@ -165,6 +201,7 @@ pub fn app(state: AppState) -> Router {
         .route("/plugins/{name}", axum::routing::post(plugin_ui::update))
         .route("/history", get(history_ui::list))
         .route("/apply", get(apply::list))
+        .route("/apply/count", get(apply::count))
         .route("/apply/{name}", axum::routing::post(apply::apply))
         .route("/style.css", get(style))
         .route("/logo.svg", get(logo))
@@ -276,10 +313,7 @@ async fn index(State(state): State<AppState>) -> Response {
             }
         })
         .collect();
-    let has_targets = state.inner.plugins.read().map_or_else(
-        |poisoned| poisoned.into_inner().iter().any(|plugin| plugin.is_target()),
-        |plugins| plugins.iter().any(|plugin| plugin.is_target()),
-    );
+    let has_targets = state.has_targets();
     let page = IndexPage {
         nav: "devices",
         groups,

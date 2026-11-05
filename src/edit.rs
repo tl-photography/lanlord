@@ -26,6 +26,9 @@ pub struct DeviceForm {
     ip: String,
     #[serde(default)]
     note: String,
+    /// `review` to go to the apply preview after saving.
+    #[serde(default)]
+    then: String,
 }
 
 impl DeviceForm {
@@ -36,6 +39,7 @@ impl DeviceForm {
             group: device.group.clone(),
             ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
             note: device.note.clone(),
+            then: String::new(),
         }
     }
 
@@ -77,6 +81,7 @@ struct EditPage {
     form: DeviceForm,
     groups: Vec<GroupOption>,
     error: String,
+    has_targets: bool,
 }
 
 fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: String) -> Response {
@@ -105,6 +110,7 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
         form,
         groups,
         error,
+        has_targets: state.has_targets(),
     };
     match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
@@ -229,6 +235,7 @@ pub async fn move_device(
 }
 
 fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response {
+    let next = if form.then == "review" { "/apply" } else { "/" };
     let device = match form.to_device() {
         Ok(device) => device,
         Err(message) => return page(state, original, form, message),
@@ -254,7 +261,8 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
             if let Some(text) = history::device(before.as_ref(), &device) {
                 history::record(&state.inner.history_path, &[text]);
             }
-            Redirect::to("/").into_response()
+            state.forget_pending();
+            Redirect::to(next).into_response()
         }
         Err(Error::Invalid(message)) => page(state, original, form, message),
         Err(error) => server_error(&error),

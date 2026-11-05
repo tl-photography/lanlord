@@ -22,7 +22,7 @@
       <a href="/"{% if nav == "devices" %} aria-current="page"{% endif %}>Devices</a>
       <a href="/groups"{% if nav == "groups" %} aria-current="page"{% endif %}>Groups</a>
       <a href="/plugins"{% if nav == "plugins" %} aria-current="page"{% endif %}>Plugins</a>
-      <a href="/apply"{% if nav == "apply" %} aria-current="page"{% endif %}>Apply</a>
+      <a href="/apply"{% if nav == "apply" %} aria-current="page"{% endif %}>Apply <span class="badge pending" id="pending-count" hidden></span></a>
       <a href="/history"{% if nav == "history" %} aria-current="page"{% endif %}>History</a>
     </nav>
     <a class="button add" href="/devices/new">Add device</a>

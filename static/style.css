@@ -184,3 +184,6 @@ input:focus, select:focus, button:focus, a:focus-visible { outline: 2px solid va
 .history { width: 100%; border-collapse: collapse; }
 .history th, .history td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
 .history .time { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.pending { margin-left: 0.3rem; background: var(--accent); color: #fff; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
