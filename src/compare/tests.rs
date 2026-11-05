@@ -65,6 +65,7 @@ fn matching_entries_give_no_findings() {
             ),
             entry("00:00:00:00:00:02", "plug", None, Some(20)),
         ]),
+        ..Observation::default()
     };
     assert_eq!(compare(&list(), &groups(), &observation), []);
 }
@@ -79,6 +80,7 @@ fn unknown_devices_are_reported_once() {
     let observation = Observation {
         seen: vec![stranger.clone(), stranger],
         entries: None,
+        ..Observation::default()
     };
     assert_eq!(
         compare(&list(), &groups(), &observation),
@@ -109,6 +111,7 @@ fn differences_per_device_and_foreign_entries_are_found() {
             ),
             entry("00:00:00:00:00:77", "old-tv", None, None),
         ]),
+        ..Observation::default()
     };
     assert_eq!(
         compare(&list(), &groups(), &observation),
