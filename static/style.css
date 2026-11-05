@@ -130,6 +130,8 @@ code { font-size: 0.9em; }
 .plugin-result { padding: 0.8rem 0; border-top: 1px solid var(--border); }
 .plugin-result h3 { margin: 0; }
 .plugin-result p { margin: 0.25rem 0; }
+.changes li, .notes li { margin: 0.3rem 0; }
+.commands { margin: 0.3rem 0; padding: 0.5rem 0.7rem; overflow-x: auto; border-radius: 0.4rem; background: var(--surface); border: 1px solid var(--border); font-size: 0.85em; }
 .avatar {
   flex: 0 0 2.4rem; height: 2.4rem; display: grid; place-items: center; border-radius: 0.6rem;
   background: var(--accent-soft); color: var(--accent); font-weight: 700;

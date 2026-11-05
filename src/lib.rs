@@ -1,5 +1,6 @@
 //! lanlord: device list for a small `OpenWrt` network.
 
+mod apply;
 pub mod auth;
 pub mod compare;
 pub mod config;
@@ -157,6 +158,8 @@ pub fn app(state: AppState) -> Router {
         .route("/plugins/{name}/enabled", axum::routing::post(plugin_ui::toggle))
         .route("/plugins/{name}/delete", axum::routing::post(plugin_ui::delete))
         .route("/plugins/{name}", axum::routing::post(plugin_ui::update))
+        .route("/apply", get(apply::list))
+        .route("/apply/{name}", axum::routing::post(apply::apply))
         .route("/style.css", get(style))
         .route("/logo.svg", get(logo))
         .route("/favicon.svg", get(favicon))
