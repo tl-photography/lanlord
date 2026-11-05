@@ -145,14 +145,57 @@ pub struct Settings {
     pub plugins: Vec<toml::Table>,
 }
 
-/// Reads the enabled plugins from `lanlord.toml`. A missing file means no plugins. File settings are resolved in
-/// the directory of `lanlord.toml`.
-///
-/// # Errors
-///
-/// If the file is invalid, a type is unknown, a plugin's settings are wrong or a name is used twice.
-pub fn load(path: &Path) -> Result<Vec<Arc<dyn Plugin>>, Error> {
-    build(read_settings(path)?.plugins, &data_dir(path))
+/// The plugins of `lanlord.toml`: the enabled ones that work, and a problem for every entry that could not be built.
+/// A broken entry never stops lanlord, it is only left out.
+#[derive(Default)]
+pub struct Loaded {
+    /// Enabled plugins that could be built.
+    pub plugins: Vec<Arc<dyn Plugin>>,
+    /// One entry per `[[plugin]]` table, in file order: the problem, or `None` if it is fine.
+    pub problems: Vec<Option<String>>,
+    /// A problem with the whole file, for example invalid TOML.
+    pub file_problem: Option<String>,
+}
+
+impl Loaded {
+    /// All problems as text, the file problem first.
+    #[must_use]
+    pub fn all_problems(&self) -> Vec<String> {
+        self.file_problem
+            .iter()
+            .cloned()
+            .chain(self.problems.iter().flatten().cloned())
+            .collect()
+    }
+}
+
+/// Reads `lanlord.toml`. A missing file means no plugins. File settings are resolved in its directory.
+#[must_use]
+pub fn load(path: &Path) -> Loaded {
+    match read_settings(path) {
+        Ok(settings) => check(settings.plugins, &data_dir(path)),
+        Err(error) => Loaded {
+            file_problem: Some(error.to_string()),
+            ..Loaded::default()
+        },
+    }
+}
+
+/// Builds every entry on its own, so one broken entry does not affect the others.
+#[must_use]
+pub fn check(tables: Vec<toml::Table>, data_dir: &Path) -> Loaded {
+    let mut names = HashSet::new();
+    let mut loaded = Loaded::default();
+    for table in tables {
+        match build_one(table, data_dir, &mut names) {
+            Ok(plugin) => {
+                loaded.plugins.extend(plugin);
+                loaded.problems.push(None);
+            }
+            Err(error) => loaded.problems.push(Some(error.to_string())),
+        }
+    }
+    loaded
 }
 
 /// Reads the configured plugin tables. A missing file means no plugins.
@@ -175,21 +218,33 @@ pub fn read_settings(path: &Path) -> Result<Settings, Error> {
 ///
 /// If a plugin is invalid or the file cannot be written.
 pub fn save_settings(path: &Path, settings: &Settings) -> Result<(), Error> {
-    build(settings.plugins.clone(), &data_dir(path))?;
+    if let Some(problem) = check(settings.plugins.clone(), &data_dir(path))
+        .problems
+        .into_iter()
+        .flatten()
+        .next()
+    {
+        return Err(Error::Invalid(problem));
+    }
     let content = toml::to_string_pretty(settings).map_err(|error| Error::Invalid(error.to_string()))?;
     crate::devices::write_private(path, &content)
 }
 
-fn data_dir(settings_path: &Path) -> PathBuf {
+/// The data directory: the directory of `lanlord.toml`.
+#[must_use]
+pub fn data_dir(settings_path: &Path) -> PathBuf {
     settings_path
         .parent()
         .map_or_else(PathBuf::new, Path::to_path_buf)
 }
 
-fn build(tables: Vec<toml::Table>, data_dir: &Path) -> Result<Vec<Arc<dyn Plugin>>, Error> {
-    let mut names = HashSet::new();
-    let mut plugins = Vec::new();
-    for mut table in tables {
+/// Builds one entry; `None` if it is disabled.
+fn build_one(
+    mut table: toml::Table,
+    data_dir: &Path,
+    names: &mut HashSet<String>,
+) -> Result<Option<Arc<dyn Plugin>>, Error> {
+    {
         let kind = take_string(&mut table, "type")?;
         let name = take_string(&mut table, "name")?;
         if !is_valid_name(&name) {
@@ -214,11 +269,8 @@ fn build(tables: Vec<toml::Table>, data_dir: &Path) -> Result<Vec<Arc<dyn Plugin
             field_value(field, &text).map_err(|message| Error::Invalid(format!("{name}: {message}")))?;
         }
         let plugin = (plugin_type.build)(name, table, data_dir)?;
-        if enabled {
-            plugins.push(plugin);
-        }
+        Ok(enabled.then_some(plugin))
     }
-    Ok(plugins)
 }
 
 fn take_string(table: &mut toml::Table, key: &str) -> Result<String, Error> {
@@ -250,17 +302,21 @@ mod tests {
 
     use super::*;
 
-    fn load_text(text: &str) -> Result<Vec<Arc<dyn Plugin>>, Error> {
+    fn load_text(text: &str) -> Result<Vec<Arc<dyn Plugin>>, String> {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("lanlord.toml");
         fs::write(&path, text).unwrap();
-        load(&path)
+        let loaded = load(&path);
+        match loaded.all_problems().into_iter().next() {
+            Some(problem) => Err(problem),
+            None => Ok(loaded.plugins),
+        }
     }
 
     #[test]
     fn missing_file_means_no_plugins() {
         let directory = tempfile::tempdir().unwrap();
-        assert!(load(&directory.path().join("lanlord.toml")).unwrap().is_empty());
+        assert!(load(&directory.path().join("lanlord.toml")).plugins.is_empty());
     }
 
     #[test]

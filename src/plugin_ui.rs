@@ -29,6 +29,7 @@ struct FieldView {
 
 struct PluginRow {
     name: String,
+    problem: String,
     title: &'static str,
     enabled: bool,
     search: String,
@@ -97,14 +98,21 @@ fn table_text(table: &toml::Table, key: &str) -> String {
 }
 
 fn page(state: &AppState, scan_results: Vec<ScanRow>, has_scanned: bool, error: String) -> Response {
-    let settings = match plugins::read_settings(&state.inner.plugins_path) {
-        Ok(settings) => settings,
-        Err(error) => return server_error(&error),
+    // A broken lanlord.toml is shown, not hidden behind an error page, so it can be fixed here.
+    let (settings, file_problem) = match plugins::read_settings(&state.inner.plugins_path) {
+        Ok(settings) => (settings, String::new()),
+        Err(error) => (Settings::default(), error.to_string()),
     };
+    let problems = plugins::check(
+        settings.plugins.clone(),
+        &plugins::data_dir(&state.inner.plugins_path),
+    )
+    .problems;
     let rows = settings
         .plugins
         .iter()
-        .map(|table| {
+        .zip(problems)
+        .map(|(table, problem)| {
             let name = table_text(table, "name");
             let kind = table_text(table, "type");
             let plugin_type = plugins::plugin_type(&kind);
@@ -113,6 +121,7 @@ fn page(state: &AppState, scan_results: Vec<ScanRow>, has_scanned: bool, error: 
             });
             PluginRow {
                 search: format!("{name} {kind}").to_ascii_lowercase(),
+                problem: problem.unwrap_or_default(),
                 name,
                 title: plugin_type.map_or("Unknown type", |plugin_type| plugin_type.title),
                 enabled: table
@@ -144,7 +153,7 @@ fn page(state: &AppState, scan_results: Vec<ScanRow>, has_scanned: bool, error: 
         scan_results,
         has_scanned,
         can_import: !state.groups().default_group.is_empty(),
-        error,
+        error: if error.is_empty() { file_problem } else { error },
     };
     match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
@@ -211,8 +220,21 @@ pub async fn update(
         let Some(plugin_type) = plugins::plugin_type(&table_text(plugin, "type")) else {
             return Err("Unknown plugin type".to_owned());
         };
-        for (key, value) in settings_table(plugin_type, &form)? {
-            plugin.insert(key, value);
+        // New settings replace all old ones, so leftovers of an older version cannot keep the entry invalid.
+        let fields = settings_table(plugin_type, &form)?;
+        plugin.retain(|key, _| matches!(key, "type" | "name" | "enabled"));
+        plugin.extend(fields);
+        Ok(())
+    })
+}
+
+/// Deletes a plugin instance, also a broken one.
+pub async fn delete(State(state): State<AppState>, Path(name): Path<String>) -> Response {
+    change(&state, |settings| {
+        let before = settings.plugins.len();
+        settings.plugins.retain(|table| table_text(table, "name") != name);
+        if settings.plugins.len() == before {
+            return Err(format!("No plugin named {name}"));
         }
         Ok(())
     })
@@ -251,10 +273,7 @@ fn change(state: &AppState, update: impl FnOnce(&mut Settings) -> Result<(), Str
         }
         Err(error) => return server_error(&error),
     }
-    let loaded = match plugins::load(&state.inner.plugins_path) {
-        Ok(plugins) => plugins,
-        Err(error) => return server_error(&error),
-    };
+    let loaded = plugins::load(&state.inner.plugins_path).plugins;
     match state.inner.plugins.write() {
         Ok(mut plugins) => *plugins = loaded,
         Err(_) => return server_error(&"plugin lock poisoned"),

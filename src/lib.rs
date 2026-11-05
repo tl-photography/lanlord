@@ -110,7 +110,11 @@ impl AppState {
         let devices_path = data_dir.join("devices.toml");
         DeviceList::load(&devices_path, &groups.group_names())?;
         let plugins_path = data_dir.join("lanlord.toml");
-        let plugins = plugins::load(&plugins_path)?;
+        let loaded = plugins::load(&plugins_path);
+        for problem in loaded.all_problems() {
+            tracing::warn!("plugin left out: {problem}");
+        }
+        let plugins = loaded.plugins;
         Ok(Self {
             inner: Arc::new(Inner {
                 plugins: RwLock::new(plugins),
@@ -154,6 +158,7 @@ pub fn app(state: AppState) -> Router {
         .route("/plugins", get(plugin_ui::list).post(plugin_ui::create))
         .route("/plugins/scan", axum::routing::post(plugin_ui::scan))
         .route("/plugins/{name}/enabled", axum::routing::post(plugin_ui::toggle))
+        .route("/plugins/{name}/delete", axum::routing::post(plugin_ui::delete))
         .route("/plugins/{name}", axum::routing::post(plugin_ui::update))
         .route("/style.css", get(style))
         .route("/logo.svg", get(logo))

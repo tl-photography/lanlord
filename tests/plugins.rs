@@ -39,11 +39,11 @@ async fn plugins_can_be_added_configured_and_toggled() {
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
 
     let settings_path = data.path().join("lanlord.toml");
-    assert_eq!(lanlord::plugins::load(&settings_path).unwrap().len(), 1);
+    assert_eq!(lanlord::plugins::load(&settings_path).plugins.len(), 1);
 
     let response = post(&data, "/plugins/router/enabled", "").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
-    assert!(lanlord::plugins::load(&settings_path).unwrap().is_empty());
+    assert!(lanlord::plugins::load(&settings_path).plugins.is_empty());
 
     let response = post(&data, "/plugins/router", "path=router.leases").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -79,7 +79,7 @@ async fn openwrt_plugin_can_be_added_and_configured() {
     .await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     let settings_path = data.path().join("lanlord.toml");
-    let active = lanlord::plugins::load(&settings_path).unwrap();
+    let active = lanlord::plugins::load(&settings_path).plugins;
     assert_eq!(active[0].kind(), "openwrt");
 
     let response = post(
@@ -195,4 +195,79 @@ async fn failing_plugins_are_reported_without_stopping_the_scan() {
     let page = String::from_utf8(body.to_vec()).unwrap();
     assert!(page.contains("Scan failed"), "{page}");
     assert!(page.contains("nope.leases"));
+}
+
+/// The `router` entry of an older lanlord version, with SSH settings the current OpenWrt plugin does not know.
+const OLD_ENTRY: &str = "[[plugin]]\ntype = \"openwrt\"\nname = \"router\"\nenabled = true\nhost = \"router.lan\"\nport = 22\nuser = \"root\"\nkey_file = \"router.key\"\nhost_key_file = \"router.pub\"\n";
+const LEASES_ENTRY: &str =
+    "[[plugin]]\ntype = \"leases-file\"\nname = \"leases\"\nenabled = true\npath = \"dhcp.leases\"\n";
+
+#[tokio::test]
+async fn broken_entries_are_left_out_without_stopping_lanlord() {
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(
+        data.path().join("lanlord.toml"),
+        format!("{OLD_ENTRY}{LEASES_ENTRY}"),
+    )
+    .unwrap();
+
+    let loaded = lanlord::plugins::load(&data.path().join("lanlord.toml"));
+    assert_eq!(loaded.plugins.len(), 1, "the working plugin is still loaded");
+    assert_eq!(loaded.plugins[0].name(), "leases");
+    assert!(loaded.problems[0].as_deref().unwrap().contains("router"));
+
+    let (status, page) = get(&data, "/plugins").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(page.contains("Left out: router: Address is required"), "{page}");
+    assert!(page.contains(r#"action="/plugins/router/delete""#));
+}
+
+#[tokio::test]
+async fn new_settings_replace_the_old_fields() {
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(data.path().join("lanlord.toml"), OLD_ENTRY).unwrap();
+    let response = post(
+        &data,
+        "/plugins/router",
+        "url=https%3A%2F%2Frouter.lan&user=lanlord&password_file=router.password&certificate=00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF",
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let saved = std::fs::read_to_string(data.path().join("lanlord.toml")).unwrap();
+    assert!(!saved.contains("key_file"), "{saved}");
+    assert_eq!(
+        lanlord::plugins::load(&data.path().join("lanlord.toml")).all_problems(),
+        Vec::<String>::new()
+    );
+}
+
+#[tokio::test]
+async fn broken_entries_can_be_deleted() {
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(
+        data.path().join("lanlord.toml"),
+        format!("{OLD_ENTRY}{LEASES_ENTRY}"),
+    )
+    .unwrap();
+    assert_eq!(
+        post(&data, "/plugins/router/delete", "").await.status(),
+        StatusCode::SEE_OTHER
+    );
+    let saved = std::fs::read_to_string(data.path().join("lanlord.toml")).unwrap();
+    assert!(!saved.contains("router"), "{saved}");
+    assert!(saved.contains("leases"));
+    let response = post(&data, "/plugins/nope/delete", "").await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn a_broken_settings_file_is_shown_not_fatal() {
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(data.path().join("lanlord.toml"), "this is = not [valid").unwrap();
+    let loaded = lanlord::plugins::load(&data.path().join("lanlord.toml"));
+    assert!(loaded.plugins.is_empty());
+    assert!(loaded.file_problem.is_some());
+    let (status, page) = get(&data, "/plugins").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(page.contains("lanlord.toml"), "{page}");
 }
