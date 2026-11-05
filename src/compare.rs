@@ -123,7 +123,8 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
             });
             continue;
         };
-        if !entry.name.eq_ignore_ascii_case(&device.name) {
+        // Entries without a name, like a Wi-Fi station without a static lease, have no name to compare.
+        if !entry.name.is_empty() && !entry.name.eq_ignore_ascii_case(&device.name) {
             findings.push(Finding::WrongName {
                 device: device.name.clone(),
                 actual: entry.name.clone(),

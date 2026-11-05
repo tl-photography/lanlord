@@ -45,6 +45,8 @@ pub enum FieldKind {
     Port,
     /// A file name inside the data directory; no paths, so plugins cannot read files elsewhere.
     DataFile,
+    /// A SHA-256 fingerprint: 64 hex digits, with or without colons.
+    Fingerprint,
 }
 
 /// One setting of a plugin type.
@@ -106,6 +108,15 @@ pub fn field_value(field: &Field, value: &str) -> Result<toml::Value, String> {
             Ok(port) if port > 0 => Ok(toml::Value::Integer(i64::from(port))),
             _ => Err(format!("{} must be a number from 1 to 65535", field.label)),
         },
+        FieldKind::Fingerprint
+            if value.chars().filter(|c| *c != ':').count() != 64
+                || !value.chars().all(|c| c == ':' || c.is_ascii_hexdigit()) =>
+        {
+            Err(format!(
+                "{} must be 64 hex digits, as openssl prints it",
+                field.label
+            ))
+        }
         FieldKind::DataFile if !is_data_file(value) => Err(format!(
             "{} must be a file name in the data directory, without / or ..",
             field.label
@@ -329,7 +340,7 @@ mod tests {
                 "unknown field",
             ),
             (
-                "[[plugin]]\ntype = \"openwrt\"\nname = \"router\"\nhost = \"router.lan\"\nuser = \"root\"\nkey_file = \"router.key\"\nhost_key_file = \"router.pub\"\nunknown = true\n",
+                "[[plugin]]\ntype = \"openwrt\"\nname = \"router\"\nurl = \"https://router.lan\"\nuser = \"lanlord\"\npassword_file = \"router.password\"\ncertificate = \"00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF\"\nunknown = true\n",
                 "unknown field",
             ),
             (

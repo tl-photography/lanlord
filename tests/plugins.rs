@@ -74,7 +74,7 @@ async fn openwrt_plugin_can_be_added_and_configured() {
     let response = post(
         &data,
         "/plugins",
-        "type=openwrt&name=router&host=router.lan&user=root&port=22&key_file=router.key&host_key_file=router.pub",
+        "type=openwrt&name=router&url=https%3A%2F%2Frouter.lan&user=lanlord&password_file=router.password&certificate=00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF",
     )
     .await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
@@ -85,13 +85,16 @@ async fn openwrt_plugin_can_be_added_and_configured() {
     let response = post(
         &data,
         "/plugins/router",
-        "host=router2.lan&user=root&port=2222&key_file=router.key&host_key_file=router.pub",
+        "url=https%3A%2F%2Frouter2.lan&user=lanlord&password_file=router.password&certificate=00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF",
     )
     .await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     let settings = lanlord::plugins::read_settings(&settings_path).unwrap();
-    assert_eq!(settings.plugins[0]["host"].as_str(), Some("router2.lan"));
-    assert_eq!(settings.plugins[0]["port"].as_integer(), Some(2222));
+    assert_eq!(settings.plugins[0]["url"].as_str(), Some("https://router2.lan"));
+    assert!(
+        !settings.plugins[0].contains_key("password"),
+        "only the file name is stored"
+    );
 }
 
 #[tokio::test]
@@ -108,8 +111,12 @@ async fn invalid_settings_are_rejected_with_a_message() {
         ),
         ("type=leases-file&name=a&path=", "Lease file is required"),
         (
-            "type=openwrt&name=a&host=router.lan&user=root&port=0&key_file=k&host_key_file=h",
-            "SSH port must be a number",
+            "type=openwrt&name=a&url=http%3A%2F%2Frouter.lan&user=lanlord&password_file=p&certificate=00112233445566778899AABBCCDDEEFF00112233445566778899AABBCCDDEEFF",
+            "the address must use https://",
+        ),
+        (
+            "type=openwrt&name=a&url=https%3A%2F%2Frouter.lan&user=lanlord&password_file=p&certificate=1234",
+            "must be 64 hex digits",
         ),
         ("type=pihole&name=a", "Choose a supported plugin type"),
         (
