@@ -324,6 +324,7 @@ impl PiHole {
         }
         let message = answer
             .pointer("/error/message")
+            .or_else(|| answer.pointer("/session/message"))
             .and_then(Value::as_str)
             .unwrap_or("no details");
         let hint = if status == StatusCode::UNAUTHORIZED {
@@ -738,10 +739,11 @@ mod tests {
                 "/api/auth",
                 post(|State(fake): State<Shared>, Json(body): Json<Value>| async move {
                     if body["password"] != "app-password" {
-                        return Json(json!({ "session": { "valid": false } }));
+                        let refused = json!({ "session": { "valid": false, "message": "password incorrect" } });
+                        return (Status::UNAUTHORIZED, Json(refused));
                     }
                     fake.lock().unwrap().sessions += 1;
-                    Json(json!({ "session": { "valid": true, "sid": "sid-1" } }))
+                    (Status::OK, Json(json!({ "session": { "valid": true, "sid": "sid-1" } })))
                 })
                 .delete(|State(fake): State<Shared>| async move {
                     fake.lock().unwrap().sessions -= 1;
@@ -873,12 +875,10 @@ mod tests {
 
         let other = tempfile::tempdir().unwrap();
         let wrong = plugin(&url, other.path(), "wrong");
+        let error = wrong.plan(devices()).await.unwrap_err();
         assert!(
-            wrong
-                .plan(devices())
-                .await
-                .unwrap_err()
-                .contains("check the app password")
+            error.contains("HTTP 401: password incorrect, check the app password"),
+            "{error}"
         );
 
         fake.lock().unwrap().refuse_clients = true;
