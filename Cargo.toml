@@ -39,9 +39,15 @@ pedantic = { level = "warn", priority = -1 }
 unwrap_used = "warn"
 expect_used = "warn"
 
+# Thin LTO: quick to build, used for the image of every build.
 [profile.release]
-lto = true
-codegen-units = 1
+lto = "thin"
 strip = true
 panic = "abort"
 overflow-checks = true
+
+# Full LTO for published releases: slower to build, a little smaller and faster.
+[profile.dist]
+inherits = "release"
+lto = true
+codegen-units = 1
