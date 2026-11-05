@@ -32,7 +32,7 @@ differences.
 | Type          | Reports                                                                 | Applies                                  |
 | ------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
 | `openwrt`     | DHCP leases, static leases and Wi-Fi VLANs per MAC of an OpenWrt device | static leases, if the device serves DHCP |
-| `pihole`      | the devices in Pi-hole's network table                                  | client groups per lanlord group          |
+| `pihole`      | the devices in Pi-hole's network table, if switched on                  | client groups per lanlord group          |
 | `leases-file` | the devices in a dnsmasq lease file in the data directory               | -                                        |
 
 File settings, like password files, are file names in the data directory. Paths outside it are rejected.
@@ -89,6 +89,9 @@ devices. Clients lanlord adds have the comment `lanlord: <device>`; lanlord chan
 never deleted, other clients never touched: a device whose address already has another client is listed as left out.
 
 Pi-hole has no rollback: lanlord makes the changes one by one, reads Pi-hole again and reports anything missing.
+
+"Report devices" adds the devices of Pi-hole's network table to a scan. Leave it off when Pi-hole runs in a container
+behind NAT: it then sees no real MAC addresses, only its virtual interfaces.
 
 The plugin needs the HTTPS address, the name of a file in the data directory with an app password (mode `0600`;
 create it in Pi-hole under Settings, Web interface / API, "Configure app password") and the SHA-256 fingerprint of

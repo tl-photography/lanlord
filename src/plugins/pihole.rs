@@ -52,6 +52,12 @@ pub(super) const TYPE: PluginType = PluginType {
             kind: FieldKind::Fingerprint,
             placeholder: "AB:CD:...",
         },
+        Field {
+            key: "report_devices",
+            label: "Report devices (only if Pi-hole sees real MAC addresses, not behind Docker NAT)",
+            kind: FieldKind::Switch,
+            placeholder: "",
+        },
     ],
     build: |name, table, data_dir| Ok(Arc::new(PiHole::new(name, table, data_dir)?)),
 };
@@ -62,6 +68,8 @@ struct Settings {
     url: String,
     password_file: String,
     certificate: String,
+    #[serde(default)]
+    report_devices: bool,
 }
 
 /// A client entry of Pi-hole.
@@ -255,6 +263,8 @@ pub struct PiHole {
     api: Url,
     password_file: PathBuf,
     client: Client,
+    /// Whether the network table is reported; behind Docker NAT it only holds virtual interfaces.
+    report_devices: bool,
 }
 
 impl PiHole {
@@ -263,6 +273,7 @@ impl PiHole {
             url,
             password_file,
             certificate,
+            report_devices,
         } = settings(&name, table)?;
         let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
         let mut api = secure_url(&name, &url)?;
@@ -276,6 +287,7 @@ impl PiHole {
             api,
             password_file: data_dir.join(password_file),
             client,
+            report_devices,
         })
     }
 
@@ -367,6 +379,9 @@ impl PiHole {
     }
 
     async fn read(&self) -> Result<Observation, String> {
+        if !self.report_devices {
+            return Ok(Observation::default());
+        }
         let session = self.login().await?;
         let devices = self
             .request(Method::GET, "network/devices", Some(&session), None)
@@ -809,11 +824,15 @@ mod tests {
     }
 
     fn plugin(url: &str, data: &Path, password: &str) -> PiHole {
+        plugin_with(url, data, password, "")
+    }
+
+    fn plugin_with(url: &str, data: &Path, password: &str, extra: &str) -> PiHole {
         let path = data.join("pihole.password");
         std::fs::write(&path, password).unwrap();
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
         let table: toml::Table = toml::from_str(&format!(
-            "url = \"{url}\"\npassword_file = \"pihole.password\"\ncertificate = \"{FINGERPRINT}\"\n"
+            "url = \"{url}\"\npassword_file = \"pihole.password\"\ncertificate = \"{FINGERPRINT}\"\n{extra}"
         ))
         .unwrap();
         PiHole::new("pihole".to_owned(), table, data).unwrap()
@@ -859,7 +878,13 @@ mod tests {
         }
         assert_eq!(pihole.plan(devices()).await.unwrap().unwrap().steps, []);
 
-        let seen = pihole.observe().await.unwrap().seen;
+        assert_eq!(
+            pihole.observe().await.unwrap(),
+            Observation::default(),
+            "devices are only reported when switched on"
+        );
+        let reporting = plugin_with(&url, data.path(), "app-password", "report_devices = true\n");
+        let seen = reporting.observe().await.unwrap().seen;
         assert_eq!(seen[0].hostname, "phone");
         assert_eq!(fake.lock().unwrap().sessions, 0);
     }
