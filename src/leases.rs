@@ -4,10 +4,10 @@
 //! when it sets that device's lease, and leaves every other entry alone. A device whose address is not in a
 //! network the router serves is waiting: its entry stays as it is until that network exists.
 
-use std::fmt::Write as _;
 use std::net::Ipv4Addr;
 
 use crate::devices::DeviceList;
+use crate::preview::{Preview, Step};
 
 /// The uci configuration of the static leases.
 pub const CONFIG: &str = "dhcp";
@@ -114,21 +114,26 @@ pub struct Plan {
 }
 
 impl Plan {
-    /// A short fingerprint of the changes: apply only goes ahead if the changes are still the ones shown.
+    /// The plan as steps for the apply page.
+    #[must_use]
+    pub fn preview(&self) -> Preview {
+        Preview {
+            steps: self
+                .changes
+                .iter()
+                .map(|change| Step {
+                    description: change.description().to_owned(),
+                    details: change.commands(),
+                })
+                .collect(),
+            notes: self.notes.clone(),
+        }
+    }
+
+    /// The digest of [`Plan::preview`].
     #[must_use]
     pub fn digest(&self) -> String {
-        let mut text = String::new();
-        for change in &self.changes {
-            for command in change.commands() {
-                text.push_str(&command);
-                text.push('\n');
-            }
-        }
-        let digest = ring::digest::digest(&ring::digest::SHA256, text.as_bytes());
-        digest.as_ref()[..16].iter().fold(String::new(), |mut hex, byte| {
-            let _ = write!(hex, "{byte:02x}");
-            hex
-        })
+        self.preview().digest()
     }
 }
 

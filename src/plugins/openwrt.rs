@@ -21,11 +21,12 @@ use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Entry, Observation, Seen};
 use crate::devices::{DeviceList, Error, normalize_mac};
 use crate::leases::{self, Change, HostSection, Network, Plan};
+use crate::preview::Preview;
 
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Largest answer that is read.
-const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+pub(super) const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 /// Lifetime of the rpcd session in seconds; one scan needs only a few.
 const SESSION_TIMEOUT: u64 = 60;
 /// Session id for the login call.
@@ -96,12 +97,7 @@ impl OpenWrt {
             certificate,
         } = settings(&name, table)?;
         let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
-        let mut endpoint = Url::parse(&url).map_err(|_| invalid("invalid address"))?;
-        let local = matches!(endpoint.host_str(), Some("127.0.0.1" | "localhost"));
-        // Plain HTTP would send the password readable over the network; only the own host may use it.
-        if endpoint.scheme() != "https" && !(endpoint.scheme() == "http" && local) {
-            return Err(invalid("the address must use https://"));
-        }
+        let mut endpoint = secure_url(&name, &url)?;
         endpoint.set_path("/ubus");
         endpoint.set_query(None);
         let fingerprint =
@@ -163,10 +159,10 @@ impl OpenWrt {
         Ok((!networks.is_empty()).then(|| leases::plan(devices, &hosts, &networks)))
     }
 
-    async fn preview(&self, devices: DeviceList) -> Result<Option<Plan>, String> {
+    async fn preview(&self, devices: DeviceList) -> Result<Option<Preview>, String> {
         let password = read_password(&self.password_file).await?;
         let session = self.login(&password).await?;
-        self.plan_in(&session, &devices).await
+        Ok(self.plan_in(&session, &devices).await?.map(|plan| plan.preview()))
     }
 
     /// Stages the changes, applies them with rollback, reads the device again and confirms only if nothing is
@@ -319,7 +315,7 @@ impl Plugin for OpenWrt {
         true
     }
 
-    fn plan(&self, devices: DeviceList) -> BoxFuture<'_, Result<Option<Plan>, String>> {
+    fn plan(&self, devices: DeviceList) -> BoxFuture<'_, Result<Option<Preview>, String>> {
         Box::pin(self.preview(devices))
     }
 
@@ -328,8 +324,20 @@ impl Plugin for OpenWrt {
     }
 }
 
+/// Parses a device address: `https`, or plain `http` to the own host only, which would otherwise send the password
+/// readable over the network.
+pub(super) fn secure_url(name: &str, url: &str) -> Result<Url, Error> {
+    let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
+    let endpoint = Url::parse(url).map_err(|_| invalid("invalid address"))?;
+    let local = matches!(endpoint.host_str(), Some("127.0.0.1" | "localhost"));
+    if endpoint.scheme() != "https" && !(endpoint.scheme() == "http" && local) {
+        return Err(invalid("the address must use https://"));
+    }
+    Ok(endpoint)
+}
+
 /// Reads the password file; it must be readable for the owner only.
-async fn read_password(path: &Path) -> Result<String, String> {
+pub(super) async fn read_password(path: &Path) -> Result<String, String> {
     let metadata = tokio::fs::metadata(path)
         .await
         .map_err(|error| format!("{}: {error}", path.display()))?;
@@ -512,7 +520,7 @@ fn served_networks(dhcp: &Value, dump: &Value) -> Vec<Network> {
 }
 
 /// Parses a SHA-256 fingerprint: 64 hex digits, with or without colons.
-fn parse_fingerprint(text: &str) -> Option<[u8; 32]> {
+pub(super) fn parse_fingerprint(text: &str) -> Option<[u8; 32]> {
     let digits: String = text.chars().filter(|c| *c != ':').collect();
     if digits.len() != 64 {
         return None;
@@ -525,7 +533,7 @@ fn parse_fingerprint(text: &str) -> Option<[u8; 32]> {
 }
 
 /// HTTP client that trusts exactly the certificate with this fingerprint, whatever its name or issuer.
-fn client(fingerprint: [u8; 32]) -> Result<Client, String> {
+pub(super) fn client(fingerprint: [u8; 32]) -> Result<Client, String> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let verifier = PinnedCertificate {
         fingerprint,
@@ -971,7 +979,7 @@ mod tests {
         assert!(router.is_target());
 
         let plan = router.plan(devices()).await.unwrap().unwrap();
-        assert_eq!(plan.changes.len(), 2, "take over cfg01 as lanlord_omv");
+        assert_eq!(plan.steps.len(), 2, "take over cfg01 as lanlord_omv");
         assert!(plan.notes[0].starts_with("plug waits"));
 
         assert_eq!(router.apply(devices(), plan.digest()).await.unwrap().len(), 2);
@@ -981,7 +989,7 @@ mod tests {
             assert!(fake.committed.contains_key("lanlord_omv"));
             assert!(!fake.committed.contains_key("cfg01"));
         }
-        assert_eq!(router.plan(devices()).await.unwrap().unwrap().changes, []);
+        assert_eq!(router.plan(devices()).await.unwrap().unwrap().steps, []);
         assert_eq!(
             router.apply(devices(), Plan::default().digest()).await.unwrap(),
             Vec::<String>::new()

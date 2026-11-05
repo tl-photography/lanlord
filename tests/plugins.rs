@@ -65,7 +65,10 @@ async fn page_offers_the_built_in_types() {
     assert!(page.contains(r#"aria-current="page">Plugins</a>"#));
     assert!(page.contains(r#"name="type" value="leases-file""#));
     assert!(page.contains(r#"name="type" value="openwrt""#));
-    assert!(!page.contains("pihole"));
+    assert!(page.contains(r#"name="type" value="pihole""#));
+    assert!(page.contains(r#"placeholder="pihole.password""#));
+    assert!(page.contains(r#"<input type="checkbox" name="report_devices" value="true">"#));
+    assert!(!page.contains("telepathy"));
 }
 
 #[tokio::test]
@@ -118,7 +121,7 @@ async fn invalid_settings_are_rejected_with_a_message() {
             "type=openwrt&name=a&url=https%3A%2F%2Frouter.lan&user=lanlord&password_file=p&certificate=1234",
             "must be 64 hex digits",
         ),
-        ("type=pihole&name=a", "Choose a supported plugin type"),
+        ("type=telepathy&name=a", "Choose a supported plugin type"),
         (
             "type=leases-file&name=a%20b&path=dhcp.leases",
             "invalid plugin name",
@@ -270,4 +273,33 @@ async fn a_broken_settings_file_is_shown_not_fatal() {
     let (status, page) = get(&data, "/plugins").await;
     assert_eq!(status, StatusCode::OK);
     assert!(page.contains("lanlord.toml"), "{page}");
+}
+
+#[tokio::test]
+async fn switches_are_saved_as_yes_or_no() {
+    let data = tempfile::tempdir().unwrap();
+    let fingerprint = "00".repeat(32);
+    let form = format!(
+        "type=pihole&name=dns&url=https%3A%2F%2Fpi.hole&password_file=pihole.password&certificate={fingerprint}"
+    );
+    assert_eq!(
+        post(&data, "/plugins", &form).await.status(),
+        StatusCode::SEE_OTHER
+    );
+    let path = data.path().join("lanlord.toml");
+    let saved = |path: &std::path::Path| {
+        lanlord::plugins::read_settings(path).unwrap().plugins[0]["report_devices"].as_bool()
+    };
+    assert_eq!(saved(&path), Some(false), "an unchecked box sends nothing");
+
+    let form = format!(
+        "url=https%3A%2F%2Fpi.hole&password_file=pihole.password&certificate={fingerprint}&report_devices=true"
+    );
+    assert_eq!(
+        post(&data, "/plugins/dns", &form).await.status(),
+        StatusCode::SEE_OTHER
+    );
+    assert_eq!(saved(&path), Some(true));
+    let (_, page) = get(&data, "/plugins").await;
+    assert!(page.contains(r#"name="report_devices" value="true" checked"#));
 }

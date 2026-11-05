@@ -28,6 +28,16 @@ struct FieldView {
     placeholder: &'static str,
 }
 
+impl FieldView {
+    fn is_switch(&self) -> bool {
+        self.input == "checkbox"
+    }
+
+    fn checked(&self) -> bool {
+        self.value == "true"
+    }
+}
+
 struct PluginRow {
     name: String,
     problem: String,
@@ -73,6 +83,7 @@ struct PluginsPage {
 fn input(field: &Field) -> &'static str {
     match field.kind {
         FieldKind::Url => "url",
+        FieldKind::Switch => "checkbox",
         _ => "text",
     }
 }
@@ -94,6 +105,7 @@ fn table_text(table: &toml::Table, key: &str) -> String {
     match table.get(key) {
         Some(toml::Value::String(text)) => text.clone(),
         Some(toml::Value::Integer(number)) => number.to_string(),
+        Some(toml::Value::Boolean(flag)) => flag.to_string(),
         _ => String::new(),
     }
 }

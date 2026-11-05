@@ -13,6 +13,7 @@ pub mod leases;
 pub mod origin;
 mod plugin_ui;
 pub mod plugins;
+pub mod preview;
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};

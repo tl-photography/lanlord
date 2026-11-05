@@ -13,8 +13,8 @@ use axum::response::{Html, IntoResponse, Response};
 
 use crate::devices::DeviceList;
 use crate::history;
-use crate::leases::Plan;
 use crate::plugins::{self, Plugin};
+use crate::preview::Preview;
 use crate::{AppState, server_error};
 
 /// Longest time for a preview of one target.
@@ -58,7 +58,7 @@ fn targets(state: &AppState) -> Option<Vec<Arc<dyn Plugin>>> {
     )
 }
 
-fn view(plugin: &dyn Plugin, result: Result<Option<Plan>, String>) -> TargetView {
+fn view(plugin: &dyn Plugin, result: Result<Option<Preview>, String>) -> TargetView {
     let mut view = TargetView {
         name: plugin.name().to_owned(),
         title: plugins::plugin_type(plugin.kind()).map_or("Unknown type", |plugin_type| plugin_type.title),
@@ -73,11 +73,11 @@ fn view(plugin: &dyn Plugin, result: Result<Option<Plan>, String>) -> TargetView
             view.manages = true;
             view.digest = plan.digest();
             view.changes = plan
-                .changes
+                .steps
                 .iter()
-                .map(|change| ChangeView {
-                    description: change.description().to_owned(),
-                    commands: change.commands().join("\n"),
+                .map(|step| ChangeView {
+                    description: step.description.clone(),
+                    commands: step.details.join("\n"),
                 })
                 .collect();
             view.notes = plan.notes;
@@ -89,7 +89,7 @@ fn view(plugin: &dyn Plugin, result: Result<Option<Plan>, String>) -> TargetView
 }
 
 /// The plan of every target, each with a time limit, in the order of the plugins.
-async fn previews(active: &[Arc<dyn Plugin>], devices: &DeviceList) -> Vec<Result<Option<Plan>, String>> {
+async fn previews(active: &[Arc<dyn Plugin>], devices: &DeviceList) -> Vec<Result<Option<Preview>, String>> {
     let mut tasks = tokio::task::JoinSet::new();
     for (index, plugin) in active.iter().cloned().enumerate() {
         let devices = devices.clone();
@@ -147,11 +147,11 @@ async fn page(state: &AppState, message: String, error: String) -> Response {
     }
 }
 
-fn count_changes(results: &[Result<Option<Plan>, String>]) -> usize {
+fn count_changes(results: &[Result<Option<Preview>, String>]) -> usize {
     results
         .iter()
         .filter_map(|result| result.as_ref().ok().and_then(Option::as_ref))
-        .map(|plan| plan.changes.len())
+        .map(|plan| plan.steps.len())
         .sum()
 }
 

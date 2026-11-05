@@ -4,6 +4,7 @@
 
 mod leases_file;
 mod openwrt;
+mod pihole;
 
 use std::collections::HashSet;
 use std::fs;
@@ -16,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::compare::Observation;
 use crate::devices::{DeviceList, Error, is_valid_name};
-use crate::leases::Plan;
+use crate::preview::Preview;
 
 /// A future that a plugin returns; boxed, so plugins can be stored as trait objects.
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -34,7 +35,7 @@ pub trait Plugin: Send + Sync {
         false
     }
     /// The changes a target would make for this device list; `None` if it has nothing to manage.
-    fn plan(&self, _devices: DeviceList) -> BoxFuture<'_, Result<Option<Plan>, String>> {
+    fn plan(&self, _devices: DeviceList) -> BoxFuture<'_, Result<Option<Preview>, String>> {
         Box::pin(async { Ok(None) })
     }
     /// Makes the changes, if they are still the ones with this digest; returns what was changed.
@@ -56,6 +57,8 @@ pub enum FieldKind {
     DataFile,
     /// A SHA-256 fingerprint: 64 hex digits, with or without colons.
     Fingerprint,
+    /// Yes or no, a checkbox; off when the form does not send it.
+    Switch,
 }
 
 /// One setting of a plugin type.
@@ -88,7 +91,7 @@ pub struct PluginType {
 }
 
 /// All built-in plugin types.
-pub const TYPES: &[PluginType] = &[leases_file::TYPE, openwrt::TYPE];
+pub const TYPES: &[PluginType] = &[leases_file::TYPE, openwrt::TYPE, pihole::TYPE];
 
 /// The plugin type with this `type` value.
 #[must_use]
@@ -103,6 +106,9 @@ pub fn plugin_type(kind: &str) -> Option<&'static PluginType> {
 /// A message for the user if the value does not fit the field.
 pub fn field_value(field: &Field, value: &str) -> Result<toml::Value, String> {
     let value = value.trim();
+    if field.kind == FieldKind::Switch {
+        return Ok(toml::Value::Boolean(matches!(value, "true" | "on")));
+    }
     if value.is_empty() {
         return Err(format!("{} is required", field.label));
     }
@@ -383,7 +389,7 @@ mod tests {
             assert!(!described.fields.is_empty(), "{}", described.kind);
             assert!(plugin_type(described.kind).is_some());
         }
-        assert!(plugin_type("pihole").is_none());
+        assert!(plugin_type("telepathy").is_none());
     }
 
     #[test]
