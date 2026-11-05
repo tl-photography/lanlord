@@ -34,6 +34,32 @@ fn healthcheck() -> ExitCode {
     }
 }
 
+/// Asks for a new password twice and saves its hash in the data directory.
+fn set_password() -> ExitCode {
+    let data_dir = std::env::var("LANLORD_DATA").unwrap_or_else(|_| DEFAULT_DATA.to_owned());
+    let path = std::path::Path::new(&data_dir).join("password.hash");
+    let first = rpassword::prompt_password("New password: ");
+    let second = rpassword::prompt_password("Repeat it: ");
+    let (Ok(first), Ok(second)) = (first, second) else {
+        eprintln!("cannot read the password, run with docker exec -it");
+        return ExitCode::FAILURE;
+    };
+    if first != second {
+        eprintln!("the passwords differ");
+        return ExitCode::FAILURE;
+    }
+    match lanlord::auth::save_password(&path, &first) {
+        Ok(()) => {
+            println!("password saved in {}", path.display());
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("{error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
 /// Waits for Ctrl-C or SIGTERM (sent by `docker stop`).
 async fn shutdown_signal() {
     let terminate = async {
@@ -53,8 +79,10 @@ async fn shutdown_signal() {
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    if std::env::args().nth(1).as_deref() == Some("healthcheck") {
-        return healthcheck();
+    match std::env::args().nth(1).as_deref() {
+        Some("healthcheck") => return healthcheck(),
+        Some("set-password") => return set_password(),
+        _ => {}
     }
 
     tracing_subscriber::fmt::init();

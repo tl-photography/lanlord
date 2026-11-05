@@ -33,7 +33,7 @@ fn data() -> TempDir {
 }
 
 fn app(data: &TempDir) -> Router {
-    lanlord::app(lanlord::AppState::load(data.path()).unwrap())
+    lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap())
 }
 
 fn devices(data: &TempDir) -> String {

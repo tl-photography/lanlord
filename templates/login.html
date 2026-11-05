@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Log in - lanlord</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="login">
+    <img src="/logo.svg" alt="lanlord: every device needs a lease" width="400" height="120">
+    {% if !error.is_empty() %}
+    <p class="error" role="alert">{{ error }}</p>
+    {% endif %}
+    {% if has_password %}
+    <form method="post" action="/login">
+      <label>Password <input type="password" name="password" required autocomplete="current-password" autofocus></label>
+      <button type="submit">Log in</button>
+    </form>
+    {% else %}
+    <p class="notice">No password is set yet. Set one on the server:</p>
+    <pre><code>docker exec -it lanlord /lanlord set-password</code></pre>
+    {% endif %}
+  </main>
+</body>
+</html>

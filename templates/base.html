@@ -24,6 +24,7 @@
       <a href="/plugins"{% if nav == "plugins" %} aria-current="page"{% endif %}>Plugins</a>
     </nav>
     <a class="button add" href="/devices/new">Add device</a>
+    <form class="logout" method="post" action="/logout"><button type="submit">Log out</button></form>
   </header>
   <main>
     {% block content %}{% endblock %}

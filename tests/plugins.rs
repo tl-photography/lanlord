@@ -10,7 +10,7 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 fn app(data: &TempDir) -> Router {
-    lanlord::app(lanlord::AppState::load(data.path()).unwrap())
+    lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap())
 }
 
 async fn post(data: &TempDir, path: &str, form: &str) -> axum::response::Response {

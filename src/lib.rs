@@ -1,5 +1,6 @@
 //! lanlord: device list for a small `OpenWrt` network.
 
+pub mod auth;
 pub mod compare;
 pub mod config;
 pub mod devices;
@@ -76,6 +77,10 @@ struct Inner {
     devices_path: PathBuf,
     /// Held while the device list is read, changed and written.
     write_lock: Mutex<()>,
+    /// Off only when another layer, like a proxy with its own login, protects lanlord.
+    login_required: bool,
+    password_path: PathBuf,
+    sessions: auth::Sessions,
 }
 
 impl AppState {
@@ -86,6 +91,20 @@ impl AppState {
     ///
     /// If a file cannot be read or is invalid.
     pub fn load(data_dir: &Path) -> Result<Self, Error> {
+        Self::open(data_dir, true)
+    }
+
+    /// Like [`AppState::load`], but without the login: for tests, and for running behind another layer that
+    /// already authenticates every request.
+    ///
+    /// # Errors
+    ///
+    /// If a file cannot be read or is invalid.
+    pub fn load_without_login(data_dir: &Path) -> Result<Self, Error> {
+        Self::open(data_dir, false)
+    }
+
+    fn open(data_dir: &Path, login_required: bool) -> Result<Self, Error> {
         let groups_path = data_dir.join("groups.toml");
         let groups = Config::load(&groups_path)?;
         let devices_path = data_dir.join("devices.toml");
@@ -100,6 +119,9 @@ impl AppState {
                 groups_path,
                 devices_path,
                 write_lock: Mutex::new(()),
+                login_required,
+                password_path: data_dir.join("password.hash"),
+                sessions: auth::Sessions::default(),
             }),
         })
     }
@@ -138,7 +160,13 @@ pub fn app(state: AppState) -> Router {
         .route("/favicon.svg", get(favicon))
         .route("/app.js", get(script))
         .route("/healthz", get(healthz))
+        .route("/login", get(auth::form).post(auth::login))
+        .route("/logout", axum::routing::post(auth::logout))
         .layer(axum::middleware::from_fn(origin::same_origin_only))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            auth::require_login,
+        ))
         .with_state(state);
     for (name, value) in SECURITY_HEADERS {
         router = router.layer(SetResponseHeaderLayer::overriding(

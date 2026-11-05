@@ -173,3 +173,9 @@ input:focus, select:focus, button:focus, a:focus-visible { outline: 2px solid va
   td[data-label]::before { content: attr(data-label); flex: 0 0 6.5rem; color: var(--muted); }
   td:empty { display: none; }
 }
+
+/* Log out and the login page. */
+.logout button { background: transparent; color: var(--topbar-text); border-color: rgba(255, 255, 255, 0.3); font-weight: normal; }
+.login { max-width: 24rem; margin: 12vh auto 0; padding: 1.5rem; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 0.8rem; box-shadow: var(--shadow); }
+.login img { display: block; margin: 0 auto 1rem; max-width: 100%; height: auto; }

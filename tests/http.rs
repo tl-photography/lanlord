@@ -31,7 +31,7 @@ fn app() -> (TempDir, Router) {
     let example = Path::new(env!("CARGO_MANIFEST_DIR")).join("examples/groups.toml");
     std::fs::copy(example, data.path().join("groups.toml")).unwrap();
     std::fs::write(data.path().join("devices.toml"), DEVICES).unwrap();
-    let state = lanlord::AppState::load(data.path()).unwrap();
+    let state = lanlord::AppState::load_without_login(data.path()).unwrap();
     (data, lanlord::app(state))
 }
 
@@ -133,13 +133,13 @@ async fn devices_in_unknown_groups_stop_the_start() {
         DEVICES.replace("\"iot\"", "\"office\""),
     )
     .unwrap();
-    assert!(lanlord::AppState::load(data.path()).is_err());
+    assert!(lanlord::AppState::load_without_login(data.path()).is_err());
 }
 
 #[tokio::test]
 async fn starts_without_groups_and_devices() {
     let data = tempfile::tempdir().unwrap();
-    let app = lanlord::app(lanlord::AppState::load(data.path()).unwrap());
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
     let response = app
         .oneshot(Request::get("/").body(Body::empty()).unwrap())
         .await
