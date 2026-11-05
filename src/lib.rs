@@ -10,6 +10,7 @@ mod groups;
 pub mod history;
 mod history_ui;
 pub mod leases;
+pub mod notify;
 pub mod origin;
 mod plugin_ui;
 pub mod plugins;
@@ -199,6 +200,10 @@ pub fn app(state: AppState) -> Router {
         .route("/plugins/scan", axum::routing::post(plugin_ui::scan))
         .route("/plugins/{name}/enabled", axum::routing::post(plugin_ui::toggle))
         .route("/plugins/{name}/delete", axum::routing::post(plugin_ui::delete))
+        .route(
+            "/plugins/{name}/test",
+            axum::routing::post(plugin_ui::test_notification),
+        )
         .route("/plugins/{name}", axum::routing::post(plugin_ui::update))
         .route("/history", get(history_ui::list))
         .route("/apply", get(apply::list))

@@ -14,6 +14,7 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use crate::compare::{self, Finding};
 use crate::devices::Error;
 use crate::history;
+use crate::notify::Notification;
 use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, Settings};
 use crate::{AppState, server_error};
 
@@ -26,6 +27,7 @@ struct FieldView {
     value: String,
     input: &'static str,
     placeholder: &'static str,
+    optional: bool,
 }
 
 impl FieldView {
@@ -40,6 +42,7 @@ impl FieldView {
 
 struct PluginRow {
     name: String,
+    notifies: bool,
     problem: String,
     title: &'static str,
     enabled: bool,
@@ -85,6 +88,7 @@ struct PluginsPage {
     scan_results: Vec<ScanRow>,
     has_scanned: bool,
     can_import: bool,
+    message: String,
     error: String,
 }
 
@@ -105,6 +109,7 @@ fn field_views(fields: &'static [Field], values: impl Fn(&str) -> String) -> Vec
             value: values(field.key),
             input: input(field),
             placeholder: field.placeholder,
+            optional: field.optional,
         })
         .collect()
 }
@@ -119,6 +124,26 @@ fn table_text(table: &toml::Table, key: &str) -> String {
 }
 
 fn page(state: &AppState, scan_results: Vec<ScanRow>, has_scanned: bool, error: String) -> Response {
+    page_with_message(state, scan_results, has_scanned, String::new(), error)
+}
+
+fn page_with_message(
+    state: &AppState,
+    scan_results: Vec<ScanRow>,
+    has_scanned: bool,
+    message: String,
+    error: String,
+) -> Response {
+    let notifiers: Vec<String> = state.inner.plugins.read().map_or_else(
+        |_| Vec::new(),
+        |plugins| {
+            plugins
+                .iter()
+                .filter(|plugin| plugin.notifies())
+                .map(|plugin| plugin.name().to_owned())
+                .collect()
+        },
+    );
     // A broken lanlord.toml is shown, not hidden behind an error page, so it can be fixed here.
     let (settings, file_problem) = match plugins::read_settings(&state.inner.plugins_path) {
         Ok(settings) => (settings, String::new()),
@@ -141,6 +166,7 @@ fn page(state: &AppState, scan_results: Vec<ScanRow>, has_scanned: bool, error: 
                 field_views(plugin_type.fields, |key| table_text(table, key))
             });
             PluginRow {
+                notifies: notifiers.contains(&name),
                 search: format!("{name} {kind}").to_ascii_lowercase(),
                 problem: problem.unwrap_or_default(),
                 name,
@@ -174,6 +200,7 @@ fn page(state: &AppState, scan_results: Vec<ScanRow>, has_scanned: bool, error: 
         scan_results,
         has_scanned,
         can_import: !state.groups().default_group.is_empty(),
+        message,
         error: if error.is_empty() { file_problem } else { error },
     };
     match page.render() {
@@ -304,6 +331,40 @@ fn change(state: &AppState, update: impl FnOnce(&mut Settings) -> Result<(), Str
         Err(_) => return server_error(&"plugin lock poisoned"),
     }
     Redirect::to("/plugins").into_response()
+}
+
+/// Sends a test notification through one notification plugin.
+pub async fn test_notification(State(state): State<AppState>, Path(name): Path<String>) -> Response {
+    let plugin = state.inner.plugins.read().ok().and_then(|plugins| {
+        plugins
+            .iter()
+            .find(|plugin| plugin.name() == name && plugin.notifies())
+            .cloned()
+    });
+    let Some(plugin) = plugin else {
+        return page(
+            &state,
+            Vec::new(),
+            false,
+            format!("No enabled notification plugin named {name}"),
+        );
+    };
+    match tokio::time::timeout(SCAN_TIMEOUT, plugin.notify(Notification::test())).await {
+        Ok(Ok(())) => page_with_message(
+            &state,
+            Vec::new(),
+            false,
+            format!("{name}: test notification sent"),
+            String::new(),
+        ),
+        Ok(Err(error)) => page(&state, Vec::new(), false, error),
+        Err(_) => page(
+            &state,
+            Vec::new(),
+            false,
+            format!("{name}: no answer within {} s", SCAN_TIMEOUT.as_secs()),
+        ),
+    }
 }
 
 /// Scans every enabled plugin at the same time, each with a time limit, without changing anything.

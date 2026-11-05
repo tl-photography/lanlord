@@ -303,3 +303,67 @@ async fn switches_are_saved_as_yes_or_no() {
     let (_, page) = get(&data, "/plugins").await;
     assert!(page.contains(r#"name="report_devices" value="true" checked"#));
 }
+
+#[tokio::test]
+async fn notification_plugins_send_a_test_on_request() {
+    use std::sync::{Arc, Mutex};
+    let received: Arc<Mutex<Vec<String>>> = Arc::default();
+    let shared = received.clone();
+    let handler = move |body: String| {
+        let shared = shared.clone();
+        async move {
+            shared.lock().unwrap().push(body);
+            StatusCode::NO_CONTENT
+        }
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move {
+        axum::serve(
+            listener,
+            axum::Router::new().route("/hook", axum::routing::post(handler)),
+        )
+        .await
+    });
+
+    let data = tempfile::tempdir().unwrap();
+    let form = format!("type=webhook&name=hook&url=http%3A%2F%2F127.0.0.1%3A{port}%2Fhook&token_file=");
+    assert_eq!(
+        post(&data, "/plugins", &form).await.status(),
+        StatusCode::SEE_OTHER,
+        "the token file is optional"
+    );
+    let (_, page) = get(&data, "/plugins").await;
+    assert!(page.contains("Send test notification"));
+
+    let response = post(&data, "/plugins/hook/test", "").await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    assert!(
+        String::from_utf8(body.to_vec())
+            .unwrap()
+            .contains("hook: test notification sent")
+    );
+    assert!(received.lock().unwrap()[0].contains("lanlord test"));
+
+    let response = post(&data, "/plugins/nothing/test", "").await;
+    assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[test]
+fn an_older_entry_without_a_switch_still_loads() {
+    let data = tempfile::tempdir().unwrap();
+    let path = data.path().join("lanlord.toml");
+    std::fs::write(
+        &path,
+        format!(
+            "[[plugin]]\ntype = \"pihole\"\nname = \"dns\"\nenabled = true\nurl = \"https://pi.hole\"\n\
+             password_file = \"pihole.password\"\ncertificate = \"{}\"\n",
+            "00".repeat(32)
+        ),
+    )
+    .unwrap();
+    let loaded = lanlord::plugins::load(&path);
+    assert_eq!(loaded.all_problems(), Vec::<String>::new());
+    assert_eq!(loaded.plugins.len(), 1);
+}
