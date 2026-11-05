@@ -27,7 +27,7 @@ them. Pi-hole has no rollback; lanlord reports what is missing.</p>
   <ol class="changes">
     {% for change in target.changes %}
     <li>{{ change.description }}
-      <details><summary>uci</summary><pre class="commands">{{ change.commands }}</pre></details>
+      <details><summary>Details</summary><pre class="commands">{{ change.commands }}</pre></details>
     </li>
     {% endfor %}
   </ol>
