@@ -3,50 +3,76 @@
 # lanlord
 
 A device list for small OpenWrt networks.
-Give every device a name and a group, then compare the list with enabled network sources.
-Changes in lanlord are not applied to the router or Pi-hole yet.
+Every device gets a name and a group, and every group is a VLAN.
+lanlord compares the list with what the router and the access points report and shows unknown devices and
+differences.
 
 ## How it works
 
-- Groups map to VLANs, for example `lan`, `iot` and `guest`. The groups and their VLAN ids are configuration.
-- Devices and groups are stored in the data directory as `devices.toml` and `groups.toml`.
-- The Plugins page configures sources and scans them for unknown devices and discrepancies.
-- Moving a device changes its group in lanlord only. The router and access points are unchanged.
-- Pi-hole can report network devices, but OpenWrt remains the DHCP source of truth.
+- Groups map to VLANs, for example `lan`, `iot` and `guest`. They are set up in the interface; the first one is the
+  default group for unknown devices.
+- Devices, groups and plugin settings are TOML files in the data directory: `devices.toml`, `groups.toml` and
+  `lanlord.toml`.
+- Plugins report what they see. A scan lists unknown devices, which can be added to the list, and differences:
+  missing static leases, other addresses, names or VLANs.
+- A plugin entry that cannot be used, for example after a settings change, is left out and shown on the Plugins
+  page; lanlord still starts.
 
-### Requirements on OpenWrt
+### Plugins
 
-- OpenWrt on the router and every access point.
-- The full `wpad` variant (`wpad-mbedtls` or `wpad-openssl`) on every access point. The basic variants cannot assign
-  VLANs per station.
-- The VLANs configured as bridge VLANs, tagged towards the router.
-- The `lanlord-apply` script and the SSH key of lanlord on every device, see below.
+| Type          | Reports                                                                    |
+| ------------- | -------------------------------------------------------------------------- |
+| `openwrt`     | DHCP leases, static leases and Wi-Fi VLANs per MAC of an OpenWrt device     |
+| `leases-file` | the devices in a dnsmasq lease file in the data directory                   |
 
-### Access to the routers
+File settings, like password files, are file names in the data directory. Paths outside it are rejected.
 
-lanlord connects over SSH with its own key. On the router and the access points the key is restricted to one
-command in `authorized_keys`:
+### OpenWrt
 
-```text
-command="/usr/libexec/lanlord-apply",no-port-forwarding,no-agent-forwarding,no-pty ssh-ed25519 AAAA... lanlord
+lanlord uses the ubus JSON-RPC API that LuCI uses, as its own rpcd user. An ACL on the device decides what that
+user may read, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
+
+```json
+{
+  "lanlord": {
+    "description": "lanlord device list",
+    "read": {
+      "ubus": { "luci-rpc": ["getDHCPLeases"], "uci": ["get"] },
+      "uci": ["dhcp", "wireless"]
+    }
+  }
+}
 ```
 
-The OpenWrt plugin uses `host`, `user`, `port`, `key_file` and `host_key_file` settings. The private key and pinned
-host public key stay in files in the data directory. The private key file must be readable by the lanlord user and
-have mode `0600`.
-
-The restricted `lanlord-apply read` helper emits tab-separated records:
+and the user in `/etc/config/rpcd`, with a password hash from `uhttpd -m <password>`:
 
 ```text
-lease<TAB>mac<TAB>ip<TAB>hostname
-entry<TAB>mac<TAB>name<TAB>ip-or--<TAB>vlan-or--
+config login
+	option username 'lanlord'
+	option password '$1$...'
+	list read 'lanlord'
 ```
 
-The current helper supports reads only. It rejects every other request and does not change router configuration.
+The plugin needs the HTTPS address of the device, the user, the name of a file in the data directory with the
+password (mode `0600`) and the SHA-256 fingerprint of the device's certificate. lanlord trusts only that
+certificate, so a self-signed one works without a certificate authority. The fingerprint:
 
-The Pi-hole plugin uses the v6 API's `/network/devices` endpoint. Set its API URL and a `password_file` path in the
-Plugins page. Store an application password in a mode-`0600` file, not in `lanlord.toml`. The URL must be reachable
-from the lanlord container.
+```sh
+openssl s_client -connect router.lan:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
+```
+
+Assigning VLANs per Wi-Fi device needs the full `wpad` variant (`wpad-mbedtls` or `wpad-openssl`) on every access
+point; the basic variants cannot.
+
+### Login
+
+lanlord asks for one password. Its Argon2id hash is `password.hash` in the data directory; set it with
+
+```sh
+docker exec -it lanlord /lanlord set-password
+```
+
+After failed attempts each next attempt waits longer. Sessions last 12 hours and end with a restart.
 
 ## Container Quick Start
 
@@ -55,15 +81,16 @@ docker run -d --name lanlord \
    --restart unless-stopped \
    --user "$(id -u):$(id -g)" \
    --read-only --cap-drop ALL --security-opt no-new-privileges \
+   -v "$PWD/lanlord-data:/data" \
    -p 127.0.0.1:8080:8080 \
    ghcr.io/tl-photography/lanlord:latest
+docker exec -it lanlord /lanlord set-password
 ```
 
-lanlord has no login of its own.
-Run it behind a reverse proxy with authentication, and do not expose it to the internet.
+Run it behind a reverse proxy with HTTPS, and do not expose it to the internet.
 
-`LANLORD_LISTEN` sets the listen address, the default is `0.0.0.0:8080`.
-The container health check runs `/lanlord healthcheck`.
+`LANLORD_LISTEN` sets the listen address, the default is `0.0.0.0:8080`. `LANLORD_DATA` sets the data directory, the
+default is `/data`. The container health check runs `/lanlord healthcheck`.
 
 ### Docker Compose
 
@@ -76,13 +103,15 @@ services:
     read_only: true
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
+    volumes:
+      - ./lanlord-data:/data
 ```
 
 ### User and permissions
 
 The image runs as uid and gid 10001 by default.
 Any other `uid:gid` works with `--user` or `user:`, lanlord needs no entry in `/etc/passwd`.
-Use the owner of the data directory, so the SSH key in it can stay readable for that user only.
+Use the owner of the data directory, so the password files in it can stay readable for that user only.
 Root and the `PUID`/`PGID` environment variables of other images are not supported, the container never runs as root.
 
 ### Hardening
