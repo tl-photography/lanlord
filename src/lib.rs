@@ -24,7 +24,7 @@ use crate::config::Config;
 use crate::devices::{DeviceList, Error};
 
 /// Headers on every response: no external content, no frames, no caching of device data.
-const SECURITY_HEADERS: [(HeaderName, &str); 9] = [
+const SECURITY_HEADERS: [(HeaderName, &str); 8] = [
     (
         header::CONTENT_SECURITY_POLICY,
         "default-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
@@ -39,10 +39,6 @@ const SECURITY_HEADERS: [(HeaderName, &str); 9] = [
     ),
     (
         HeaderName::from_static("cross-origin-opener-policy"),
-        "same-origin",
-    ),
-    (
-        HeaderName::from_static("cross-origin-resource-policy"),
         "same-origin",
     ),
     (
@@ -179,7 +175,11 @@ pub fn app(state: AppState) -> Router {
             HeaderValue::from_static(value),
         ));
     }
-    router
+    // Only the logo and icon may be shown by other sites, for example a dashboard; everything else stays own.
+    router.layer(SetResponseHeaderLayer::if_not_present(
+        CROSS_ORIGIN_RESOURCE_POLICY,
+        HeaderValue::from_static("same-origin"),
+    ))
 }
 
 struct DeviceRow {
@@ -289,12 +289,28 @@ async fn script() -> impl IntoResponse {
     ([(header::CONTENT_TYPE, "text/javascript; charset=utf-8")], SCRIPT)
 }
 
+const CROSS_ORIGIN_RESOURCE_POLICY: HeaderName = HeaderName::from_static("cross-origin-resource-policy");
+
+/// Public images: other sites may embed them.
+fn public_image(svg: &'static str) -> impl IntoResponse {
+    (
+        [
+            (header::CONTENT_TYPE, HeaderValue::from_static("image/svg+xml")),
+            (
+                CROSS_ORIGIN_RESOURCE_POLICY,
+                HeaderValue::from_static("cross-origin"),
+            ),
+        ],
+        svg,
+    )
+}
+
 async fn logo() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "image/svg+xml")], LOGO)
+    public_image(LOGO)
 }
 
 async fn favicon() -> impl IntoResponse {
-    ([(header::CONTENT_TYPE, "image/svg+xml")], FAVICON)
+    public_image(FAVICON)
 }
 
 async fn healthz() -> &'static str {

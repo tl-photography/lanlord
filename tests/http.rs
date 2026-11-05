@@ -152,6 +152,24 @@ async fn starts_without_groups_and_devices() {
 }
 
 #[tokio::test]
+async fn only_the_logo_and_icon_may_be_embedded_by_other_sites() {
+    for (path, policy) in [
+        ("/favicon.svg", "cross-origin"),
+        ("/logo.svg", "cross-origin"),
+        ("/", "same-origin"),
+        ("/style.css", "same-origin"),
+        ("/nope", "same-origin"),
+    ] {
+        let response = send(path).await;
+        assert_eq!(
+            response.headers()["cross-origin-resource-policy"],
+            policy,
+            "{path}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn every_response_has_the_security_headers() {
     for path in ["/", "/healthz", "/style.css", "/app.js", "/favicon.svg", "/nope"] {
         let response = send(path).await;
