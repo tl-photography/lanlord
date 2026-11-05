@@ -26,7 +26,7 @@ use crate::preview::Preview;
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Largest answer that is read.
-const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+pub(super) const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
 /// Lifetime of the rpcd session in seconds; one scan needs only a few.
 const SESSION_TIMEOUT: u64 = 60;
 /// Session id for the login call.
@@ -97,12 +97,7 @@ impl OpenWrt {
             certificate,
         } = settings(&name, table)?;
         let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
-        let mut endpoint = Url::parse(&url).map_err(|_| invalid("invalid address"))?;
-        let local = matches!(endpoint.host_str(), Some("127.0.0.1" | "localhost"));
-        // Plain HTTP would send the password readable over the network; only the own host may use it.
-        if endpoint.scheme() != "https" && !(endpoint.scheme() == "http" && local) {
-            return Err(invalid("the address must use https://"));
-        }
+        let mut endpoint = secure_url(&name, &url)?;
         endpoint.set_path("/ubus");
         endpoint.set_query(None);
         let fingerprint =
@@ -329,8 +324,20 @@ impl Plugin for OpenWrt {
     }
 }
 
+/// Parses a device address: `https`, or plain `http` to the own host only, which would otherwise send the password
+/// readable over the network.
+pub(super) fn secure_url(name: &str, url: &str) -> Result<Url, Error> {
+    let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
+    let endpoint = Url::parse(url).map_err(|_| invalid("invalid address"))?;
+    let local = matches!(endpoint.host_str(), Some("127.0.0.1" | "localhost"));
+    if endpoint.scheme() != "https" && !(endpoint.scheme() == "http" && local) {
+        return Err(invalid("the address must use https://"));
+    }
+    Ok(endpoint)
+}
+
 /// Reads the password file; it must be readable for the owner only.
-async fn read_password(path: &Path) -> Result<String, String> {
+pub(super) async fn read_password(path: &Path) -> Result<String, String> {
     let metadata = tokio::fs::metadata(path)
         .await
         .map_err(|error| format!("{}: {error}", path.display()))?;
@@ -513,7 +520,7 @@ fn served_networks(dhcp: &Value, dump: &Value) -> Vec<Network> {
 }
 
 /// Parses a SHA-256 fingerprint: 64 hex digits, with or without colons.
-fn parse_fingerprint(text: &str) -> Option<[u8; 32]> {
+pub(super) fn parse_fingerprint(text: &str) -> Option<[u8; 32]> {
     let digits: String = text.chars().filter(|c| *c != ':').collect();
     if digits.len() != 64 {
         return None;
@@ -526,7 +533,7 @@ fn parse_fingerprint(text: &str) -> Option<[u8; 32]> {
 }
 
 /// HTTP client that trusts exactly the certificate with this fingerprint, whatever its name or issuer.
-fn client(fingerprint: [u8; 32]) -> Result<Client, String> {
+pub(super) fn client(fingerprint: [u8; 32]) -> Result<Client, String> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let verifier = PinnedCertificate {
         fingerprint,
