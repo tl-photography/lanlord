@@ -70,14 +70,7 @@ struct ScanRow {
     error: String,
     findings: Vec<String>,
     discoveries: Vec<Discovery>,
-    wifi: Vec<WifiRow>,
     notes: Vec<String>,
-}
-
-struct WifiRow {
-    device: String,
-    access_point: String,
-    signal: String,
 }
 
 struct Discovery {
@@ -451,27 +444,9 @@ pub async fn scan(State(state): State<AppState>) -> Response {
                     _ => None,
                 })
                 .collect();
-            let mut wifi: Vec<WifiRow> = observation
-                .wifi
-                .iter()
-                .map(|client| WifiRow {
-                    device: devices
-                        .devices
-                        .iter()
-                        .find(|device| device.mac == client.mac)
-                        .map_or_else(|| client.mac.clone(), |device| device.name.clone()),
-                    access_point: client.access_point.clone(),
-                    signal: client
-                        .signal
-                        .map(|signal| format!("{signal} dBm"))
-                        .unwrap_or_default(),
-                })
-                .collect();
-            wifi.sort_by_key(|row| row.device.to_ascii_lowercase());
             ScanRow {
                 name: plugin.name().to_owned(),
                 title,
-                wifi,
                 notes: observation.notes.clone(),
                 status: match findings.len() {
                     0 => "No discrepancies".to_owned(),
@@ -495,7 +470,6 @@ fn failed(name: &str, title: &'static str, error: String) -> ScanRow {
         error,
         findings: Vec::new(),
         discoveries: Vec::new(),
-        wifi: Vec::new(),
         notes: Vec::new(),
     }
 }
@@ -515,10 +489,6 @@ fn finding_text(finding: &Finding) -> String {
             format!("Unknown device {name} ({mac}, {})", address(*ip))
         }
         Finding::Missing { device } => format!("{device} has no entry"),
-        Finding::LeaseUnused { device } => format!(
-            "{device} has a static lease but does not use it: its address is set on the device. Let it use DHCP, or \
-             change where its address comes from"
-        ),
         Finding::UnexpectedLease { device } => format!(
             "{device} should set its address itself but has a DHCP lease. Change where its address comes from"
         ),

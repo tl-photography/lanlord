@@ -14,12 +14,12 @@ broken line
     assert_eq!(
         parse(content),
         [
-            Seen {
+            Present {
                 mac: "aa:bb:cc:00:11:22".to_owned(),
                 ip: Some(Ipv4Addr::new(192, 0, 2, 10)),
                 hostname: "phone".to_owned(),
             },
-            Seen {
+            Present {
                 mac: "aa:bb:cc:00:11:33".to_owned(),
                 ip: Some(Ipv4Addr::new(192, 0, 2, 11)),
                 hostname: String::new(),

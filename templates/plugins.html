@@ -26,12 +26,6 @@
     <ul>{% for finding in result.findings %}<li>{{ finding }}</li>{% endfor %}</ul>
     {% endif %}
     {% for note in result.notes %}<p class="notice">{{ note }}</p>{% endfor %}
-    {% if !result.wifi.is_empty() %}
-    <h4>On Wi-Fi</h4>
-    <ul class="wifi">
-      {% for client in result.wifi %}<li>{{ client.device }}: {{ client.access_point }}{% if !client.signal.is_empty() %}, {{ client.signal }}{% endif %}</li>{% endfor %}
-    </ul>
-    {% endif %}
     {% if can_import %}
     {% for device in result.discoveries %}
     <form method="post" action="/devices/discovered" class="inline">

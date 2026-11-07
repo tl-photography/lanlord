@@ -130,11 +130,11 @@ fn the_network_table_reports_devices_with_a_real_mac() {
             { "hwaddr": "aa:bb:cc:00:00:02", "ips": [] }
         ] });
     let observation = observation(&devices);
-    assert_eq!(observation.entries, None);
-    assert_eq!(observation.seen.len(), 2);
-    assert_eq!(observation.seen[0].hostname, "phone.lan");
-    assert_eq!(observation.seen[0].ip, Some(Ipv4Addr::new(192, 0, 2, 10)));
-    assert_eq!(observation.seen[1].ip, None);
+    assert_eq!(observation.assigned, None);
+    assert_eq!(observation.present.len(), 2);
+    assert_eq!(observation.present[0].hostname, "phone.lan");
+    assert_eq!(observation.present[0].ip, Some(Ipv4Addr::new(192, 0, 2, 10)));
+    assert_eq!(observation.present[1].ip, None);
 }
 
 /// A Pi-hole like v6: one app password, sessions that must be ended, groups get ids on creation.
@@ -316,7 +316,7 @@ async fn applies_groups_then_clients_and_always_logs_out() {
         "devices are only reported when switched on"
     );
     let reporting = plugin_with(&url, data.path(), &password, "report_devices = true\n");
-    let seen = reporting.observe().await.unwrap().seen;
+    let seen = reporting.observe().await.unwrap().present;
     assert_eq!(seen[0].hostname, "phone");
     assert_eq!(fake.lock().unwrap().sessions, 0);
 }

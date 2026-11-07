@@ -47,8 +47,8 @@ fn list() -> DeviceList {
     }
 }
 
-fn entry(mac: &str, name: &str, ip: Option<Ipv4Addr>, vlan: Option<u16>) -> Entry {
-    Entry {
+fn entry(mac: &str, name: &str, ip: Option<Ipv4Addr>, vlan: Option<u16>) -> Assigned {
+    Assigned {
         mac: mac.to_owned(),
         name: name.to_owned(),
         ip,
@@ -59,12 +59,12 @@ fn entry(mac: &str, name: &str, ip: Option<Ipv4Addr>, vlan: Option<u16>) -> Entr
 #[test]
 fn matching_entries_give_no_findings() {
     let observation = Observation {
-        seen: vec![Seen {
+        present: vec![Present {
             mac: "00:00:00:00:00:01".to_owned(),
             ip: Some(Ipv4Addr::new(192, 0, 2, 2)),
             hostname: "omv".to_owned(),
         }],
-        entries: Some(vec![
+        assigned: Some(vec![
             entry(
                 "00:00:00:00:00:01",
                 "OMV",
@@ -80,14 +80,14 @@ fn matching_entries_give_no_findings() {
 
 #[test]
 fn unknown_devices_are_reported_once() {
-    let stranger = Seen {
+    let stranger = Present {
         mac: "00:00:00:00:00:99".to_owned(),
         ip: Some(Ipv4Addr::new(192, 0, 2, 99)),
         hostname: "phone".to_owned(),
     };
     let observation = Observation {
-        seen: vec![stranger.clone(), stranger],
-        entries: None,
+        present: vec![stranger.clone(), stranger],
+        assigned: None,
         ..Observation::default()
     };
     assert_eq!(
@@ -109,8 +109,8 @@ fn plugins_that_only_report_have_no_missing_entries() {
 #[test]
 fn differences_per_device_and_foreign_entries_are_found() {
     let observation = Observation {
-        seen: vec![],
-        entries: Some(vec![
+        present: vec![],
+        assigned: Some(vec![
             entry(
                 "00:00:00:00:00:01",
                 "server",
@@ -181,61 +181,22 @@ fn address_device(self_assigned: bool) -> DeviceList {
     }
 }
 
-fn seen(mac: &str) -> Seen {
-    Seen {
-        mac: mac.to_owned(),
-        ip: Some([192, 0, 2, 2].into()),
-        hostname: String::new(),
-    }
-}
-
-#[test]
-fn a_device_that_does_not_use_its_lease_is_reported() {
-    let observation = Observation {
-        seen: vec![seen("aa:bb:cc:dd:ee:02")],
-        neighbours: Some(vec![seen("aa:bb:cc:dd:ee:01")]),
-        ..Observation::default()
-    };
-    let findings = compare(&address_device(false), &groups(), &observation);
-    assert!(
-        findings.contains(&Finding::LeaseUnused {
-            device: "ap".to_owned()
-        }),
-        "{findings:?}"
-    );
-    let findings = compare(&address_device(true), &groups(), &observation);
-    assert!(
-        !findings.contains(&Finding::LeaseUnused {
-            device: "ap".to_owned()
-        }),
-        "{findings:?}"
-    );
-}
-
 #[test]
 fn a_device_that_sets_its_address_itself_but_has_a_lease_is_reported() {
     let observation = Observation {
-        seen: vec![seen("aa:bb:cc:dd:ee:01")],
-        neighbours: Some(Vec::new()),
+        assigned: Some(vec![Assigned {
+            mac: "aa:bb:cc:dd:ee:01".to_owned(),
+            name: "ap".to_owned(),
+            ip: Some(Ipv4Addr::new(192, 0, 2, 1)),
+            vlan: None,
+        }]),
         ..Observation::default()
     };
     let findings = compare(&address_device(true), &groups(), &observation);
-    assert!(
-        findings.contains(&Finding::UnexpectedLease {
-            device: "ap".to_owned()
-        }),
-        "{findings:?}"
-    );
-}
-
-#[test]
-fn a_plugin_without_leases_says_nothing_about_them() {
-    let observation = Observation {
-        neighbours: Some(vec![seen("aa:bb:cc:dd:ee:01")]),
-        ..Observation::default()
-    };
     assert_eq!(
-        compare(&address_device(false), &groups(), &observation),
-        Vec::new()
+        findings,
+        [Finding::UnexpectedLease {
+            device: "ap".to_owned()
+        }]
     );
 }

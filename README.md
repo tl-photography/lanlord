@@ -63,11 +63,9 @@ user may read and change, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
         "luci-rpc": ["getDHCPLeases"],
         "network.interface": ["dump"],
         "uci": ["get"],
-        "iwinfo": ["devices", "info", "assoclist"],
-        "file": ["read"]
+        "iwinfo": ["devices", "assoclist"]
       },
-      "uci": ["dhcp", "wireless"],
-      "file": { "/proc/net/arp": ["read"] }
+      "uci": ["dhcp", "wireless"]
     },
     "write": {
       "ubus": { "uci": ["add", "set", "delete", "apply", "confirm", "rollback", "revert"] },

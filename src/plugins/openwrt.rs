@@ -18,16 +18,13 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
-use crate::compare::{Entry, Observation, Seen, WifiClient};
+use crate::compare::{Assigned, Observation, Present};
 use crate::devices::{DeviceList, Error, normalize_mac};
 use crate::leases::{self, Change, HostSection, NameSection, Network, Plan};
 use crate::preview::Preview;
 
 /// Static leases, DNS names and served networks of a device.
 type LeaseState = (Vec<HostSection>, Vec<NameSection>, Vec<Network>);
-
-/// The kernel's table of IPv4 neighbours on the device.
-const NEIGHBOURS: &str = "/proc/net/arp";
 
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -94,15 +91,14 @@ struct Settings {
     user: String,
     password_file: String,
     certificate: String,
-    #[serde(default)]
-    device: String,
+    /// Only used to fill an empty address and for the device page.
+    #[serde(default, rename = "device")]
+    _device: String,
 }
 
 /// One `OpenWrt` device.
 pub struct OpenWrt {
     name: String,
-    /// The linked device's name, or the plugin's; names the access point of Wi-Fi clients.
-    label: String,
     endpoint: Url,
     user: String,
     password_file: PathBuf,
@@ -116,7 +112,7 @@ impl OpenWrt {
             user,
             password_file,
             certificate,
-            device,
+            ..
         } = settings(&name, table)?;
         let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
         let mut endpoint = secure_url(&name, &url)?;
@@ -126,7 +122,6 @@ impl OpenWrt {
             parse_fingerprint(&certificate).ok_or_else(|| invalid("invalid certificate fingerprint"))?;
         let client = client(fingerprint).map_err(|error| invalid(&error))?;
         Ok(Self {
-            label: if device.is_empty() { name.clone() } else { device },
             name,
             endpoint,
             user,
@@ -170,21 +165,11 @@ impl OpenWrt {
             Err(error) if error.ends_with("not found") => {}
             Err(error) => observation.notes.push(format!("Wi-Fi clients not read: {error}")),
         }
-        let arguments = json!({ "path": NEIGHBOURS });
-        match self.call(&session, "file", "read", &arguments).await {
-            Ok(table) => {
-                let text = table.get("data").and_then(Value::as_str).unwrap_or_default();
-                observation.neighbours = Some(neighbours(text));
-            }
-            // Without rpcd's file module the method does not exist.
-            Err(error) if error.ends_with("not found") || error.ends_with("ubus error 3") => {}
-            Err(error) => observation.notes.push(format!("Neighbours not read: {error}")),
-        }
         Ok(observation)
     }
 
     /// The devices connected to each Wi-Fi interface of the device.
-    async fn wifi_clients(&self, session: &str) -> Result<Vec<WifiClient>, String> {
+    async fn wifi_clients(&self, session: &str) -> Result<Vec<String>, String> {
         let devices = self.call(session, "iwinfo", "devices", &json!({})).await?;
         let mut clients = Vec::new();
         for device in devices
@@ -195,9 +180,8 @@ impl OpenWrt {
             .filter_map(Value::as_str)
         {
             let arguments = json!({ "device": device });
-            let info = self.call(session, "iwinfo", "info", &arguments).await?;
             let associated = self.call(session, "iwinfo", "assoclist", &arguments).await?;
-            clients.extend(wifi(&access_point(&self.label, device, &info), &associated));
+            clients.extend(wifi(&associated));
         }
         Ok(clients)
     }
@@ -488,7 +472,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            Some(Seen { mac, ip, hostname })
+            Some(Present { mac, ip, hostname })
         })
         .collect();
 
@@ -505,7 +489,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
         })
         .collect();
 
-    let mut entries: Vec<Entry> = Vec::new();
+    let mut entries: Vec<Assigned> = Vec::new();
     for host in sections(hosts) {
         let name = host.get("name").and_then(Value::as_str).unwrap_or_default();
         let ip = host
@@ -514,7 +498,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
             .and_then(|ip| ip.parse::<Ipv4Addr>().ok());
         for mac in macs(host.get("mac")) {
             if entries.iter().all(|entry| entry.mac != mac) {
-                entries.push(Entry {
+                entries.push(Assigned {
                     vlan: vlans.get(&mac).copied(),
                     mac,
                     name: name.to_owned(),
@@ -525,7 +509,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
     }
     for (mac, vlan) in &vlans {
         if entries.iter().all(|entry| &entry.mac != mac) {
-            entries.push(Entry {
+            entries.push(Assigned {
                 mac: mac.clone(),
                 name: String::new(),
                 ip: None,
@@ -535,8 +519,8 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
     }
     entries.sort_by(|left, right| left.mac.cmp(&right.mac));
     Observation {
-        seen,
-        entries: Some(entries),
+        present: seen,
+        assigned: Some(entries),
         ..Observation::default()
     }
 }
@@ -609,64 +593,28 @@ fn served_networks(served: &[String], dump: &Value) -> Vec<Network> {
         .collect()
 }
 
-/// Where a client is connected: the plugin name, the network name and the band.
-fn access_point(plugin: &str, device: &str, info: &Value) -> String {
-    let ssid = info.get("ssid").and_then(Value::as_str).unwrap_or(device);
-    let band = match info.get("frequency").and_then(Value::as_u64) {
-        Some(frequency) if frequency < 3000 => " (2.4 GHz)",
-        Some(frequency) if frequency < 5925 => " (5 GHz)",
-        Some(_) => " (6 GHz)",
-        None => "",
-    };
-    format!("{plugin}: {ssid}{band}")
-}
-
-/// The clients of one Wi-Fi interface.
-fn wifi(access_point: &str, associated: &Value) -> Vec<WifiClient> {
+/// The MAC addresses of the clients of one Wi-Fi interface.
+fn wifi(associated: &Value) -> Vec<String> {
     associated
         .get("results")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|client| {
-            Some(WifiClient {
-                mac: normalize_mac(client.get("mac")?.as_str()?)?,
-                access_point: access_point.to_owned(),
-                signal: client.get("signal").and_then(Value::as_i64),
-            })
-        })
+        .filter_map(|client| normalize_mac(client.get("mac")?.as_str()?))
         .collect()
 }
 
-/// Reads the kernel's table of neighbours: flags 0 means no answer. A link-local address says nothing about the device.
-fn neighbours(table: &str) -> Vec<Seen> {
-    table
-        .lines()
-        .skip(1)
-        .filter_map(|line| {
-            let fields: Vec<&str> = line.split_whitespace().collect();
-            let (&address, &flags, &mac) = (fields.first()?, fields.get(2)?, fields.get(3)?);
-            (flags != "0x0").then(|| Seen {
-                mac: mac.to_ascii_lowercase(),
-                ip: address.parse::<Ipv4Addr>().ok().filter(|ip| !ip.is_link_local()),
-                hostname: String::new(),
-            })
-        })
-        .collect()
-}
-
-/// Adds the Wi-Fi clients; one without a DHCP lease, for example with a fixed address on the device, is seen too.
-fn add_wifi(observation: &mut Observation, clients: Vec<WifiClient>) {
-    for client in &clients {
-        if observation.seen.iter().all(|seen| seen.mac != client.mac) {
-            observation.seen.push(Seen {
-                mac: client.mac.clone(),
+/// Adds the Wi-Fi clients; one without a DHCP lease, for example with a fixed address on the device, is present too.
+fn add_wifi(observation: &mut Observation, clients: Vec<String>) {
+    for mac in clients {
+        if observation.present.iter().all(|present| present.mac != mac) {
+            observation.present.push(Present {
+                mac,
                 ip: None,
                 hostname: String::new(),
             });
         }
     }
-    observation.wifi = clients;
 }
 
 /// Parses a SHA-256 fingerprint: 64 hex digits, with or without colons.
