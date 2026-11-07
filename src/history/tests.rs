@@ -104,6 +104,7 @@ fn group_changes_are_listed() {
 fn plugin_changes_are_listed() {
     let parse = |text: &str| Settings {
         plugins: vec![toml::from_str(text).unwrap()],
+        ..Settings::default()
     };
     let before = parse("name = \"router\"\ntype = \"openwrt\"\nenabled = true\nurl = \"https://a\"\n");
     let after = parse("name = \"router\"\ntype = \"openwrt\"\nenabled = false\nurl = \"https://b\"\n");

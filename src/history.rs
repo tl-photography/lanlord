@@ -183,6 +183,13 @@ fn value_text(value: Option<&toml::Value>) -> String {
 #[must_use]
 pub fn plugins(before: &Settings, after: &Settings) -> Vec<String> {
     let mut texts = Vec::new();
+    if before.scan != after.scan {
+        texts.push(format!(
+            "Background scan changed: every {} minutes, restore {}",
+            after.scan.interval_minutes,
+            if after.scan.restore { "on" } else { "off" }
+        ));
+    }
     for table in &after.plugins {
         let name = table_name(table);
         let Some(old) = before.plugins.iter().find(|old| table_name(old) == name) else {

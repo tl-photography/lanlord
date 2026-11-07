@@ -130,6 +130,16 @@ with a self-signed certificate needs its SHA-256 fingerprint. `email` sends thro
 servers are checked against the usual certificate authorities, built into lanlord. Each notification plugin has a
 "Send test notification" button on the Plugins page.
 
+### Background scan
+
+Set on the Plugins page: every how many minutes lanlord scans on its own (0 is off, the default). The notification
+plugins then hear about new unknown devices, each once, and about changes made outside lanlord, for example a
+lease edited in LuCI: open changes on a target while the device list did not change since it last matched. Changes
+you make in lanlord are no such thing, they wait for Apply.
+
+With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
+and says so in the history and a notification. It is off by default.
+
 ### Login
 
 lanlord asks for one password. Its Argon2id hash is `password.hash` in the data directory; set it with

@@ -104,7 +104,10 @@ fn view(plugin: &dyn Plugin, result: Result<Option<Preview>, String>) -> TargetV
 }
 
 /// The plan of every target, each with a time limit, in the order of the plugins.
-async fn previews(active: &[Arc<dyn Plugin>], devices: &DeviceList) -> Vec<Result<Option<Preview>, String>> {
+pub(crate) async fn previews(
+    active: &[Arc<dyn Plugin>],
+    devices: &DeviceList,
+) -> Vec<Result<Option<Preview>, String>> {
     let mut tasks = tokio::task::JoinSet::new();
     for (index, plugin) in active.iter().cloned().enumerate() {
         let devices = devices.clone();
@@ -201,7 +204,11 @@ pub async fn list(State(state): State<AppState>) -> Response {
 }
 
 /// Applies the changes of one target, if they are still the ones shown; logs the result and returns it as text.
-async fn apply_target(state: &AppState, plugin: &dyn Plugin, digest: String) -> Result<String, String> {
+pub(crate) async fn apply_target(
+    state: &AppState,
+    plugin: &dyn Plugin,
+    digest: String,
+) -> Result<String, String> {
     let name = plugin.name();
     let devices = state.devices().map_err(|error| error.to_string())?;
     let history = &state.inner.history_path;

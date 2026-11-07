@@ -11,11 +11,11 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 
-use crate::compare::{self, Finding};
+use crate::compare::{self, Finding, Observation};
 use crate::devices::Error;
 use crate::history;
 use crate::notify::Notification;
-use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, Settings};
+use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, ScanSettings, Settings};
 use crate::{AppState, server_error};
 
 /// Longest time one plugin may take for a scan.
@@ -92,6 +92,9 @@ struct PluginsPage {
     can_import: bool,
     message: String,
     error: String,
+    scan: ScanSettings,
+    /// One line about the last background scan.
+    last_scan: String,
 }
 
 fn input(field: &Field) -> &'static str {
@@ -219,6 +222,13 @@ fn page_with_message(
         can_import: !state.groups().default_group.is_empty(),
         message,
         error: if error.is_empty() { file_problem } else { error },
+        scan: settings.scan,
+        last_scan: state
+            .inner
+            .watch
+            .lock()
+            .map(|watch| watch.last.clone())
+            .unwrap_or_default(),
     };
     match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
@@ -384,17 +394,10 @@ pub async fn test_notification(State(state): State<AppState>, Path(name): Path<S
     }
 }
 
-/// Scans every enabled plugin at the same time, each with a time limit, without changing anything.
-pub async fn scan(State(state): State<AppState>) -> Response {
-    let devices = match state.devices() {
-        Ok(devices) => devices,
-        Err(error) => return server_error(&error),
-    };
-    let groups = state.groups().groups;
-    let active: Vec<Arc<dyn Plugin>> = match state.inner.plugins.read() {
-        Ok(plugins) => plugins.clone(),
-        Err(_) => return server_error(&"plugin lock poisoned"),
-    };
+/// Asks every plugin at the same time, each with a time limit; the results are in the order of the plugins.
+pub(crate) async fn observe_all(
+    active: &[Arc<dyn Plugin>],
+) -> Vec<Result<Result<Observation, String>, tokio::time::error::Elapsed>> {
     let mut tasks = tokio::task::JoinSet::new();
     for (index, plugin) in active.iter().cloned().enumerate() {
         tasks.spawn(async move { (index, tokio::time::timeout(SCAN_TIMEOUT, plugin.observe()).await) });
@@ -406,8 +409,52 @@ pub async fn scan(State(state): State<AppState>) -> Response {
         }
     }
     results.sort_by_key(|(index, _)| *index);
-    let scan_results = results
+    results.into_iter().map(|(_, result)| result).collect()
+}
+
+/// Sets the interval and the restore option of the background scan.
+pub async fn background(
+    State(state): State<AppState>,
+    Form(form): Form<HashMap<String, String>>,
+) -> Response {
+    let Ok(interval_minutes) = form
+        .get("interval")
+        .map_or("0", String::as_str)
+        .trim()
+        .parse::<u32>()
+    else {
+        return page(
+            &state,
+            Vec::new(),
+            false,
+            "The interval must be a number of minutes".to_owned(),
+        );
+    };
+    let restore = form.get("restore").is_some_and(|value| value == "true");
+    change(&state, |settings| {
+        settings.scan = ScanSettings {
+            interval_minutes,
+            restore,
+        };
+        Ok(())
+    })
+}
+
+/// Scans every enabled plugin at the same time, each with a time limit, without changing anything.
+pub async fn scan(State(state): State<AppState>) -> Response {
+    let devices = match state.devices() {
+        Ok(devices) => devices,
+        Err(error) => return server_error(&error),
+    };
+    let groups = state.groups().groups;
+    let active: Vec<Arc<dyn Plugin>> = match state.inner.plugins.read() {
+        Ok(plugins) => plugins.clone(),
+        Err(_) => return server_error(&"plugin lock poisoned"),
+    };
+    let scan_results = observe_all(&active)
+        .await
         .into_iter()
+        .enumerate()
         .map(|(index, result)| {
             let plugin = &active[index];
             let title =

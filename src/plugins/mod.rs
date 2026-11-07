@@ -184,9 +184,24 @@ pub fn is_data_file(name: &str) -> bool {
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Settings {
+    /// The background scan.
+    #[serde(default)]
+    pub scan: ScanSettings,
     /// Configured plugin instances.
     #[serde(default, rename = "plugin")]
     pub plugins: Vec<toml::Table>,
+}
+
+/// Settings of the background scan.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct ScanSettings {
+    /// Minutes between scans; 0 switches the background scan off.
+    #[serde(default)]
+    pub interval_minutes: u32,
+    /// Whether changes made outside lanlord are undone automatically.
+    #[serde(default)]
+    pub restore: bool,
 }
 
 /// The plugins of `lanlord.toml`: the enabled ones that work, and a problem for every entry that could not be built.

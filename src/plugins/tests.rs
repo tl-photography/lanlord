@@ -52,6 +52,7 @@ fn settings_round_trip_with_private_permissions() {
             )
             .unwrap(),
         ],
+        ..Settings::default()
     };
 
     save_settings(&path, &settings).unwrap();
@@ -152,6 +153,7 @@ fn an_empty_address_is_taken_from_the_linked_device() {
 fn linked_plugins_are_listed_per_device() {
     let settings = Settings {
         plugins: vec![openwrt_table("", "ap"), openwrt_table("https://router.lan", "")],
+        ..Settings::default()
     };
     let links = linked_plugins(&settings);
     assert_eq!(links.len(), 1);

@@ -15,6 +15,7 @@ pub mod origin;
 mod plugin_ui;
 pub mod plugins;
 pub mod preview;
+pub mod watch;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -92,6 +93,8 @@ struct Inner {
     history_path: PathBuf,
     /// Number of changes the targets would make, and when it was counted.
     pending: Mutex<Option<(Instant, usize)>>,
+    /// What the background scan remembers.
+    watch: Mutex<watch::WatchState>,
 }
 
 impl AppState {
@@ -139,6 +142,7 @@ impl AppState {
                 sessions: auth::Sessions::default(),
                 history_path: data_dir.join("history.log"),
                 pending: Mutex::new(None),
+                watch: Mutex::default(),
             }),
         })
     }
@@ -208,6 +212,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/plugins", get(plugin_ui::list).post(plugin_ui::create))
         .route("/plugins/scan", axum::routing::post(plugin_ui::scan))
+        .route("/plugins/background", axum::routing::post(plugin_ui::background))
         .route("/plugins/{name}/enabled", axum::routing::post(plugin_ui::toggle))
         .route("/plugins/{name}/delete", axum::routing::post(plugin_ui::delete))
         .route(
