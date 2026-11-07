@@ -95,6 +95,7 @@ async fn main() -> ExitCode {
         }
     };
     let listen = listen_address();
+    lanlord::watch::spawn(state.clone());
     let listener = match tokio::net::TcpListener::bind(&listen).await {
         Ok(listener) => listener,
         Err(error) => {

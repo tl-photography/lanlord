@@ -11,6 +11,16 @@
 <form class="scan-plugins" method="post" action="/plugins/scan">
   <button type="submit">Scan enabled plugins</button>
 </form>
+<details class="plugin-config"{% if scan.interval_minutes > 0 %} open{% endif %}>
+  <summary>Background scan</summary>
+  <p>Scans on its own and tells the notification plugins about new unknown devices and about changes made outside lanlord. Changes you make in lanlord always wait for Apply.</p>
+  <form method="post" action="/plugins/background">
+    <label>Every how many minutes (0 = off) <input type="number" name="interval" min="0" max="1440" value="{{ scan.interval_minutes }}"></label>
+    <label class="switch"><input type="checkbox" name="restore" value="true"{% if scan.restore %} checked{% endif %}> Restore: undo changes made outside lanlord automatically</label>
+    <button type="submit">Save</button>
+  </form>
+  {% if !last_scan.is_empty() %}<p>Last scan: {{ last_scan }}</p>{% endif %}
+</details>
 {% if has_scanned %}
 <h2>Scan results</h2>
 {% if scan_results.is_empty() %}
