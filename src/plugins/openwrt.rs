@@ -20,7 +20,8 @@ use serde_json::{Value, json};
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Assigned, Observation, Present};
 use crate::devices::{DeviceList, Error, normalize_mac};
-use crate::leases::{self, Change, HostSection, NameSection, Network, Plan};
+use crate::leases::{self, Change, HostSection, LeasePlan, NameSection, Network};
+use crate::plan::Plan;
 use crate::preview::Preview;
 
 /// Static leases, DNS names and served networks of a device.
@@ -206,7 +207,7 @@ impl OpenWrt {
         ))
     }
 
-    async fn plan_in(&self, session: &str, devices: &DeviceList) -> Result<Option<Plan>, String> {
+    async fn plan_in(&self, session: &str, devices: &DeviceList) -> Result<Option<LeasePlan>, String> {
         let (hosts, names, networks) = self.lease_state(session).await?;
         Ok((!networks.is_empty()).then(|| {
             let mut plan = leases::plan(devices, &hosts, &networks);
@@ -371,12 +372,12 @@ impl Plugin for OpenWrt {
         true
     }
 
-    fn plan(&self, devices: DeviceList) -> BoxFuture<'_, Result<Option<Preview>, String>> {
-        Box::pin(self.preview(devices))
+    fn plan(&self, plan: Plan) -> BoxFuture<'_, Result<Option<Preview>, String>> {
+        Box::pin(self.preview(plan.devices))
     }
 
-    fn apply(&self, devices: DeviceList, digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
-        Box::pin(self.write(devices, digest))
+    fn apply(&self, plan: Plan, digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
+        Box::pin(self.write(plan.devices, digest))
     }
 }
 

@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
-use crate::devices::{Error, Interface, is_valid_name, normalize_mac};
+use crate::devices::{Error, Interface, normalize_mac};
 use crate::history;
 use crate::plugins;
 use crate::{AppState, server_error};
@@ -198,57 +198,6 @@ pub async fn update(
 #[derive(Debug, Deserialize)]
 pub struct MoveForm {
     group: String,
-}
-
-/// A discovered device to import into an empty list.
-#[derive(Debug, Deserialize)]
-pub struct DiscoveredForm {
-    name: String,
-    mac: String,
-}
-
-fn suggested_name(hostname: &str, mac: &str) -> String {
-    let mut name = String::new();
-    let mut separator = false;
-    for character in hostname.chars() {
-        if character.is_ascii_alphanumeric() {
-            if separator && !name.is_empty() {
-                name.push('-');
-            }
-            name.push(character.to_ascii_lowercase());
-            separator = false;
-        } else if !name.is_empty() {
-            separator = true;
-        }
-    }
-    if is_valid_name(&name) {
-        name
-    } else {
-        let suffix = mac.replace(':', "");
-        format!("device-{}", &suffix[suffix.len().saturating_sub(6)..])
-    }
-}
-
-/// Adds a device that a plugin reported as unknown, in the default group.
-pub async fn add_discovered(
-    State(state): State<AppState>,
-    Form(discovered): Form<DiscoveredForm>,
-) -> Response {
-    let group = state.groups().default_group;
-    if group.is_empty() {
-        return (StatusCode::CONFLICT, "Create a group before importing devices").into_response();
-    }
-    let Some(mac) = normalize_mac(&discovered.mac) else {
-        return (StatusCode::UNPROCESSABLE_ENTITY, "Invalid MAC address").into_response();
-    };
-    let form = DeviceForm {
-        name: suggested_name(&discovered.name, &mac),
-        mac,
-        group,
-        unreviewed: true,
-        ..DeviceForm::default()
-    };
-    save(&state, None, form)
 }
 
 /// Moves a device to another group, keeps everything else.

@@ -26,15 +26,6 @@
     <ul>{% for finding in result.findings %}<li>{{ finding }}</li>{% endfor %}</ul>
     {% endif %}
     {% for note in result.notes %}<p class="notice">{{ note }}</p>{% endfor %}
-    {% if can_import %}
-    {% for device in result.discoveries %}
-    <form method="post" action="/devices/discovered" class="inline">
-      <input type="hidden" name="name" value="{{ device.name }}">
-      <input type="hidden" name="mac" value="{{ device.mac }}">
-      <button type="submit">Add {% if device.name.is_empty() %}{{ device.mac }}{% else %}{{ device.name }}{% endif %}</button>
-    </form>
-    {% endfor %}
-    {% endif %}
   </section>
   {% endfor %}
 </div>

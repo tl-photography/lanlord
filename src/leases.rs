@@ -121,14 +121,14 @@ impl Change {
 
 /// The changes for one router and what is left as it is.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Plan {
+pub struct LeasePlan {
     /// Changes, in the order they are made.
     pub changes: Vec<Change>,
     /// Devices that are left as they are, and why.
     pub notes: Vec<String>,
 }
 
-impl Plan {
+impl LeasePlan {
     /// The plan as steps for the apply page.
     #[must_use]
     pub fn preview(&self) -> Preview {
@@ -145,7 +145,7 @@ impl Plan {
         }
     }
 
-    /// The digest of [`Plan::preview`].
+    /// The digest of [`LeasePlan::preview`].
     #[must_use]
     pub fn digest(&self) -> String {
         self.preview().digest()
@@ -230,8 +230,8 @@ fn update(device: &str, own: &HostSection, wanted: Vec<(String, String)>) -> Opt
 /// Plans the static leases: devices with an address in a served network get a `lanlord_` section, sections of
 /// devices without an address or of removed devices go away.
 #[must_use]
-pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> Plan {
-    let mut plan = Plan::default();
+pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> LeasePlan {
+    let mut plan = LeasePlan::default();
     let mut kept_own: Vec<String> = Vec::new();
     let mut deleted: Vec<&str> = Vec::new();
 
@@ -322,7 +322,7 @@ pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> P
 }
 
 /// Adds the DNS names of devices that set their address themselves: they have no lease that would give them one.
-pub fn plan_names(list: &DeviceList, names: &[NameSection], networks: &[Network], plan: &mut Plan) {
+pub fn plan_names(list: &DeviceList, names: &[NameSection], networks: &[Network], plan: &mut LeasePlan) {
     let mut wanted: Vec<String> = Vec::new();
     for device in list.interfaces.iter().filter(|device| device.self_assigned) {
         let Some(ip) = device.ip else { continue };

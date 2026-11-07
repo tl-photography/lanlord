@@ -20,8 +20,9 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::compare::Observation;
-use crate::devices::{DeviceList, Error, is_valid_name};
+use crate::devices::{Error, is_valid_name};
 use crate::notify::Notification;
+use crate::plan::Plan;
 use crate::preview::Preview;
 
 /// A future that a plugin returns; boxed, so plugins can be stored as trait objects.
@@ -39,8 +40,8 @@ pub trait Plugin: Send + Sync {
     fn is_target(&self) -> bool {
         false
     }
-    /// The changes a target would make for this device list; `None` if it has nothing to manage.
-    fn plan(&self, _devices: DeviceList) -> BoxFuture<'_, Result<Option<Preview>, String>> {
+    /// The changes a target would make for this plan; `None` if it has nothing to manage.
+    fn plan(&self, _plan: Plan) -> BoxFuture<'_, Result<Option<Preview>, String>> {
         Box::pin(async { Ok(None) })
     }
     /// Whether the plugin sends notifications.
@@ -52,7 +53,7 @@ pub trait Plugin: Send + Sync {
         Box::pin(async { Err("this plugin does not send notifications".to_owned()) })
     }
     /// Makes the changes, if they are still the ones with this digest; returns what was changed.
-    fn apply(&self, _devices: DeviceList, _digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
+    fn apply(&self, _plan: Plan, _digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
         Box::pin(async { Err("this plugin does not change anything".to_owned()) })
     }
 }
@@ -198,15 +199,28 @@ pub struct Settings {
 }
 
 /// Settings of the background scan.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScanSettings {
     /// Minutes between scans; 0 switches the background scan off.
-    #[serde(default)]
+    #[serde(default = "default_interval")]
     pub interval_minutes: u32,
     /// Whether changes made outside lanlord are undone automatically.
     #[serde(default)]
     pub restore: bool,
+}
+
+const fn default_interval() -> u32 {
+    10
+}
+
+impl Default for ScanSettings {
+    fn default() -> Self {
+        Self {
+            interval_minutes: default_interval(),
+            restore: false,
+        }
+    }
 }
 
 /// What the device overview shows.

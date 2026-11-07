@@ -175,7 +175,7 @@ fn texts(received: &Mutex<Vec<Value>>) -> Vec<String> {
 }
 
 #[tokio::test]
-async fn unknown_devices_and_outside_changes_are_notified_once() {
+async fn new_devices_and_outside_changes_are_notified_once() {
     let (data, uci, received) = setup().await;
     let state = lanlord::AppState::load_without_login(data.path()).unwrap();
     let app = lanlord::app(state.clone());
@@ -186,13 +186,15 @@ async fn unknown_devices_and_outside_changes_are_notified_once() {
         1,
         "open changes before the first apply are no drift"
     );
+    assert!(texts(&received)[0].contains("New device stranger (aa:bb:cc:00:00:99) added to lan"));
+    let list = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
     assert!(
-        texts(&received)[0]
-            .contains("Unknown device stranger (aa:bb:cc:00:00:99, 192.0.2.99), seen by router")
+        list.contains("name = \"stranger\"\nmac = \"aa:bb:cc:00:00:99\"\ngroup = \"lan\"\nunreviewed = true"),
+        "{list}"
     );
 
     lanlord::watch::run_once(&state).await;
-    assert_eq!(texts(&received).len(), 1, "the same device is not reported again");
+    assert_eq!(texts(&received).len(), 1, "the device is in the list now");
     let again = lanlord::AppState::load_without_login(data.path()).unwrap();
     lanlord::watch::run_once(&again).await;
     assert_eq!(texts(&received).len(), 1, "not after a restart either");
@@ -230,7 +232,7 @@ async fn changes_in_the_list_wait_for_apply() {
     let app = lanlord::app(state.clone());
     apply(&app).await;
     lanlord::watch::run_once(&state).await;
-    assert_eq!(texts(&received).len(), 1, "only the unknown device");
+    assert_eq!(texts(&received).len(), 1, "only the new device");
 
     let change = "name=OMV&mac=00:00:00:00:00:01&group=lan&ip=192.0.2.3&note=";
     assert_eq!(
@@ -283,4 +285,54 @@ async fn restore_undoes_outside_changes() {
         history.contains("Background scan changed: every 5 minutes, restore on"),
         "{history}"
     );
+}
+
+#[tokio::test]
+async fn guests_not_seen_for_30_days_are_removed() {
+    let (data, _uci, received) = setup().await;
+    let state = lanlord::AppState::load_without_login(data.path()).unwrap();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let old = now - 31 * 86_400;
+    std::fs::write(
+        data.path().join("last-seen"),
+        format!("00:00:00:00:00:01 {old}\n"),
+    )
+    .unwrap();
+    lanlord::watch::run_once(&state).await;
+    let list = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
+    assert!(!list.contains("OMV"), "{list}");
+    assert!(
+        texts(&received)
+            .iter()
+            .any(|text| text.contains("OMV removed from lan: not seen for 30 days")),
+        "{:?}",
+        texts(&received)
+    );
+    let seen = std::fs::read_to_string(data.path().join("last-seen")).unwrap();
+    assert!(
+        seen.starts_with("aa:bb:cc:00:00:99 "),
+        "only guests are kept: {seen}"
+    );
+}
+
+#[tokio::test]
+async fn a_failed_plugin_removes_nobody() {
+    let (data, _uci, _received) = setup().await;
+    let path = data.path().join("lanlord.toml");
+    let settings = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        format!(
+            "{settings}\n[[plugin]]\ntype = \"leases-file\"\nname = \"broken\"\npath = \"missing.leases\"\n"
+        ),
+    )
+    .unwrap();
+    let state = lanlord::AppState::load_without_login(data.path()).unwrap();
+    std::fs::write(data.path().join("last-seen"), "00:00:00:00:00:01 1\n").unwrap();
+    lanlord::watch::run_once(&state).await;
+    let list = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
+    assert!(list.contains("OMV"), "{list}");
 }

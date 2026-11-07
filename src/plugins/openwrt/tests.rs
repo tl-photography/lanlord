@@ -376,20 +376,26 @@ async fn applies_static_leases_and_confirms_after_reading_them_back() {
     let router = plugin(&url, data.path(), "secret", 0o600);
     assert!(router.is_target());
 
-    let plan = router.plan(devices()).await.unwrap().unwrap();
+    let plan = router.plan(devices().into()).await.unwrap().unwrap();
     assert_eq!(plan.steps.len(), 2, "take over cfg01 as lanlord_omv");
     assert!(plan.notes[0].starts_with("plug waits"));
 
-    assert_eq!(router.apply(devices(), plan.digest()).await.unwrap().len(), 2);
+    assert_eq!(
+        router.apply(devices().into(), plan.digest()).await.unwrap().len(),
+        2
+    );
     {
         let fake = fake.lock().unwrap();
         assert_eq!(fake.calls, ["delete", "add", "apply", "confirm"]);
         assert!(fake.committed.contains_key("lanlord_omv"));
         assert!(!fake.committed.contains_key("cfg01"));
     }
-    assert_eq!(router.plan(devices()).await.unwrap().unwrap().steps, []);
+    assert_eq!(router.plan(devices().into()).await.unwrap().unwrap().steps, []);
     assert_eq!(
-        router.apply(devices(), Plan::default().digest()).await.unwrap(),
+        router
+            .apply(devices().into(), LeasePlan::default().digest())
+            .await
+            .unwrap(),
         Vec::<String>::new()
     );
 }
@@ -399,7 +405,10 @@ async fn changes_that_differ_from_the_preview_are_not_applied() {
     let data = tempfile::tempdir().unwrap();
     let (url, fake) = fake_target(router_with_omv()).await;
     let router = plugin(&url, data.path(), "secret", 0o600);
-    let error = router.apply(devices(), "stale".to_owned()).await.unwrap_err();
+    let error = router
+        .apply(devices().into(), "stale".to_owned())
+        .await
+        .unwrap_err();
     assert!(error.contains("changed since the preview"), "{error}");
     assert_eq!(fake.lock().unwrap().calls, Vec::<String>::new());
 }
@@ -413,8 +422,8 @@ async fn changes_the_router_does_not_show_are_rolled_back() {
     })
     .await;
     let router = plugin(&url, data.path(), "secret", 0o600);
-    let digest = router.plan(devices()).await.unwrap().unwrap().digest();
-    let error = router.apply(devices(), digest).await.unwrap_err();
+    let digest = router.plan(devices().into()).await.unwrap().unwrap().digest();
+    let error = router.apply(devices().into(), digest).await.unwrap_err();
     assert!(error.contains("rolled back"), "{error}");
     assert_eq!(fake.lock().unwrap().calls, ["delete", "add", "apply", "rollback"]);
 }
@@ -428,8 +437,8 @@ async fn a_refused_change_discards_the_staged_ones() {
     })
     .await;
     let router = plugin(&url, data.path(), "secret", 0o600);
-    let digest = router.plan(devices()).await.unwrap().unwrap().digest();
-    let error = router.apply(devices(), digest).await.unwrap_err();
+    let digest = router.plan(devices().into()).await.unwrap().unwrap().digest();
+    let error = router.apply(devices().into(), digest).await.unwrap_err();
     assert!(error.contains("rpcd ACL"), "{error}");
     assert_eq!(fake.lock().unwrap().calls, ["delete", "revert"]);
 }
@@ -439,8 +448,11 @@ async fn an_access_point_without_dhcp_has_nothing_to_apply() {
     let data = tempfile::tempdir().unwrap();
     let (url, _) = fake_target(FakeUci::default()).await;
     let access_point = plugin(&url, data.path(), "secret", 0o600);
-    assert_eq!(access_point.plan(devices()).await.unwrap(), None);
-    let error = access_point.apply(devices(), String::new()).await.unwrap_err();
+    assert_eq!(access_point.plan(devices().into()).await.unwrap(), None);
+    let error = access_point
+        .apply(devices().into(), String::new())
+        .await
+        .unwrap_err();
     assert!(error.contains("serves no DHCP"), "{error}");
 }
 

@@ -11,8 +11,8 @@ use axum::extract::{Path, State};
 use axum::http::{StatusCode, header};
 use axum::response::{Html, IntoResponse, Response};
 
-use crate::devices::DeviceList;
 use crate::history;
+use crate::plan::Plan;
 use crate::plugins::{self, Plugin};
 use crate::preview::Preview;
 use crate::{AppState, server_error};
@@ -106,15 +106,15 @@ fn view(plugin: &dyn Plugin, result: Result<Option<Preview>, String>) -> TargetV
 /// The plan of every target, each with a time limit, in the order of the plugins.
 pub(crate) async fn previews(
     active: &[Arc<dyn Plugin>],
-    devices: &DeviceList,
+    plan: &Plan,
 ) -> Vec<Result<Option<Preview>, String>> {
     let mut tasks = tokio::task::JoinSet::new();
     for (index, plugin) in active.iter().cloned().enumerate() {
-        let devices = devices.clone();
+        let plan = plan.clone();
         tasks.spawn(async move {
             (
                 index,
-                tokio::time::timeout(PREVIEW_TIMEOUT, plugin.plan(devices)).await,
+                tokio::time::timeout(PREVIEW_TIMEOUT, plugin.plan(plan)).await,
             )
         });
     }
@@ -134,14 +134,14 @@ pub(crate) async fn previews(
 }
 
 async fn page(state: &AppState, message: String, error: String) -> Response {
-    let devices = match state.devices() {
+    let plan = match state.plan() {
         Ok(devices) => devices,
         Err(error) => return server_error(&error),
     };
     let Some(active) = targets(state) else {
         return server_error(&"plugin lock poisoned");
     };
-    let results = previews(&active, &devices).await;
+    let results = previews(&active, &plan).await;
     state.remember_pending(count_changes(&results));
     let targets = active
         .iter()
@@ -178,14 +178,14 @@ pub async fn count(State(state): State<AppState>) -> Response {
     if let Some(changes) = state.pending() {
         return count_json(changes);
     }
-    let devices = match state.devices() {
+    let plan = match state.plan() {
         Ok(devices) => devices,
         Err(error) => return server_error(&error),
     };
     let Some(active) = targets(&state) else {
         return server_error(&"plugin lock poisoned");
     };
-    let changes = count_changes(&previews(&active, &devices).await);
+    let changes = count_changes(&previews(&active, &plan).await);
     state.remember_pending(changes);
     count_json(changes)
 }
@@ -210,10 +210,10 @@ pub(crate) async fn apply_target(
     digest: String,
 ) -> Result<String, String> {
     let name = plugin.name();
-    let devices = state.devices().map_err(|error| error.to_string())?;
+    let plan = state.plan().map_err(|error| error.to_string())?;
     let history = &state.inner.history_path;
     state.forget_pending();
-    match tokio::time::timeout(APPLY_TIMEOUT, plugin.apply(devices, digest)).await {
+    match tokio::time::timeout(APPLY_TIMEOUT, plugin.apply(plan, digest)).await {
         Ok(Ok(applied)) if applied.is_empty() => Ok(format!("{name}: nothing to apply")),
         Ok(Ok(applied)) => {
             let count = applied.len();

@@ -13,10 +13,11 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 
 use crate::compare::{self, Finding, Observation};
 use crate::devices::Error;
+use crate::guests::{self, now};
 use crate::history;
 use crate::notify::Notification;
 use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, Settings};
-use crate::{AppState, server_error};
+use crate::{AppState, server_error, watch};
 
 /// The answer of one plugin to a scan.
 pub(crate) type ObserveResult = Result<Result<Observation, String>, tokio::time::error::Elapsed>;
@@ -69,13 +70,7 @@ struct ScanRow {
     status: String,
     error: String,
     findings: Vec<String>,
-    discoveries: Vec<Discovery>,
     notes: Vec<String>,
-}
-
-struct Discovery {
-    name: String,
-    mac: String,
 }
 
 #[derive(Template)]
@@ -86,7 +81,6 @@ struct PluginsPage {
     types: Vec<TypeView>,
     scan_results: Vec<ScanRow>,
     has_scanned: bool,
-    can_import: bool,
     message: String,
     error: String,
 }
@@ -215,7 +209,6 @@ fn page_with_message(
         types,
         scan_results,
         has_scanned,
-        can_import: !state.groups().default_group.is_empty(),
         message,
         error: if error.is_empty() { file_problem } else { error },
     };
@@ -403,18 +396,29 @@ pub(crate) async fn observe_all(active: &[Arc<dyn Plugin>]) -> Vec<ObserveResult
     results.into_iter().map(|(_, result)| result).collect()
 }
 
-/// Scans every enabled plugin at the same time, each with a time limit, without changing anything.
+/// Scans every enabled plugin at the same time, each with a time limit. Adds new devices and removes old guests, like
+/// the background scan; changes nothing in the network.
 pub async fn scan(State(state): State<AppState>) -> Response {
-    let devices = match state.devices() {
-        Ok(devices) => devices,
-        Err(error) => return server_error(&error),
-    };
-    let groups = state.groups().groups;
     let active: Vec<Arc<dyn Plugin>> = match state.inner.plugins.read() {
         Ok(plugins) => plugins.clone(),
         Err(_) => return server_error(&"plugin lock poisoned"),
     };
     let results = observe_all(&active).await;
+    let complete = results.iter().all(|result| matches!(result, Ok(Ok(_))));
+    let observations: Vec<&Observation> = results
+        .iter()
+        .filter_map(|result| match result {
+            Ok(Ok(observation)) => Some(observation),
+            _ => None,
+        })
+        .collect();
+    let found = guests::take_in(&state, &observations, complete, now());
+    watch::send(&state, &active, "lanlord: devices", &found).await;
+    let devices = match state.devices() {
+        Ok(devices) => devices,
+        Err(error) => return server_error(&error),
+    };
+    let groups = state.groups().groups;
     let scan_results = results
         .into_iter()
         .enumerate()
@@ -434,16 +438,6 @@ pub async fn scan(State(state): State<AppState>) -> Response {
                 }
             };
             let findings = compare::compare(&devices, &groups, &observation);
-            let discoveries = findings
-                .iter()
-                .filter_map(|finding| match finding {
-                    Finding::Unknown { mac, hostname, .. } => Some(Discovery {
-                        name: hostname.clone(),
-                        mac: mac.clone(),
-                    }),
-                    _ => None,
-                })
-                .collect();
             ScanRow {
                 name: plugin.name().to_owned(),
                 title,
@@ -455,11 +449,10 @@ pub async fn scan(State(state): State<AppState>) -> Response {
                 },
                 error: String::new(),
                 findings: findings.iter().map(finding_text).collect(),
-                discoveries,
             }
         })
         .collect();
-    page(&state, scan_results, true, String::new())
+    page_with_message(&state, scan_results, true, found.join(". "), String::new())
 }
 
 fn failed(name: &str, title: &'static str, error: String) -> ScanRow {
@@ -469,7 +462,6 @@ fn failed(name: &str, title: &'static str, error: String) -> ScanRow {
         status: "Scan failed".to_owned(),
         error,
         findings: Vec::new(),
-        discoveries: Vec::new(),
         notes: Vec::new(),
     }
 }

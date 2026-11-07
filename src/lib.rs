@@ -7,12 +7,14 @@ pub mod config;
 pub mod devices;
 mod edit;
 mod groups;
+mod guests;
 pub mod history;
 mod history_ui;
 pub mod leases;
 mod machines;
 pub mod notify;
 pub mod origin;
+pub mod plan;
 mod plugin_ui;
 pub mod plugins;
 pub mod preview;
@@ -194,6 +196,14 @@ impl AppState {
         }
     }
 
+    /// The plan for the targets: devices and groups.
+    pub(crate) fn plan(&self) -> Result<plan::Plan, Error> {
+        Ok(plan::Plan {
+            devices: self.devices()?,
+            groups: self.groups().groups,
+        })
+    }
+
     fn devices(&self) -> Result<DeviceList, Error> {
         DeviceList::load(&self.inner.devices_path, &self.groups().group_names())
     }
@@ -204,7 +214,6 @@ pub fn app(state: AppState) -> Router {
     let mut router = Router::new()
         .route("/", get(index))
         .route("/devices", axum::routing::post(edit::create))
-        .route("/devices/discovered", axum::routing::post(edit::add_discovered))
         .route("/devices/new", get(edit::new_form))
         .route("/devices/{name}", get(edit::edit_form).post(edit::update))
         .route("/devices/{name}/move", axum::routing::post(edit::move_device))
