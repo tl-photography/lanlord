@@ -23,15 +23,11 @@ pub struct GroupForm {
     label: String,
 }
 
-/// Field of the form that sets a subnet.
+/// Fields of the form for the network of a group: its subnet and its own Wi-Fi.
 #[derive(Debug, Deserialize)]
-pub struct SubnetForm {
+pub struct NetworkForm {
+    #[serde(default)]
     subnet: String,
-}
-
-/// Fields of the form for the Wi-Fi of a group.
-#[derive(Debug, Deserialize)]
-pub struct WifiForm {
     #[serde(default)]
     ssid: String,
     #[serde(default)]
@@ -193,11 +189,11 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<GroupForm>) 
     })
 }
 
-/// Sets or clears the subnet of a group.
-pub async fn set_subnet(
+/// Sets the subnet of a group and its own Wi-Fi, all from one form.
+pub async fn set_network(
     State(state): State<AppState>,
     Path(name): Path<String>,
-    Form(form): Form<SubnetForm>,
+    Form(form): Form<NetworkForm>,
 ) -> Response {
     change(&state, GroupForm::default(), |config, _| {
         let group = config
@@ -206,22 +202,6 @@ pub async fn set_subnet(
             .find(|group| group.name == name)
             .ok_or_else(|| format!("No such group: {name}"))?;
         form.subnet.trim().clone_into(&mut group.subnet);
-        Ok(())
-    })
-}
-
-/// Sets or clears the SSID of a group and the file with its password.
-pub async fn set_wifi(
-    State(state): State<AppState>,
-    Path(name): Path<String>,
-    Form(form): Form<WifiForm>,
-) -> Response {
-    change(&state, GroupForm::default(), |config, _| {
-        let group = config
-            .groups
-            .iter_mut()
-            .find(|group| group.name == name)
-            .ok_or_else(|| format!("No such group: {name}"))?;
         form.ssid.trim().clone_into(&mut group.ssid);
         let file = if group.ssid.is_empty() {
             ""

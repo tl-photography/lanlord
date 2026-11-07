@@ -163,7 +163,7 @@ async fn a_group_gets_its_own_wifi_with_a_password_file() {
     let data = setup().await;
     let form = "ssid=Home+IoT&password_file=iot.wifi";
     assert_eq!(
-        post(&data, "/groups/guest/wifi", form).await.0,
+        post(&data, "/groups/guest/network", form).await.0,
         StatusCode::SEE_OTHER
     );
     let file = groups_file(&data);
@@ -174,7 +174,7 @@ async fn a_group_gets_its_own_wifi_with_a_password_file() {
 
     let (status, page) = post(
         &data,
-        "/groups/guest/wifi",
+        "/groups/guest/network",
         "ssid=Home+IoT&password_file=..%2Fsecret",
     )
     .await;
@@ -186,17 +186,44 @@ async fn a_group_gets_its_own_wifi_with_a_password_file() {
     let long = "x".repeat(33);
     let (status, _) = post(
         &data,
-        "/groups/guest/wifi",
+        "/groups/guest/network",
         &format!("ssid={long}&password_file=iot.wifi"),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 
     assert_eq!(
-        post(&data, "/groups/guest/wifi", "ssid=&password_file=iot.wifi")
+        post(&data, "/groups/guest/network", "ssid=&password_file=iot.wifi")
             .await
             .0,
         StatusCode::SEE_OTHER
     );
     assert!(!groups_file(&data).contains("ssid"), "{}", groups_file(&data));
+}
+
+#[tokio::test]
+async fn one_save_keeps_the_subnet_and_the_wifi_of_a_group() {
+    let data = setup().await;
+    let form = "subnet=192.0.2.0%2F24&ssid=Things&password_file=iot.wifi";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let file = groups_file(&data);
+    assert!(file.contains("subnet = \"192.0.2.0/24\""), "{file}");
+    assert!(file.contains("ssid = \"Things\""), "{file}");
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(
+        log.contains("Group guest changed: subnet none → 192.0.2.0/24, SSID none → Things, password file none → iot.wifi"),
+        "{log}"
+    );
+    let request = Request::get("/groups").body(Body::empty()).unwrap();
+    let response = app(&data).oneshot(request).await.unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let page = String::from_utf8(body.to_vec()).unwrap();
+    assert_eq!(
+        page.matches(r#"form="network-guest""#).count(),
+        3,
+        "every field of the row is in its form: {page}"
+    );
 }

@@ -221,12 +221,12 @@ async fn an_address_outside_the_subnet_gets_a_warning() {
     let (_, page) = send(&app, get("/")).await;
     assert!(!page.contains("note warning"), "{page}");
 
-    let inside = send(&app, post("/groups/lan/subnet", "subnet=192.0.2.0%2F24")).await;
+    let inside = send(&app, post("/groups/lan/network", "subnet=192.0.2.0%2F24")).await;
     assert_eq!(inside.0, StatusCode::SEE_OTHER);
     let (_, page) = send(&app, get("/")).await;
     assert!(!page.contains("note warning"), "{page}");
 
-    let outside = send(&app, post("/groups/lan/subnet", "subnet=198.51.100.0%2F24")).await;
+    let outside = send(&app, post("/groups/lan/network", "subnet=198.51.100.0%2F24")).await;
     assert_eq!(outside.0, StatusCode::SEE_OTHER);
     let (_, page) = send(&app, get("/")).await;
     assert!(
@@ -238,10 +238,10 @@ async fn an_address_outside_the_subnet_gets_a_warning() {
     let (_, page) = send(&app, get("/devices/lamp")).await;
     assert!(!page.contains("is outside LAN"), "no fixed address: {page}");
 
-    let (status, page) = send(&app, post("/groups/lan/subnet", "subnet=nonsense")).await;
+    let (status, page) = send(&app, post("/groups/lan/network", "subnet=nonsense")).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(page.contains("the subnet must look like"), "{page}");
-    let (status, page) = send(&app, post("/groups/none/subnet", "subnet=")).await;
+    let (status, page) = send(&app, post("/groups/none/network", "subnet=")).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(page.contains("No such group"), "{page}");
 
@@ -254,7 +254,7 @@ async fn subnets_of_two_groups_cannot_overlap() {
     let data = data();
     let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
     let form = "name=iot&vlan=20&subnet=192.0.2.128%2F25";
-    send(&app, post("/groups/lan/subnet", "subnet=192.0.2.0%2F24")).await;
+    send(&app, post("/groups/lan/network", "subnet=192.0.2.0%2F24")).await;
     let (status, page) = send(&app, post("/groups", form)).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(page.contains("overlap"), "{page}");

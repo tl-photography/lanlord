@@ -17,20 +17,17 @@
       <td data-label="ID"><code>{{ group.name }}</code></td>
       <td data-label="VLAN">{{ group.vlan }}</td>
       <td data-label="Subnet">
-        <form method="post" action="/groups/{{ group.name }}/subnet" class="row">
-          <input name="subnet" value="{{ group.subnet }}" aria-label="Subnet of {{ group.title }}" placeholder="192.168.1.0/24" autocapitalize="off" spellcheck="false">
-          <button type="submit" class="secondary" aria-label="Save the subnet of {{ group.title }}">Save</button>
-        </form>
+        <input form="network-{{ group.name }}" name="subnet" value="{{ group.subnet }}" aria-label="Subnet of {{ group.title }}" placeholder="192.168.1.0/24" autocapitalize="off" spellcheck="false">
       </td>
       <td data-label="Own Wi-Fi">
-        <form method="post" action="/groups/{{ group.name }}/wifi" class="row">
-          <input name="ssid" value="{{ group.ssid }}" maxlength="32" aria-label="SSID of {{ group.title }}" placeholder="optional SSID" spellcheck="false">
-          <input name="password_file" value="{{ group.password_file }}" aria-label="Password file of {{ group.title }}" placeholder="iot.wifi" autocapitalize="off" spellcheck="false">
-          <button type="submit" class="secondary" aria-label="Save the Wi-Fi of {{ group.title }}">Save</button>
-        </form>
+        <span class="row">
+          <input form="network-{{ group.name }}" name="ssid" value="{{ group.ssid }}" maxlength="32" aria-label="SSID of {{ group.title }}" placeholder="optional SSID" spellcheck="false">
+          <input form="network-{{ group.name }}" name="password_file" value="{{ group.password_file }}" aria-label="Password file of {{ group.title }}" placeholder="iot.wifi" autocapitalize="off" spellcheck="false">
+        </span>
       </td>
       <td data-label="Devices">{{ group.devices }}</td>
       <td>
+        <form method="post" action="/groups/{{ group.name }}/network" id="network-{{ group.name }}" class="inline"><button type="submit" class="secondary" aria-label="Save {{ group.title }}">Save</button></form>
         {% if group.devices == 0 %}
         <form method="post" action="/groups/{{ group.name }}/delete" class="inline" data-confirm="Delete group {{ group.title }}?"><button type="submit" class="danger">Delete</button></form>
         {% endif %}

@@ -150,32 +150,27 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
     for group in &after.groups {
         match before.groups.iter().find(|old| old.name == group.name) {
             None => texts.push(format!("Group {} added: VLAN {}", group.name, group.vlan)),
-            Some(old) if old.subnet != group.subnet && old.vlan == group.vlan && old.label == group.label => {
-                texts.push(format!(
-                    "Group {} changed: subnet {} → {}",
-                    group.name,
-                    optional(&old.subnet),
-                    optional(&group.subnet)
-                ));
+            Some(old) if old != group => {
+                let mut changes = Vec::new();
+                if old.vlan != group.vlan {
+                    changes.push(format!("VLAN {} → {}", old.vlan, group.vlan));
+                }
+                for (what, before, after) in [
+                    ("label", &old.label, &group.label),
+                    ("subnet", &old.subnet, &group.subnet),
+                    ("SSID", &old.ssid, &group.ssid),
+                    (
+                        "password file",
+                        &old.ssid_password_file,
+                        &group.ssid_password_file,
+                    ),
+                ] {
+                    if before != after {
+                        changes.push(format!("{what} {} → {}", optional(before), optional(after)));
+                    }
+                }
+                texts.push(format!("Group {} changed: {}", group.name, changes.join(", ")));
             }
-            Some(old) if old.ssid != group.ssid || old.ssid_password_file != group.ssid_password_file => {
-                texts.push(format!(
-                    "Group {} changed: SSID {} → {}, password file {} → {}",
-                    group.name,
-                    optional(&old.ssid),
-                    optional(&group.ssid),
-                    optional(&old.ssid_password_file),
-                    optional(&group.ssid_password_file)
-                ));
-            }
-            Some(old) if old != group => texts.push(format!(
-                "Group {} changed: VLAN {} → {}, label {} → {}",
-                group.name,
-                old.vlan,
-                group.vlan,
-                optional(&old.label),
-                optional(&group.label)
-            )),
             Some(_) => {}
         }
     }

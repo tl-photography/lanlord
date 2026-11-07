@@ -102,7 +102,7 @@ fn group_changes_are_listed() {
     assert_eq!(
         groups(&before, &after),
         [
-            "Group lan changed: VLAN 1 → 1, label none → LAN",
+            "Group lan changed: label none → LAN",
             "Group guest added: VLAN 30",
             "DNS service router → PiHole",
             "Default group lan → guest",
