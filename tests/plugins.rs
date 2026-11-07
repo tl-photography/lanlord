@@ -370,3 +370,43 @@ fn an_older_entry_without_a_switch_still_loads() {
     assert_eq!(loaded.all_problems(), Vec::<String>::new());
     assert_eq!(loaded.plugins.len(), 1);
 }
+
+#[tokio::test]
+async fn plugins_can_be_renamed() {
+    let data = tempfile::tempdir().unwrap();
+    assert_eq!(
+        post(&data, "/plugins", "type=leases-file&name=one&path=a.leases")
+            .await
+            .status(),
+        StatusCode::SEE_OTHER
+    );
+    assert_eq!(
+        post(&data, "/plugins", "type=leases-file&name=two&path=b.leases")
+            .await
+            .status(),
+        StatusCode::SEE_OTHER
+    );
+    let (_, page) = get(&data, "/plugins").await;
+    assert!(page.contains(r#"name="new_name" value="one""#), "{page}");
+
+    let response = post(&data, "/plugins/one", "path=a.leases&new_name=first").await;
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let settings = lanlord::plugins::read_settings(&data.path().join("lanlord.toml")).unwrap();
+    assert_eq!(settings.plugins[0]["name"].as_str(), Some("first"));
+    let (_, history) = get(&data, "/history").await;
+    assert!(history.contains("Plugin one renamed to first"), "{history}");
+    assert!(!history.contains("Plugin one deleted"));
+
+    let response = post(&data, "/plugins/first", "path=a.leases&new_name=two").await;
+    assert_eq!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "the name is taken"
+    );
+    let response = post(&data, "/plugins/first", "path=a.leases&new_name=a%20b").await;
+    assert_eq!(
+        response.status(),
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid name"
+    );
+}
