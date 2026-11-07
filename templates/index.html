@@ -26,7 +26,7 @@
             <ul class="connections">
               {% for row in card.rows %}
               <li><a href="/devices/{{ row.name }}">{{ row.name }}</a>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
-                <span class="meta">{% if !row.ip.is_empty() %}{{ row.ip }} · {% endif %}<code>{{ row.mac }}</code></span></li>
+                {% include "device_meta.html" %}</li>
               {% endfor %}
             </ul>
           </span>
@@ -37,7 +37,7 @@
           <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
           <span class="text">
             <strong>{{ row.name }}</strong>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
-            <span class="meta">{% if !row.ip.is_empty() %}{{ row.ip }} · {% endif %}<code>{{ row.mac }}</code></span>
+            {% include "device_meta.html" %}
             {% if !row.note.is_empty() %}<span class="note">{{ row.note }}</span>{% endif %}
           </span>
         </a>
