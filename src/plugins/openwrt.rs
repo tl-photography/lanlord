@@ -23,6 +23,9 @@ use crate::devices::{DeviceList, Error, normalize_mac};
 use crate::leases::{self, Change, HostSection, Network, Plan};
 use crate::preview::Preview;
 
+/// The kernel's table of IPv4 neighbours on the device.
+const NEIGHBOURS: &str = "/proc/net/arp";
+
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 /// Largest answer that is read.
@@ -163,6 +166,16 @@ impl OpenWrt {
             // No Wi-Fi hardware, no iwinfo.
             Err(error) if error.ends_with("not found") => {}
             Err(error) => observation.notes.push(format!("Wi-Fi clients not read: {error}")),
+        }
+        let arguments = json!({ "path": NEIGHBOURS });
+        match self.call(&session, "file", "read", &arguments).await {
+            Ok(table) => {
+                let text = table.get("data").and_then(Value::as_str).unwrap_or_default();
+                observation.neighbours = Some(neighbours(text));
+            }
+            // Without rpcd's file module the method does not exist.
+            Err(error) if error.ends_with("not found") || error.ends_with("ubus error 3") => {}
+            Err(error) => observation.notes.push(format!("Neighbours not read: {error}")),
         }
         Ok(observation)
     }
@@ -596,6 +609,23 @@ fn wifi(access_point: &str, associated: &Value) -> Vec<WifiClient> {
                 mac: normalize_mac(client.get("mac")?.as_str()?)?,
                 access_point: access_point.to_owned(),
                 signal: client.get("signal").and_then(Value::as_i64),
+            })
+        })
+        .collect()
+}
+
+/// Reads the kernel's table of neighbours: flags 0 means no answer. A link-local address says nothing about the device.
+fn neighbours(table: &str) -> Vec<Seen> {
+    table
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let fields: Vec<&str> = line.split_whitespace().collect();
+            let (&address, &flags, &mac) = (fields.first()?, fields.get(2)?, fields.get(3)?);
+            (flags != "0x0").then(|| Seen {
+                mac: mac.to_ascii_lowercase(),
+                ip: address.parse::<Ipv4Addr>().ok().filter(|ip| !ip.is_link_local()),
+                hostname: String::new(),
             })
         })
         .collect()

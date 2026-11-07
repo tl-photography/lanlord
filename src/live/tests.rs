@@ -1,7 +1,7 @@
 //! Unit tests of `live`.
 
 use super::*;
-use crate::compare::{Seen, WifiClient};
+use crate::compare::WifiClient;
 
 const MAC: &str = "aa:bb:cc:00:00:01";
 
@@ -100,6 +100,32 @@ fn a_device_never_seen_is_away_unless_it_sets_its_address_itself() {
     let mut router = device([192, 0, 2, 1]);
     router.self_assigned = true;
     assert_eq!(live.status(&router, 100), Status::default());
+}
+
+#[test]
+fn a_neighbour_without_a_lease_is_seen() {
+    let mut live = Live::default();
+    let neighbour = Observation {
+        neighbours: Some(lease([192, 0, 2, 5]).seen),
+        ..Observation::default()
+    };
+    live.record(100, [neighbour].iter(), true);
+    assert_eq!(live.status(&device([192, 0, 2, 5]), 100).state, "seen");
+}
+
+#[test]
+fn a_lease_alone_is_not_seen_when_the_plugin_reads_neighbours() {
+    let mut live = Live::default();
+    let lease_only = Observation {
+        neighbours: Some(Vec::new()),
+        ..lease([192, 0, 2, 5])
+    };
+    live.record(100, [lease_only].iter(), true);
+
+    let status = live.status(&device([198, 51, 100, 5]), 100);
+    assert_eq!(status.state, "away");
+    assert_eq!(status.away, "Not seen yet");
+    assert_eq!(status.actual_ip, "192.0.2.5");
 }
 
 #[test]

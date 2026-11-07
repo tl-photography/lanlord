@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::compare::Observation;
+use crate::compare::{Observation, Seen};
 use crate::devices::Device;
 
 /// The last time a device was seen.
@@ -67,18 +67,29 @@ impl Live {
             self.last_scan = time;
         }
         for observation in observations {
+            // A lease stays after the device left, so it only counts if the plugin knows no better.
+            let leases_count = observation.neighbours.is_none();
             for seen in &observation.seen {
-                let sighting = self.sightings.entry(seen.mac.to_ascii_lowercase()).or_default();
-                sighting.seen_at = time;
-                if seen.ip.is_some() {
-                    sighting.ip = seen.ip;
-                }
+                self.sighted(seen, time, leases_count);
+            }
+            for seen in observation.neighbours.iter().flatten() {
+                self.sighted(seen, time, true);
             }
             for client in &observation.wifi {
                 let sighting = self.sightings.entry(client.mac.to_ascii_lowercase()).or_default();
                 sighting.seen_at = time;
                 sighting.access_point.clone_from(&client.access_point);
             }
+        }
+    }
+
+    fn sighted(&mut self, seen: &Seen, time: u64, online: bool) {
+        let sighting = self.sightings.entry(seen.mac.to_ascii_lowercase()).or_default();
+        if online {
+            sighting.seen_at = time;
+        }
+        if seen.ip.is_some() {
+            sighting.ip = seen.ip;
         }
     }
 
@@ -114,7 +125,11 @@ impl Live {
                 actual_ip,
             };
         }
-        let away = format!("Not seen for {}", ago(time.saturating_sub(sighting.seen_at)));
+        let away = if sighting.seen_at == 0 {
+            "Not seen yet".to_owned()
+        } else {
+            format!("Not seen for {}", ago(time.saturating_sub(sighting.seen_at)))
+        };
         Status {
             state: "away",
             detail: away.clone(),

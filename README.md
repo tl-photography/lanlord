@@ -63,9 +63,11 @@ user may read and change, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
         "luci-rpc": ["getDHCPLeases"],
         "network.interface": ["dump"],
         "uci": ["get"],
-        "iwinfo": ["devices", "info", "assoclist"]
+        "iwinfo": ["devices", "info", "assoclist"],
+        "file": ["read"]
       },
-      "uci": ["dhcp", "wireless"]
+      "uci": ["dhcp", "wireless"],
+      "file": { "/proc/net/arp": ["read"] }
     },
     "write": {
       "ubus": { "uci": ["add", "set", "delete", "apply", "confirm", "rollback", "revert"] },
@@ -145,8 +147,9 @@ and says so in the history and a notification. It is off by default.
 
 The device list is the plan. After a scan, a dot on the card says whether a device was seen, and a card shows the
 address in use if it is not the planned one, for example for a device waiting for its VLAN. This stays in memory until
-the next start. A device counts as seen while it has a DHCP lease or is on the Wi-Fi, so it can stay green for the rest
-of its lease after it left.
+the next start. A device counts as seen if it is on the Wi-Fi or in the neighbour table of an OpenWrt device
+(`/proc/net/arp`, see the ACL). Without that right a DHCP lease counts too, so a device that left stays green for the
+rest of its lease, and one with a static address and a cable is not seen at all.
 
 ### Subnets
 

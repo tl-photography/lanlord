@@ -513,3 +513,16 @@ async fn wifi_clients_name_the_linked_device() {
     let observation = access_point.observe().await.unwrap();
     assert_eq!(observation.wifi[0].access_point, "LivingRoomAP: Home (5 GHz)");
 }
+
+#[test]
+fn neighbours_without_an_answer_are_left_out() {
+    let table = "IP address       HW type     Flags       HW address            Mask     Device\n\
+                 192.0.2.5        0x1         0x2         AA:BB:CC:00:00:01     *        br-lan\n\
+                 192.0.2.6        0x1         0x0         00:00:00:00:00:00     *        br-lan\n\
+                 169.254.6.112    0x1         0x2         aa:bb:cc:00:00:02     *        br-lan\n";
+    let seen = neighbours(table);
+    assert_eq!(seen.len(), 2);
+    assert_eq!(seen[0].mac, "aa:bb:cc:00:00:01");
+    assert_eq!(seen[0].ip, Some(Ipv4Addr::new(192, 0, 2, 5)));
+    assert_eq!(seen[1].ip, None, "link-local");
+}

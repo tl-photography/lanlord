@@ -50,6 +50,9 @@ pub struct Observation {
     pub entries: Option<Vec<Entry>>,
     /// Devices connected to the plugin's Wi-Fi.
     pub wifi: Vec<WifiClient>,
+    /// Devices the plugin talked to lately, whatever their address comes from; `None` if it cannot tell. Not for
+    /// finding unknown devices: this also holds neighbours outside the network, like the provider's gateway.
+    pub neighbours: Option<Vec<Seen>>,
     /// Remarks of the plugin, for example data it could not read.
     pub notes: Vec<String>,
 }
