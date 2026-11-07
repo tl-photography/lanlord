@@ -4,7 +4,7 @@
     <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
     <div class="text">
       <strong>{{ card.title }}</strong>
-<span class="badges">{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this machine">{{ plugin }}</span>{% endfor %}{% if !card.vlan_label.is_empty() %}<span class="badge vlan" title="In group {{ card.vlan_label }}">{{ card.vlan_label }}</span>{% endif %}</span>
+<span class="badges">{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this machine">{{ plugin }}</span>{% endfor %}{% if !card.role_label.is_empty() %}<span class="badge vlan">{{ card.role_label }}</span>{% endif %}{% if !card.vlan_label.is_empty() %}<span class="badge vlan" title="In group {{ card.vlan_label }}">{{ card.vlan_label }}</span>{% endif %}</span>
       {% if !card.also_in.is_empty() %}<span class="note">Also in {{ card.also_in }}</span>{% endif %}
       <ul class="connections{% if !overview.show_mac && !overview.show_ip %} compact{% endif %}">
         {% for row in card.rows %}
@@ -20,7 +20,7 @@
     <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
     <span class="text">
       <strong>{% include "device_status.html" %}{{ row.name }}</strong>
-<span class="badges">{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}{% if !card.vlan_label.is_empty() %}<span class="badge vlan" title="In group {{ card.vlan_label }}">{{ card.vlan_label }}</span>{% endif %}</span>
+<span class="badges">{% if row.unreviewed %}<span class="badge new" title="Found by a scan, not reviewed yet">New</span>{% endif %}{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}{% if !card.role_label.is_empty() %}<span class="badge vlan">{{ card.role_label }}</span>{% endif %}{% if !card.vlan_label.is_empty() %}<span class="badge vlan" title="In group {{ card.vlan_label }}">{{ card.vlan_label }}</span>{% endif %}</span>
       {% include "device_meta.html" %}{% if !row.status.away.is_empty() %}<span class="note">{{ row.status.away }}</span>{% endif %}{% if !row.warning.is_empty() %}<span class="note warning">{{ row.warning }}</span>{% endif %}
       {% if !row.note.is_empty() %}<span class="note">{{ row.note }}</span>{% endif %}
     </span>

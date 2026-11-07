@@ -44,6 +44,8 @@ fn sample() -> Device {
         ip: None,
         note: String::new(),
         self_assigned: false,
+        role: crate::devices::Role::Client,
+        unreviewed: false,
         machine: String::new(),
     }
 }

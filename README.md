@@ -158,8 +158,10 @@ and page; moving it to another group stays possible, so it is not refused.
 
 ### Network column
 
-A device that a plugin is linked to, like the router, an access point or the host of Pi-hole, appears in the Network
-column ahead of the groups. It keeps its group, which decides its VLAN, and shows it as a badge.
+A device with a role (router, access point, switch, bridge, server) appears in the Network column ahead of the groups.
+It keeps its group, which decides its VLAN, and shows it as a badge.
+
+A device added from a scan is marked "New" until it is saved or moved, so it can be told from a real guest.
 
 Every fixed address says where it comes from. "Static lease from the router" is the default. "Set on the device" is for
 devices like the router itself: they get no lease, and lanlord adds a DNS name for them instead (a `domain` section

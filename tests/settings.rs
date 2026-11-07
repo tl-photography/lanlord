@@ -137,25 +137,82 @@ async fn interface_badges_sit_side_by_side_without_addresses() {
 }
 
 #[tokio::test]
-async fn a_linked_device_moves_to_the_network_column_and_keeps_its_group() {
+async fn a_device_with_a_role_moves_to_the_network_column_and_keeps_its_group() {
     let data = data();
     let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
     let (_, page) = send(&app, get("/")).await;
     assert!(!page.contains("group network"), "{page}");
 
+    let form = "name=tv&mac=00%3A00%3A00%3A00%3A00%3A09&group=lan&ip=192.0.2.9&role=access-point";
+    assert_eq!(
+        send(&app, post("/devices/tv", form)).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let saved = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
+    assert!(saved.contains("role = \"access-point\""), "{saved}");
+
+    let (_, page) = send(&app, get("/")).await;
+    let (network, groups) = page.split_once(r#"data-group="lan""#).unwrap();
+    assert!(network.contains("group network"), "{page}");
+    assert!(network.contains("<strong>tv</strong>"), "{page}");
+    assert!(network.contains(">Access point</span>"), "{page}");
+    assert!(network.contains(r#"title="In group LAN""#), "{page}");
+    assert!(network.contains(r#"aria-label="Move tv""#), "{page}");
+    assert!(!groups.contains("<strong>tv</strong>"), "{page}");
+    assert!(groups.contains("2 devices, 1 in Network<"), "{page}");
+
+    let (_, page) = send(&app, get("/devices/tv")).await;
+    assert!(page.contains(r#"value="access-point" selected"#), "{page}");
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("role Client → Access point"), "{log}");
+}
+
+#[tokio::test]
+async fn a_linked_plugin_alone_does_not_make_a_network_device() {
+    let data = data();
     std::fs::write(
         data.path().join("lanlord.toml"),
         "[[plugin]]\nname = \"router\"\ntype = \"openwrt\"\nenabled = false\ndevice = \"tv\"\nuser = \"lanlord\"\npassword_file = \"router.password\"\ncertificate_sha256 = \"00\"\n",
     )
     .unwrap();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
     let (_, page) = send(&app, get("/")).await;
-    let (network, groups) = page.split_once(r#"data-group="lan""#).unwrap();
-    assert!(network.contains("group network"), "{page}");
-    assert!(network.contains("<strong>tv</strong>"), "{page}");
-    assert!(network.contains(r#"<span class="badge vlan""#), "{page}");
-    assert!(network.contains(r#"aria-label="Move tv""#), "{page}");
-    assert!(!groups.contains("<strong>tv</strong>"), "{page}");
-    assert!(groups.contains("2 devices, 1 in Network<"), "{page}");
+    assert!(!page.contains("group network"), "{page}");
+    assert!(page.contains("Plugin router talks to this device"), "{page}");
+}
+
+#[tokio::test]
+async fn a_device_found_by_a_scan_is_new_until_someone_looks_at_it() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let found = "name=stranger&mac=00%3A00%3A00%3A00%3A00%3A0b";
+    assert_eq!(
+        send(&app, post("/devices/discovered", found)).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let (_, page) = send(&app, get("/")).await;
+    assert!(page.contains(r#"class="badge new""#), "{page}");
+    assert_eq!(
+        page.matches("Found by a scan, not reviewed yet").count(),
+        1,
+        "{page}"
+    );
+    let (_, page) = send(&app, get("/devices/stranger")).await;
+    assert!(page.contains("A scan found this device"), "{page}");
+
+    let form = "name=stranger&mac=00%3A00%3A00%3A00%3A00%3A0b&group=lan";
+    assert_eq!(
+        send(&app, post("/devices/stranger", form)).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let (_, page) = send(&app, get("/")).await;
+    assert_eq!(
+        page.matches("Found by a scan, not reviewed yet").count(),
+        0,
+        "{page}"
+    );
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("reviewed"), "{log}");
 }
 
 #[tokio::test]

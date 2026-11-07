@@ -127,6 +127,12 @@ pub fn device(before: Option<&Device>, after: &Device) -> Option<String> {
     compare("IP", &ip_text(before), &ip_text(after));
     compare("note", &before.note, &after.note);
     compare("machine", &before.machine, &after.machine);
+    if before.role != after.role {
+        changes.push(format!("role {} → {}", before.role.label(), after.role.label()));
+    }
+    if before.unreviewed && !after.unreviewed {
+        changes.push("reviewed".to_owned());
+    }
     if before.self_assigned != after.self_assigned {
         changes.push(format!(
             "address {}",

@@ -358,6 +358,8 @@ fn devices() -> DeviceList {
         group: "lan".to_owned(),
         ip: Some(Ipv4Addr::from(ip)),
         self_assigned: false,
+        role: crate::devices::Role::Client,
+        unreviewed: false,
         note: String::new(),
         machine: String::new(),
     };
