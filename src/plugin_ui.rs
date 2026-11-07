@@ -284,12 +284,13 @@ fn find<'a>(settings: &'a mut Settings, name: &str) -> Result<&'a mut toml::Tabl
         .ok_or_else(|| format!("No plugin named {name}"))
 }
 
-/// Changes the settings of a plugin instance; its type and name stay.
+/// Changes the settings of a plugin instance and its name, if the form has a new one; its type stays.
 pub async fn update(
     State(state): State<AppState>,
     Path(name): Path<String>,
     Form(form): Form<HashMap<String, String>>,
 ) -> Response {
+    let new_name = form.get("new_name").map(|name| name.trim().to_owned());
     change(&state, |settings| {
         let plugin = find(settings, &name)?;
         let Some(plugin_type) = plugins::plugin_type(&table_text(plugin, "type")) else {
@@ -299,6 +300,9 @@ pub async fn update(
         let fields = settings_table(plugin_type, &form)?;
         plugin.retain(|key, _| matches!(key, "type" | "name" | "enabled"));
         plugin.extend(fields);
+        if let Some(new_name) = new_name.filter(|new_name| !new_name.is_empty()) {
+            plugin.insert("name".to_owned(), toml::Value::String(new_name));
+        }
         Ok(())
     })
 }

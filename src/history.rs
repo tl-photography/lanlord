@@ -190,9 +190,45 @@ pub fn plugins(before: &Settings, after: &Settings) -> Vec<String> {
             if after.scan.restore { "on" } else { "off" }
         ));
     }
+    // One entry gone and one new of the same type is a rename.
+    let gone: Vec<&toml::Table> = before
+        .plugins
+        .iter()
+        .filter(|old| {
+            after
+                .plugins
+                .iter()
+                .all(|table| table_name(table) != table_name(old))
+        })
+        .collect();
+    let new: Vec<&toml::Table> = after
+        .plugins
+        .iter()
+        .filter(|table| {
+            before
+                .plugins
+                .iter()
+                .all(|old| table_name(old) != table_name(table))
+        })
+        .collect();
+    let renamed = match (gone.as_slice(), new.as_slice()) {
+        ([old], [table]) if old.get("type") == table.get("type") => Some((*old, *table)),
+        _ => None,
+    };
+    if let Some((old, table)) = renamed {
+        texts.push(format!(
+            "Plugin {} renamed to {}",
+            table_name(old),
+            table_name(table)
+        ));
+    }
     for table in &after.plugins {
         let name = table_name(table);
-        let Some(old) = before.plugins.iter().find(|old| table_name(old) == name) else {
+        let old = before.plugins.iter().find(|old| table_name(old) == name);
+        let old = old.or(renamed
+            .filter(|(_, new)| table_name(new) == name)
+            .map(|(old, _)| old));
+        let Some(old) = old else {
             texts.push(format!(
                 "Plugin {name} added: type {}",
                 value_text(table.get("type"))
@@ -204,7 +240,7 @@ pub fn plugins(before: &Settings, after: &Settings) -> Vec<String> {
         keys.dedup();
         let changes: Vec<String> = keys
             .into_iter()
-            .filter(|key| old.get(*key) != table.get(*key))
+            .filter(|key| key.as_str() != "name" && old.get(*key) != table.get(*key))
             .map(|key| {
                 format!(
                     "{key} {} → {}",
@@ -217,10 +253,9 @@ pub fn plugins(before: &Settings, after: &Settings) -> Vec<String> {
             texts.push(format!("Plugin {name} changed: {}", changes.join(", ")));
         }
     }
-    for old in &before.plugins {
-        let name = table_name(old);
-        if after.plugins.iter().all(|table| table_name(table) != name) {
-            texts.push(format!("Plugin {name} deleted"));
+    if renamed.is_none() {
+        for old in gone {
+            texts.push(format!("Plugin {} deleted", table_name(old)));
         }
     }
     texts

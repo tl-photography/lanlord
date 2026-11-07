@@ -78,6 +78,7 @@
     <details class="plugin-config"{% if !plugin.problem.is_empty() %} open{% endif %}>
       <summary>Settings</summary>
       <form method="post" action="/plugins/{{ plugin.name }}">
+        <label>Name <input name="new_name" value="{{ plugin.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false"></label>
         {% for field in plugin.fields %}
         {% if field.is_switch() %}
         <label class="switch"><input type="checkbox" name="{{ field.key }}" value="true"{% if field.checked() %} checked{% endif %}> {{ field.label }}</label>
