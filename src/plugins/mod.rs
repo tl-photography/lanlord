@@ -2,7 +2,9 @@
 //! lanlord and enabled per instance in `lanlord.toml`. Every type describes its own settings, so the web interface
 //! and the validation need no code per type.
 
+mod email;
 mod leases_file;
+mod mqtt;
 mod ntfy;
 mod openwrt;
 mod pihole;
@@ -112,6 +114,8 @@ pub const TYPES: &[PluginType] = &[
     pihole::TYPE,
     webhook::TYPE,
     ntfy::TYPE,
+    mqtt::TYPE,
+    email::TYPE,
 ];
 
 /// The plugin type with this `type` value.
