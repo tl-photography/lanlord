@@ -73,9 +73,22 @@ impl DeviceForm {
     }
 }
 
-struct GroupOption {
-    name: String,
-    label: String,
+pub(crate) struct GroupOption {
+    pub(crate) name: String,
+    pub(crate) label: String,
+}
+
+/// The groups for a dropdown.
+pub(crate) fn group_options(state: &AppState) -> Vec<GroupOption> {
+    state
+        .groups()
+        .groups
+        .iter()
+        .map(|group| GroupOption {
+            name: group.name.clone(),
+            label: group.title().to_owned(),
+        })
+        .collect()
 }
 
 #[derive(Template)]
@@ -90,18 +103,12 @@ struct EditPage {
     has_targets: bool,
     /// Machine names in use, offered in the form.
     machines: Vec<String>,
+    /// The name of the device being edited; empty for a new one.
+    original: String,
 }
 
 fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: String) -> Response {
-    let groups = state
-        .groups()
-        .groups
-        .iter()
-        .map(|group| GroupOption {
-            name: group.name.clone(),
-            label: group.title().to_owned(),
-        })
-        .collect();
+    let groups = group_options(state);
     let (title, action) = match original {
         Some(name) => (format!("Edit {name}"), format!("/devices/{name}")),
         None => ("Add device".to_owned(), "/devices".to_owned()),
@@ -120,6 +127,7 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
         error,
         has_targets: state.has_targets(),
         machines: machine_names(state),
+        original: original.unwrap_or_default().to_owned(),
     };
     match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
@@ -259,6 +267,60 @@ pub async fn move_device(
     save(&state, Some(&name), form)
 }
 
+/// Deletes a device or interface; its lease and client go with the next apply.
+pub async fn delete(State(state): State<AppState>, Path(name): Path<String>) -> Response {
+    let Ok(_guard) = state.inner.write_lock.lock() else {
+        return server_error(&"device list lock poisoned");
+    };
+    let mut list = match state.devices() {
+        Ok(list) => list,
+        Err(error) => return server_error(&error),
+    };
+    let Some(position) = list.devices.iter().position(|device| device.name == name) else {
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
+    };
+    let removed = list.devices.remove(position);
+    let machine_left = !removed.machine.is_empty()
+        && list
+            .devices
+            .iter()
+            .any(|device| device.machine == removed.machine);
+    match list.save(&state.inner.devices_path, &state.groups().group_names()) {
+        Ok(()) => {
+            history::record(&state.inner.history_path, &[format!("Device {name} deleted")]);
+            state.forget_pending();
+            if machine_left {
+                Redirect::to(&format!("/machines/{}", removed.machine)).into_response()
+            } else {
+                Redirect::to("/").into_response()
+            }
+        }
+        Err(error) => server_error(&error),
+    }
+}
+
+/// Turns a device into a machine with this device as its first interface.
+pub async fn make_machine(State(state): State<AppState>, Path(name): Path<String>) -> Response {
+    let Ok(_guard) = state.inner.write_lock.lock() else {
+        return server_error(&"device list lock poisoned");
+    };
+    let mut list = match state.devices() {
+        Ok(list) => list,
+        Err(error) => return server_error(&error),
+    };
+    let Some(device) = list.devices.iter_mut().find(|device| device.name == name) else {
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
+    };
+    if device.machine.is_empty() {
+        device.machine.clone_from(&name);
+    }
+    let machine = device.machine.clone();
+    match list.save(&state.inner.devices_path, &state.groups().group_names()) {
+        Ok(()) => Redirect::to(&format!("/machines/{machine}")).into_response(),
+        Err(error) => server_error(&error),
+    }
+}
+
 /// Moves every connection of a machine to another group.
 pub async fn move_machine(
     State(state): State<AppState>,
@@ -296,7 +358,7 @@ pub async fn move_machine(
 
 /// Keeps the plugins linked to a device in step: a new name goes into their settings (logged), and they are built
 /// again, so an address taken from the device follows it. Called with the write lock held.
-fn follow_links(state: &AppState, old_name: Option<&str>, new_name: &str) {
+pub(crate) fn follow_links(state: &AppState, old_name: Option<&str>, new_name: &str) {
     let Ok(mut settings) = plugins::read_settings(&state.inner.plugins_path) else {
         return;
     };
@@ -355,7 +417,11 @@ fn renamed_url(url: &str, old: &str, new: &str) -> Option<String> {
 }
 
 fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response {
-    let next = if form.then == "review" { "/apply" } else { "/" };
+    let next = match form.then.as_str() {
+        "review" => "/apply".to_owned(),
+        "machine" => format!("/machines/{}", form.machine.trim()),
+        _ => "/".to_owned(),
+    };
     let device = match form.to_device() {
         Ok(device) => device,
         Err(message) => return page(state, original, form, message),
@@ -383,7 +449,7 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
             }
             follow_links(state, before.as_ref().map(|old| old.name.as_str()), &device.name);
             state.forget_pending();
-            Redirect::to(next).into_response()
+            Redirect::to(&next).into_response()
         }
         Err(Error::Invalid(message)) => page(state, original, form, message),
         Err(error) => server_error(&error),

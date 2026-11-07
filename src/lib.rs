@@ -10,6 +10,7 @@ mod groups;
 pub mod history;
 mod history_ui;
 pub mod leases;
+mod machines;
 pub mod notify;
 pub mod origin;
 mod plugin_ui;
@@ -206,6 +207,12 @@ pub fn app(state: AppState) -> Router {
         .route("/devices/new", get(edit::new_form))
         .route("/devices/{name}", get(edit::edit_form).post(edit::update))
         .route("/devices/{name}/move", axum::routing::post(edit::move_device))
+        .route("/devices/{name}/delete", axum::routing::post(edit::delete))
+        .route(
+            "/devices/{name}/interfaces",
+            axum::routing::post(edit::make_machine),
+        )
+        .route("/machines/{name}", get(machines::show).post(machines::rename))
         .route("/machines/{name}/move", axum::routing::post(edit::move_machine))
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))

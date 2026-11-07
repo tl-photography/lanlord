@@ -21,7 +21,7 @@
         <div class="card machine">
           <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
           <span class="text">
-            <strong>{{ card.title }}</strong>{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this machine">{{ plugin }}</span>{% endfor %}
+            <strong><a href="/machines/{{ card.title }}">{{ card.title }}</a></strong>{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this machine">{{ plugin }}</span>{% endfor %}
             {% if !card.also_in.is_empty() %}<span class="note">Also in {{ card.also_in }}</span>{% endif %}
             <ul class="connections">
               {% for row in card.rows %}

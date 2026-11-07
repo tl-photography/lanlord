@@ -11,9 +11,10 @@ differences.
 
 - Groups map to VLANs, for example `lan`, `iot` and `guest`. They are set up in the interface; the first one is the
   default group for unknown devices.
-- A machine with several connections, like a laptop with Wi-Fi, dock and cable, stays one entry per connection (each
-  has its own MAC, lease and name). "Belongs to" groups them: the devices page shows one card for the machine, and
-  moving the card moves all its connections.
+- A machine with several interfaces, like a laptop with Wi-Fi, dock and cable, is one device with one entry per
+  interface: each has its own MAC address, lease, DNS name and group. The devices page shows one card for it, and
+  moving the card moves all interfaces. The page of the machine adds, removes and renames them. In `devices.toml` the
+  interfaces are `[[device.interface]]` tables of the machine; a device with one connection stays a plain `[[device]]`.
 - Devices, groups and plugin settings are TOML files in the data directory: `devices.toml`, `groups.toml` and
   `lanlord.toml`.
 - Plugins report what they see. A scan lists unknown devices, which can be added to the list, and differences:
