@@ -143,6 +143,20 @@ you make in lanlord are no such thing, they wait for Apply.
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
 
+### Networks
+
+With "Manage networks" on, the OpenWrt plugin builds a network for every group with a VLAN other than 1. On a router:
+a VLAN on the bridge, an interface with the first address of the group's subnet, a DHCP pool from .100 to .249 with
+the DNS service, and a firewall zone that may reach the internet, DHCP and the DNS service, with DNS to anywhere else
+redirected to it. No IPv6. On an access point, a device without DHCP: the VLAN and an interface without an address. A
+group with its own SSID gets a Wi-Fi network on every radio.
+
+The first network turns the bridge into a VLAN bridge: VLAN 1 untagged on every port, the LAN interface moves to
+`br-lan.1`. Every other section lanlord adds is named `lanlordnet_`. A bridge with VLANs set up outside lanlord is left
+alone. Network changes are applied with a rollback after 60 seconds, so a change that cuts lanlord off undoes itself.
+
+The ACL then also needs `network`, `firewall` and `wireless` in `read.uci` and `write.uci`.
+
 ### DNS
 
 On the Groups page: the DNS server of all networks, the router or a plugin that offers DNS, like Pi-hole. A plugin

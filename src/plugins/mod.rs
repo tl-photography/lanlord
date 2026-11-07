@@ -78,7 +78,7 @@ pub enum FieldKind {
     /// Yes or no, a checkbox; off when the form does not send it.
     Switch,
     /// The name of a device in the list, chosen from a dropdown.
-    Interface,
+    Device,
 }
 
 /// One setting of a plugin type.
@@ -165,9 +165,7 @@ pub fn field_value(field: &Field, value: &str) -> Result<toml::Value, String> {
                 field.label
             ))
         }
-        FieldKind::Interface if !is_valid_name(value) => {
-            Err(format!("{} must be a device name", field.label))
-        }
+        FieldKind::Device if !is_valid_name(value) => Err(format!("{} must be a device name", field.label)),
         FieldKind::DataFile if !is_data_file(value) => Err(format!(
             "{} must be a file name in the data directory, without / or ..",
             field.label
@@ -376,7 +374,7 @@ fn build_one(
         if plugin_type
             .fields
             .iter()
-            .any(|field| field.kind == FieldKind::Interface)
+            .any(|field| field.kind == FieldKind::Device)
         {
             resolve_address(&name, &mut table, data_dir)?;
         }

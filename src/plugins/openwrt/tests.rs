@@ -3,6 +3,7 @@
 #![allow(clippy::unwrap_used)]
 
 use super::*;
+use crate::devices::DeviceList;
 
 const FINGERPRINT: &str =
     "00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF";
@@ -244,8 +245,10 @@ async fn unreachable_devices_fail_quickly() {
 #[derive(Default)]
 struct FakeUci {
     committed: serde_json::Map<String, Value>,
+    /// The other configurations, by name.
+    others: serde_json::Map<String, Value>,
     staged: Vec<(String, Value)>,
-    snapshot: Option<serde_json::Map<String, Value>>,
+    snapshot: Option<(serde_json::Map<String, Value>, serde_json::Map<String, Value>)>,
     calls: Vec<String>,
     lose_changes: bool,
     deny: &'static str,
@@ -255,6 +258,13 @@ struct FakeUci {
 impl FakeUci {
     fn answer(&mut self, method: &str, arguments: &Value) -> Value {
         match method {
+            "get" if arguments["config"] != "dhcp" => {
+                let values = self
+                    .others
+                    .get(arguments["config"].as_str().unwrap_or_default())
+                    .cloned();
+                return json!([0, { "values": values.unwrap_or_else(|| json!({})) }]);
+            }
             "get" => {
                 let mut values = self.committed.clone();
                 let ignore = if self.serves_dhcp { "0" } else { "1" };
@@ -271,7 +281,7 @@ impl FakeUci {
             _ if method == self.deny => return json!([6]),
             "add" | "set" | "delete" => self.staged.push((method.to_owned(), arguments.clone())),
             "apply" => {
-                self.snapshot = Some(self.committed.clone());
+                self.snapshot = Some((self.committed.clone(), self.others.clone()));
                 for (method, arguments) in std::mem::take(&mut self.staged) {
                     if !self.lose_changes {
                         self.commit(&method, &arguments);
@@ -279,7 +289,7 @@ impl FakeUci {
                 }
             }
             "confirm" => self.snapshot = None,
-            "rollback" => self.committed = self.snapshot.take().unwrap_or_default(),
+            "rollback" => (self.committed, self.others) = self.snapshot.take().unwrap_or_default(),
             "revert" => self.staged.clear(),
             _ => return json!([3]),
         }
@@ -289,20 +299,30 @@ impl FakeUci {
 
     fn commit(&mut self, method: &str, arguments: &Value) {
         let values = arguments["values"].as_object().cloned().unwrap_or_default();
+        let config = arguments["config"].as_str().unwrap_or("dhcp");
+        let sections = if config == "dhcp" {
+            &mut self.committed
+        } else {
+            self.others
+                .entry(config.to_owned())
+                .or_insert_with(|| json!({}))
+                .as_object_mut()
+                .unwrap()
+        };
         match method {
             "add" => {
                 let name = arguments["name"].as_str().unwrap().to_owned();
                 let mut section = values;
-                section.insert(".type".to_owned(), json!("host"));
+                section.insert(".type".to_owned(), arguments["type"].clone());
                 section.insert(".name".to_owned(), json!(name));
-                self.committed.insert(name, Value::Object(section));
+                sections.insert(name, Value::Object(section));
             }
             "set" => {
                 let section = arguments["section"].as_str().unwrap();
-                self.committed[section].as_object_mut().unwrap().extend(values);
+                sections[section].as_object_mut().unwrap().extend(values);
             }
             _ => {
-                self.committed.remove(arguments["section"].as_str().unwrap());
+                sections.remove(arguments["section"].as_str().unwrap());
             }
         }
     }
@@ -440,7 +460,11 @@ async fn a_refused_change_discards_the_staged_ones() {
     let digest = router.plan(devices().into()).await.unwrap().unwrap().digest();
     let error = router.apply(devices().into(), digest).await.unwrap_err();
     assert!(error.contains("rpcd ACL"), "{error}");
-    assert_eq!(fake.lock().unwrap().calls, ["delete", "revert"]);
+    assert_eq!(
+        fake.lock().unwrap().calls,
+        ["delete", "revert", "revert", "revert", "revert", "revert"],
+        "every configuration is reverted"
+    );
 }
 
 #[tokio::test]
@@ -505,4 +529,95 @@ fn dns_names_are_domain_sections() {
         why: String::new(),
     };
     assert_eq!(change.commands(), ["uci set dhcp.lanlordname_routermain=domain"]);
+}
+
+fn router_with_a_bridge() -> FakeUci {
+    let mut fake = router_with_omv();
+    fake.others.insert(
+        "network".to_owned(),
+        json!({
+            "cfg030f15": { ".type": "device", ".index": 1, "name": "br-lan", "type": "bridge", "ports": ["lan1", "lan2"] },
+            "lan": { ".type": "interface", ".index": 2, "device": "br-lan", "proto": "static" }
+        }),
+    );
+    fake.others.insert(
+        "firewall".to_owned(),
+        json!({ "cfg01": { ".type": "zone", "name": "lan", "network": ["lan"] }, "cfg02": { ".type": "zone", "name": "wan", "network": ["wan"] } }),
+    );
+    fake
+}
+
+fn plan_with_iot() -> Plan {
+    let group = |name: &str, vlan: u16, subnet: &str| crate::config::Group {
+        name: name.to_owned(),
+        vlan,
+        subnet: subnet.to_owned(),
+        label: String::new(),
+        ssid: String::new(),
+        ssid_password_file: String::new(),
+    };
+    Plan {
+        devices: devices(),
+        groups: vec![
+            group("lan", 1, "192.0.2.0/24"),
+            group("iot", 20, "203.0.113.0/24"),
+        ],
+        ..Plan::default()
+    }
+}
+
+fn managing(url: &str, data: &Path) -> OpenWrt {
+    std::fs::write(data.join("router.password"), "secret").unwrap();
+    std::fs::set_permissions(
+        data.join("router.password"),
+        std::fs::Permissions::from_mode(0o600),
+    )
+    .unwrap();
+    let mut table = settings_table(url);
+    table.insert("manage_networks".to_owned(), toml::Value::Boolean(true));
+    OpenWrt::new("router".to_owned(), table, data).unwrap()
+}
+
+#[tokio::test]
+async fn builds_a_network_and_confirms_after_reading_it_back() {
+    let data = tempfile::tempdir().unwrap();
+    let (url, fake) = fake_target(router_with_a_bridge()).await;
+    let router = managing(&url, data.path());
+    let preview = router.plan(plan_with_iot()).await.unwrap().unwrap();
+    let steps: Vec<&str> = preview
+        .steps
+        .iter()
+        .map(|step| step.description.as_str())
+        .collect();
+    assert!(steps.contains(&"LAN moves to br-lan.1"), "{steps:?}");
+    assert!(steps.contains(&"firewall zone iot: new"), "{steps:?}");
+    router.apply(plan_with_iot(), preview.digest()).await.unwrap();
+    {
+        let fake_now = fake.lock().unwrap();
+        assert_eq!(fake_now.calls.last().map(String::as_str), Some("confirm"));
+        assert_eq!(fake_now.others["network"]["lan"]["device"], "br-lan.1");
+        assert_eq!(
+            fake_now.others["network"]["lanlordnet_iot"]["ipaddr"],
+            "203.0.113.1"
+        );
+        assert_eq!(
+            fake_now.others["firewall"]["lanlordnet_iot_zone"][".type"],
+            "zone"
+        );
+    }
+    let again = router.plan(plan_with_iot()).await.unwrap().unwrap();
+    assert!(
+        again.steps.iter().all(|step| !step.description.contains("iot")),
+        "nothing of the network is left: {:?}",
+        again.steps
+    );
+}
+
+#[tokio::test]
+async fn without_the_setting_networks_are_left_alone() {
+    let data = tempfile::tempdir().unwrap();
+    let (url, _fake) = fake_target(router_with_a_bridge()).await;
+    let router = plugin(&url, data.path(), "secret", 0o600);
+    let preview = router.plan(plan_with_iot()).await.unwrap().unwrap();
+    assert!(preview.steps.iter().all(|step| !step.description.contains("iot")));
 }

@@ -89,7 +89,7 @@ fn input(field: &Field) -> &'static str {
     match field.kind {
         FieldKind::Url => "url",
         FieldKind::Switch => "checkbox",
-        FieldKind::Interface => "select",
+        FieldKind::Device => "select",
         _ => "text",
     }
 }
@@ -108,7 +108,7 @@ fn field_views(
             input: input(field),
             placeholder: field.placeholder,
             optional: field.optional,
-            options: if field.kind == FieldKind::Interface {
+            options: if field.kind == FieldKind::Device {
                 devices.to_vec()
             } else {
                 Vec::new()

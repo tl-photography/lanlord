@@ -19,8 +19,9 @@ use serde_json::{Value, json};
 
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Assigned, Observation, Present};
-use crate::devices::{DeviceList, Error, normalize_mac};
+use crate::devices::{Error, normalize_mac};
 use crate::leases::{self, Change, HostSection, LeasePlan, NameSection, Network};
+use crate::networks;
 use crate::plan::Plan;
 use crate::preview::Preview;
 
@@ -37,6 +38,11 @@ const SESSION_TIMEOUT: u64 = 60;
 const NO_SESSION: &str = "00000000000000000000000000000000";
 /// Seconds after which the router undoes applied changes that lanlord has not confirmed.
 const ROLLBACK_SECONDS: u64 = 30;
+/// The same for changes of the networks: the device reloads its network before lanlord can read it again.
+const NETWORK_ROLLBACK_SECONDS: u64 = 60;
+/// Tries to read the device again after applying, and the pause between them.
+const READ_BACK_TRIES: u32 = 10;
+const READ_BACK_PAUSE: Duration = Duration::from_secs(3);
 
 /// The type description for `lanlord.toml` and the web interface.
 pub(super) const TYPE: PluginType = PluginType {
@@ -44,7 +50,7 @@ pub(super) const TYPE: PluginType = PluginType {
     title: "OpenWrt",
     description: "Reads the DHCP leases, static leases and Wi-Fi VLANs of an OpenWrt router or access point \
                   through its ubus API, as its own rpcd user, and applies the static leases of a router that serves \
-                  DHCP.",
+                  DHCP. With Manage networks on, it also builds a network per group.",
     fields: &[
         Field {
             key: "url",
@@ -56,7 +62,7 @@ pub(super) const TYPE: PluginType = PluginType {
         Field {
             key: "device",
             label: "Device (optional, its fixed address is used when the address is empty)",
-            kind: FieldKind::Interface,
+            kind: FieldKind::Device,
             placeholder: "",
             optional: true,
         },
@@ -81,6 +87,14 @@ pub(super) const TYPE: PluginType = PluginType {
             placeholder: "AB:CD:...",
             optional: false,
         },
+        Field {
+            key: "manage_networks",
+            label: "Manage networks: a VLAN, interface, DHCP pool, firewall zone and Wi-Fi per group (needs rights for \
+                    network, firewall and wireless)",
+            kind: FieldKind::Switch,
+            placeholder: "",
+            optional: true,
+        },
     ],
     build: |name, table, data_dir| Ok(Arc::new(OpenWrt::new(name, table, data_dir)?)),
 };
@@ -92,9 +106,41 @@ struct Settings {
     user: String,
     password_file: String,
     certificate: String,
+    #[serde(default)]
+    manage_networks: bool,
     /// Only used to fill an empty address and for the device page.
     #[serde(default, rename = "device")]
     _device: String,
+}
+
+/// What a device gets: its static leases if it serves DHCP, and its networks if the plugin manages them.
+struct DevicePlan {
+    leases: Option<LeasePlan>,
+    networks: Option<networks::NetworkPlan>,
+}
+
+impl DevicePlan {
+    fn preview(&self) -> Option<Preview> {
+        if self.leases.is_none() && self.networks.is_none() {
+            return None;
+        }
+        let mut preview = self.leases.as_ref().map(LeasePlan::preview).unwrap_or_default();
+        if let Some(network_plan) = &self.networks {
+            preview.steps.extend(network_plan.steps());
+            preview.notes.extend(network_plan.notes.iter().cloned());
+        }
+        Some(preview)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.leases
+            .as_ref()
+            .is_none_or(|lease_plan| lease_plan.changes.is_empty())
+            && self
+                .networks
+                .as_ref()
+                .is_none_or(|network_plan| network_plan.changes.is_empty())
+    }
 }
 
 /// One `OpenWrt` device.
@@ -104,6 +150,10 @@ pub struct OpenWrt {
     user: String,
     password_file: PathBuf,
     client: Client,
+    /// Whether the plugin builds the networks of the groups.
+    manage_networks: bool,
+    /// The data directory, for the Wi-Fi passwords of the groups.
+    data_dir: PathBuf,
 }
 
 impl OpenWrt {
@@ -113,6 +163,7 @@ impl OpenWrt {
             user,
             password_file,
             certificate,
+            manage_networks,
             ..
         } = settings(&name, table)?;
         let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
@@ -128,6 +179,8 @@ impl OpenWrt {
             user,
             password_file: data_dir.join(password_file),
             client,
+            manage_networks,
+            data_dir: data_dir.to_path_buf(),
         })
     }
 
@@ -207,56 +260,139 @@ impl OpenWrt {
         ))
     }
 
-    async fn plan_in(&self, session: &str, devices: &DeviceList) -> Result<Option<LeasePlan>, String> {
-        let (hosts, names, networks) = self.lease_state(session).await?;
-        Ok((!networks.is_empty()).then(|| {
-            let mut plan = leases::plan(devices, &hosts, &networks);
-            leases::plan_names(devices, &names, &networks, &mut plan);
-            plan
-        }))
+    /// The sections of the configurations the networks touch.
+    async fn network_state(&self, session: &str) -> Result<Vec<networks::Section>, String> {
+        let mut current = Vec::new();
+        for config in networks::CONFIGS {
+            match self
+                .call(session, "uci", "get", &json!({ "config": config }))
+                .await
+            {
+                Ok(answer) => current.extend(networks::sections(config, &answer)),
+                Err(error) if error.ends_with("not found") || error.ends_with("no data") => {}
+                Err(error) => return Err(format!("{config}: {error}")),
+            }
+        }
+        Ok(current)
     }
 
-    async fn preview(&self, devices: DeviceList) -> Result<Option<Preview>, String> {
+    /// The Wi-Fi passwords of the groups with an SSID of their own, by group; unreadable files are left out.
+    async fn wifi_passwords(&self, plan: &Plan) -> HashMap<String, String> {
+        let mut passwords = HashMap::new();
+        for group in plan.groups.iter().filter(|group| !group.ssid.is_empty()) {
+            if let Ok(password) = read_password(&self.data_dir.join(&group.ssid_password_file)).await {
+                passwords.insert(group.name.clone(), password);
+            }
+        }
+        passwords
+    }
+
+    async fn plan_in(&self, session: &str, plan: &Plan) -> Result<DevicePlan, String> {
+        let (hosts, names, served) = self.lease_state(session).await?;
+        let leases = (!served.is_empty()).then(|| {
+            let mut lease_plan = leases::plan(&plan.devices, &hosts, &served);
+            leases::plan_names(&plan.devices, &names, &served, &mut lease_plan);
+            lease_plan
+        });
+        let networks = if self.manage_networks {
+            let current = self.network_state(session).await?;
+            let role = if served.is_empty() {
+                networks::Role::AccessPoint
+            } else {
+                networks::Role::Router
+            };
+            Some(networks::plan(
+                plan,
+                &current,
+                role,
+                &self.wifi_passwords(plan).await,
+            ))
+        } else {
+            None
+        };
+        Ok(DevicePlan { leases, networks })
+    }
+
+    async fn preview(&self, plan: Plan) -> Result<Option<Preview>, String> {
         let password = read_password(&self.password_file).await?;
         let session = self.login(&password).await?;
-        Ok(self.plan_in(&session, &devices).await?.map(|plan| plan.preview()))
+        Ok(self.plan_in(&session, &plan).await?.preview())
+    }
+
+    /// Reads the device again after applying. While it reloads its network it may not answer for a moment.
+    async fn read_back(&self, session: &str, plan: &Plan) -> Result<DevicePlan, String> {
+        let mut last = String::new();
+        for _ in 0..READ_BACK_TRIES {
+            match self.plan_in(session, plan).await {
+                Ok(left) => return Ok(left),
+                Err(error) => last = error,
+            }
+            tokio::time::sleep(READ_BACK_PAUSE).await;
+        }
+        Err(last)
+    }
+
+    async fn revert(&self, session: &str) {
+        for config in std::iter::once(leases::CONFIG).chain(networks::CONFIGS) {
+            let _ = self
+                .call(session, "uci", "revert", &json!({ "config": config }))
+                .await;
+        }
     }
 
     /// Stages the changes, applies them with rollback, reads the device again and confirms only if nothing is
-    /// left to change. Without the confirmation, the device undoes the changes after [`ROLLBACK_SECONDS`].
-    async fn write(&self, devices: DeviceList, digest: String) -> Result<Vec<String>, String> {
+    /// left to change. Without the confirmation, the device undoes the changes after [`ROLLBACK_SECONDS`], or
+    /// [`NETWORK_ROLLBACK_SECONDS`] for networks.
+    async fn write(&self, plan: Plan, digest: String) -> Result<Vec<String>, String> {
         let password = read_password(&self.password_file).await?;
         let session = self.login(&password).await?;
-        let plan = self
-            .plan_in(&session, &devices)
-            .await?
+        let planned = self.plan_in(&session, &plan).await?;
+        let preview = planned
+            .preview()
             .ok_or_else(|| format!("{}: serves no DHCP, there is nothing to apply", self.name))?;
-        if plan.digest() != digest {
+        if preview.digest() != digest {
             return Err(format!(
                 "{}: the device or the list changed since the preview, check the changes again",
                 self.name
             ));
         }
-        if plan.changes.is_empty() {
+        if planned.is_empty() {
             return Ok(Vec::new());
         }
-        for change in &plan.changes {
+        let lease_changes = planned
+            .leases
+            .as_ref()
+            .map_or(&[][..], |lease_plan| &lease_plan.changes[..]);
+        let network_changes = planned
+            .networks
+            .as_ref()
+            .map_or(&[][..], |network_plan| &network_plan.changes[..]);
+        for change in lease_changes {
             if let Err(error) = self.stage(&session, change).await {
-                let _ = self
-                    .call(&session, "uci", "revert", &json!({ "config": leases::CONFIG }))
-                    .await;
+                self.revert(&session).await;
                 return Err(error);
             }
         }
+        for change in network_changes {
+            if let Err(error) = self.stage_network(&session, change).await {
+                self.revert(&session).await;
+                return Err(error);
+            }
+        }
+        let timeout = if network_changes.is_empty() {
+            ROLLBACK_SECONDS
+        } else {
+            NETWORK_ROLLBACK_SECONDS
+        };
         self.call(
             &session,
             "uci",
             "apply",
-            &json!({ "rollback": true, "timeout": ROLLBACK_SECONDS }),
+            &json!({ "rollback": true, "timeout": timeout }),
         )
         .await?;
-        let left = self.plan_in(&session, &devices).await;
-        if !matches!(&left, Ok(Some(after)) if after.changes.is_empty()) {
+        let left = self.read_back(&session, &plan).await;
+        if !matches!(&left, Ok(after) if after.is_empty()) {
             let _ = self.call(&session, "uci", "rollback", &json!({})).await;
             return Err(format!(
                 "{}: the device does not show the changes after applying, they were rolled back",
@@ -264,11 +400,33 @@ impl OpenWrt {
             ));
         }
         self.call(&session, "uci", "confirm", &json!({})).await?;
-        Ok(plan
-            .changes
-            .iter()
-            .map(|change| change.description().to_owned())
-            .collect())
+        Ok(preview.steps.into_iter().map(|step| step.description).collect())
+    }
+
+    async fn stage_network(&self, session: &str, change: &networks::Change) -> Result<(), String> {
+        let values =
+            |options: &std::collections::BTreeMap<String, networks::Opt>| -> serde_json::Map<String, Value> {
+                options
+                    .iter()
+                    .map(|(key, value)| (key.clone(), value.json()))
+                    .collect()
+            };
+        let (method, arguments) = match change {
+            networks::Change::Add(section, _) => (
+                "add",
+                json!({ "config": section.config, "type": section.kind, "name": section.id, "values": values(&section.options) }),
+            ),
+            networks::Change::Set {
+                config, id, options, ..
+            } => (
+                "set",
+                json!({ "config": config, "section": id, "values": values(options) }),
+            ),
+            networks::Change::Delete { config, id, .. } => {
+                ("delete", json!({ "config": config, "section": id }))
+            }
+        };
+        self.call(session, "uci", method, &arguments).await.map(|_| ())
     }
 
     async fn stage(&self, session: &str, change: &Change) -> Result<(), String> {
@@ -373,11 +531,11 @@ impl Plugin for OpenWrt {
     }
 
     fn plan(&self, plan: Plan) -> BoxFuture<'_, Result<Option<Preview>, String>> {
-        Box::pin(self.preview(plan.devices))
+        Box::pin(self.preview(plan))
     }
 
     fn apply(&self, plan: Plan, digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
-        Box::pin(self.write(plan.devices, digest))
+        Box::pin(self.write(plan, digest))
     }
 }
 

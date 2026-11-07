@@ -12,6 +12,7 @@ pub mod history;
 mod history_ui;
 pub mod leases;
 mod machines;
+pub mod networks;
 pub mod notify;
 pub mod origin;
 pub mod plan;
