@@ -19,8 +19,13 @@
     </select>
   </label>
   <label>IP address <input name="ip" value="{{ form.ip }}" inputmode="decimal" placeholder="optional"></label>
-  <label class="switch"><input type="checkbox" name="self_assigned" value="true"{% if form.self_assigned %} checked{% endif %}> Address is set on the device itself (no static lease)</label>
-  <small>Without a lease, lanlord gives the device no <code>.lan</code> name. Check what uses that name first.</small>
+  <label>Address comes from
+    <select name="self_assigned">
+      <option value="false"{% if !form.self_assigned %} selected{% endif %}>Static lease from the router</option>
+      <option value="true"{% if form.self_assigned %} selected{% endif %}>Set on the device</option>
+    </select>
+  </label>
+  <small>Only with an IP address. Both give the device its <code>.lan</code> name.</small>
   <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
   <label>Belongs to <input name="machine" value="{{ form.machine }}" list="machines" maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="optional, e.g. a laptop with Wi-Fi and cable"></label>
   <datalist id="machines">{% for machine in machines %}<option value="{{ machine }}">{% endfor %}</datalist>

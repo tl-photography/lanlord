@@ -526,3 +526,15 @@ fn neighbours_without_an_answer_are_left_out() {
     assert_eq!(seen[0].ip, Some(Ipv4Addr::new(192, 0, 2, 5)));
     assert_eq!(seen[1].ip, None, "link-local");
 }
+
+#[test]
+fn dns_names_are_domain_sections() {
+    assert_eq!(leases::section_type(&leases::name_id("RouterMain")), "domain");
+    assert_eq!(leases::section_type(&leases::section_id("RouterMain")), "host");
+    let change = Change::Add {
+        section: leases::name_id("RouterMain"),
+        values: Vec::new(),
+        why: String::new(),
+    };
+    assert_eq!(change.commands(), ["uci set dhcp.lanlordname_routermain=domain"]);
+}

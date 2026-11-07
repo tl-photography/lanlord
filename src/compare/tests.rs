@@ -162,3 +162,76 @@ fn a_device_that_sets_its_address_itself_has_no_lease_to_miss() {
     };
     assert_eq!(compare(&list, &groups(), &Observation::default()), Vec::new());
 }
+
+fn address_device(self_assigned: bool) -> DeviceList {
+    DeviceList {
+        devices: vec![Device {
+            name: "ap".to_owned(),
+            mac: "aa:bb:cc:dd:ee:01".to_owned(),
+            group: "lan".to_owned(),
+            ip: Some([192, 0, 2, 2].into()),
+            self_assigned,
+            note: String::new(),
+            machine: String::new(),
+        }],
+    }
+}
+
+fn seen(mac: &str) -> Seen {
+    Seen {
+        mac: mac.to_owned(),
+        ip: Some([192, 0, 2, 2].into()),
+        hostname: String::new(),
+    }
+}
+
+#[test]
+fn a_device_that_does_not_use_its_lease_is_reported() {
+    let observation = Observation {
+        seen: vec![seen("aa:bb:cc:dd:ee:02")],
+        neighbours: Some(vec![seen("aa:bb:cc:dd:ee:01")]),
+        ..Observation::default()
+    };
+    let findings = compare(&address_device(false), &groups(), &observation);
+    assert!(
+        findings.contains(&Finding::LeaseUnused {
+            device: "ap".to_owned()
+        }),
+        "{findings:?}"
+    );
+    let findings = compare(&address_device(true), &groups(), &observation);
+    assert!(
+        !findings.contains(&Finding::LeaseUnused {
+            device: "ap".to_owned()
+        }),
+        "{findings:?}"
+    );
+}
+
+#[test]
+fn a_device_that_sets_its_address_itself_but_has_a_lease_is_reported() {
+    let observation = Observation {
+        seen: vec![seen("aa:bb:cc:dd:ee:01")],
+        neighbours: Some(Vec::new()),
+        ..Observation::default()
+    };
+    let findings = compare(&address_device(true), &groups(), &observation);
+    assert!(
+        findings.contains(&Finding::UnexpectedLease {
+            device: "ap".to_owned()
+        }),
+        "{findings:?}"
+    );
+}
+
+#[test]
+fn a_plugin_without_leases_says_nothing_about_them() {
+    let observation = Observation {
+        neighbours: Some(vec![seen("aa:bb:cc:dd:ee:01")]),
+        ..Observation::default()
+    };
+    assert_eq!(
+        compare(&address_device(false), &groups(), &observation),
+        Vec::new()
+    );
+}

@@ -161,8 +161,9 @@ and page; moving it to another group stays possible, so it is not refused.
 A device that a plugin is linked to, like the router, an access point or the host of Pi-hole, appears in the Network
 column ahead of the groups. It keeps its group, which decides its VLAN, and shows it as a badge.
 
-A device that sets its address itself, like the router, has "Address is set on the device itself" switched on: the
-address is shown and used for the plugin link, but it gets no static lease, and with it no `.lan` name from lanlord.
+Every fixed address says where it comes from. "Static lease from the router" is the default. "Set on the device" is for
+devices like the router itself: they get no lease, and lanlord adds a DNS name for them instead (a `domain` section
+`lanlordname_<device>`). A scan with neighbours reports a device that does not behave the way the list says.
 
 ### Settings
 

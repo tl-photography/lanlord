@@ -20,8 +20,11 @@ use serde_json::{Value, json};
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Entry, Observation, Seen, WifiClient};
 use crate::devices::{DeviceList, Error, normalize_mac};
-use crate::leases::{self, Change, HostSection, Network, Plan};
+use crate::leases::{self, Change, HostSection, NameSection, Network, Plan};
 use crate::preview::Preview;
+
+/// Static leases, DNS names and served networks of a device.
+type LeaseState = (Vec<HostSection>, Vec<NameSection>, Vec<Network>);
 
 /// The kernel's table of IPv4 neighbours on the device.
 const NEIGHBOURS: &str = "/proc/net/arp";
@@ -201,23 +204,31 @@ impl OpenWrt {
 
     /// The static leases and the networks the device serves with DHCP. A device without a DHCP pool, like an access
     /// point, is not asked for its interfaces: its ACL does not need to allow that.
-    async fn lease_state(&self, session: &str) -> Result<(Vec<HostSection>, Vec<Network>), String> {
+    async fn lease_state(&self, session: &str) -> Result<LeaseState, String> {
         let dhcp = self
             .call(session, "uci", "get", &json!({ "config": leases::CONFIG }))
             .await?;
         let served = served_interfaces(&dhcp);
         if served.is_empty() {
-            return Ok((host_sections(&dhcp), Vec::new()));
+            return Ok((host_sections(&dhcp), name_sections(&dhcp), Vec::new()));
         }
         let dump = self
             .call(session, "network.interface", "dump", &json!({}))
             .await?;
-        Ok((host_sections(&dhcp), served_networks(&served, &dump)))
+        Ok((
+            host_sections(&dhcp),
+            name_sections(&dhcp),
+            served_networks(&served, &dump),
+        ))
     }
 
     async fn plan_in(&self, session: &str, devices: &DeviceList) -> Result<Option<Plan>, String> {
-        let (hosts, networks) = self.lease_state(session).await?;
-        Ok((!networks.is_empty()).then(|| leases::plan(devices, &hosts, &networks)))
+        let (hosts, names, networks) = self.lease_state(session).await?;
+        Ok((!networks.is_empty()).then(|| {
+            let mut plan = leases::plan(devices, &hosts, &networks);
+            leases::plan_names(devices, &names, &networks, &mut plan);
+            plan
+        }))
     }
 
     async fn preview(&self, devices: DeviceList) -> Result<Option<Preview>, String> {
@@ -289,7 +300,7 @@ impl OpenWrt {
                 ..
             } => (
                 "add",
-                json!({ "config": leases::CONFIG, "type": "host", "name": section, "values": values(options) }),
+                json!({ "config": leases::CONFIG, "type": leases::section_type(section), "name": section, "values": values(options) }),
             ),
             Change::Set {
                 section,
@@ -548,6 +559,19 @@ fn host_sections(dhcp: &Value) -> Vec<HostSection> {
             macs: macs(section.get("mac")),
             ip: text(section, "ip"),
             dns: text(section, "dns"),
+        })
+        .collect()
+}
+
+/// The DNS names lanlord owns.
+fn name_sections(dhcp: &Value) -> Vec<NameSection> {
+    sections(dhcp)
+        .filter(|section| text(section, ".type") == "domain")
+        .filter(|section| text(section, ".name").starts_with(leases::NAME_PREFIX))
+        .map(|section| NameSection {
+            id: text(section, ".name"),
+            name: text(section, "name"),
+            ip: text(section, "ip"),
         })
         .collect()
 }

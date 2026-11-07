@@ -99,6 +99,16 @@ pub enum Finding {
         /// VLAN in the entry.
         actual: u16,
     },
+    /// The device has a static lease but talks without one: its address is set on the device.
+    LeaseUnused {
+        /// Name in the list.
+        device: String,
+    },
+    /// The device should set its address itself but has a DHCP lease.
+    UnexpectedLease {
+        /// Name in the list.
+        device: String,
+    },
     /// An entry for a MAC address that is not in the list.
     Foreign {
         /// MAC address.
@@ -106,6 +116,32 @@ pub enum Finding {
         /// Name in the entry.
         name: String,
     },
+}
+
+/// Devices that do not get their address the way the list says. Only a plugin that hands out leases can tell.
+fn address_source(list: &DeviceList, observation: &Observation) -> Vec<Finding> {
+    let leases: HashSet<&str> = observation
+        .seen
+        .iter()
+        .filter(|seen| seen.ip.is_some())
+        .map(|seen| seen.mac.as_str())
+        .collect();
+    let Some(neighbours) = observation.neighbours.as_ref().filter(|_| !leases.is_empty()) else {
+        return Vec::new();
+    };
+    list.devices
+        .iter()
+        .filter(|device| device.ip.is_some())
+        .filter_map(|device| {
+            let has_lease = leases.contains(device.mac.as_str());
+            let device_name = device.name.clone();
+            if device.self_assigned {
+                return has_lease.then_some(Finding::UnexpectedLease { device: device_name });
+            }
+            (!has_lease && neighbours.iter().any(|seen| seen.mac == device.mac))
+                .then_some(Finding::LeaseUnused { device: device_name })
+        })
+        .collect()
 }
 
 /// Compares the list with the observation of one plugin. The findings are sorted: unknown devices first, then
@@ -129,6 +165,8 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
             });
         }
     }
+
+    findings.extend(address_source(list, observation));
 
     let Some(entries) = &observation.entries else {
         return findings;

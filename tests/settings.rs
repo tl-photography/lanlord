@@ -170,7 +170,7 @@ async fn the_switch_for_a_self_assigned_address_is_saved() {
     let saved = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
     assert!(saved.contains("self_assigned = true"), "{saved}");
     let (_, page) = send(&app, get("/devices/tv")).await;
-    assert!(page.contains(r#"value="true" checked"#), "{page}");
+    assert!(page.contains(r#"value="true" selected"#), "{page}");
     let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
     assert!(log.contains("address set on the device"), "{log}");
 }

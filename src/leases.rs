@@ -13,6 +13,8 @@ use crate::preview::{Preview, Step};
 pub const CONFIG: &str = "dhcp";
 /// Prefix of the sections lanlord owns.
 const OWN_PREFIX: &str = "lanlord_";
+/// Prefix of the DNS names lanlord owns, for devices that set their address themselves.
+pub const NAME_PREFIX: &str = "lanlordname_";
 
 /// A `host` section as the router has it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +49,17 @@ impl Network {
             .unwrap_or(0);
         u32::from(ip) & mask == u32::from(self.address) & mask
     }
+}
+
+/// A `domain` section lanlord owns: a DNS name without a lease.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NameSection {
+    /// Section id.
+    pub id: String,
+    /// Host name.
+    pub name: String,
+    /// Address, as text.
+    pub ip: String,
 }
 
 /// One change of a uci section.
@@ -95,9 +108,11 @@ impl Change {
             format!("uci set {CONFIG}.{section}.{key}='{value}'")
         };
         match self {
-            Self::Add { section, values, .. } => std::iter::once(format!("uci set {CONFIG}.{section}=host"))
-                .chain(values.iter().map(|value| option(section, value)))
-                .collect(),
+            Self::Add { section, values, .. } => {
+                std::iter::once(format!("uci set {CONFIG}.{section}={}", section_type(section)))
+                    .chain(values.iter().map(|value| option(section, value)))
+                    .collect()
+            }
             Self::Set { section, values, .. } => values.iter().map(|value| option(section, value)).collect(),
             Self::Delete { section, .. } => vec![format!("uci delete {CONFIG}.{section}")],
         }
@@ -304,6 +319,64 @@ pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> P
         }
     }
     plan
+}
+
+/// Adds the DNS names of devices that set their address themselves: they have no lease that would give them one.
+pub fn plan_names(list: &DeviceList, names: &[NameSection], networks: &[Network], plan: &mut Plan) {
+    let mut wanted: Vec<String> = Vec::new();
+    for device in list.devices.iter().filter(|device| device.self_assigned) {
+        let Some(ip) = device.ip else { continue };
+        let id = name_id(&device.name);
+        let own = names.iter().find(|name| name.id == id);
+        wanted.push(id.clone());
+        if !networks.iter().any(|network| network.contains(ip)) {
+            continue;
+        }
+        let values = vec![
+            ("name".to_owned(), device.name.clone()),
+            ("ip".to_owned(), ip.to_string()),
+        ];
+        match own {
+            None => plan.changes.push(Change::Add {
+                section: id,
+                values,
+                why: format!("{}: DNS name for an address set on the device", device.name),
+            }),
+            Some(own) if own.name != device.name || own.ip != ip.to_string() => {
+                plan.changes.push(Change::Set {
+                    section: id,
+                    values,
+                    why: format!("{}: update the DNS name", device.name),
+                });
+            }
+            Some(_) => {}
+        }
+    }
+    for name in names.iter().filter(|name| !wanted.contains(&name.id)) {
+        plan.changes.push(Change::Delete {
+            section: name.id.clone(),
+            why: format!(
+                "{}: no address set on the device any more, remove its DNS name",
+                name.name
+            ),
+        });
+    }
+}
+
+/// The uci type of a section lanlord adds.
+#[must_use]
+pub fn section_type(section: &str) -> &'static str {
+    if section.starts_with(NAME_PREFIX) {
+        "domain"
+    } else {
+        "host"
+    }
+}
+
+/// The section id of a DNS name.
+#[must_use]
+pub fn name_id(name: &str) -> String {
+    format!("{NAME_PREFIX}{}", name.to_ascii_lowercase().replace('-', "_"))
 }
 
 #[cfg(test)]
