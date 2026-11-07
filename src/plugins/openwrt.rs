@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD as BASE64;
 use reqwest::{Client, Url};
 use rustls::client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier};
 use rustls::crypto::CryptoProvider;
@@ -18,7 +20,7 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
-use crate::compare::{Entry, Observation, Seen, WifiClient};
+use crate::compare::{Entry, Observation, PortEntry, Seen, WifiClient};
 use crate::devices::{DeviceList, Error, normalize_mac};
 use crate::leases::{self, Change, HostSection, NameSection, Network, Plan};
 use crate::preview::Preview;
@@ -28,6 +30,10 @@ type LeaseState = (Vec<HostSection>, Vec<NameSection>, Vec<Network>);
 
 /// The kernel's table of IPv4 neighbours on the device.
 const NEIGHBOURS: &str = "/proc/net/arp";
+/// The bridge whose ports are read.
+const BRIDGE: &str = "br-lan";
+/// Size of one entry in the kernel's forwarding table of a bridge.
+const FDB_ENTRY_BYTES: usize = 16;
 
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -180,7 +186,53 @@ impl OpenWrt {
             Err(error) if error.ends_with("not found") || error.ends_with("ubus error 3") => {}
             Err(error) => observation.notes.push(format!("Neighbours not read: {error}")),
         }
+        match self.bridge_ports(&session).await {
+            Ok(ports) => observation.ports = ports,
+            // Without rpcd's file module or a bridge there is nothing to read.
+            Err(error) if error.ends_with("not found") || error.ends_with("ubus error 3") => {}
+            Err(error) => observation.notes.push(format!("Ports not read: {error}")),
+        }
         Ok(observation)
+    }
+
+    /// The MAC addresses learned on the cabled ports of the bridge.
+    async fn bridge_ports(&self, session: &str) -> Result<Vec<PortEntry>, String> {
+        let status = self
+            .call(session, "network.device", "status", &json!({ "name": BRIDGE }))
+            .await?;
+        let mut ports = HashMap::new();
+        for member in status
+            .get("bridge-members")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter(|member| !is_wifi(member))
+        {
+            let path = format!("/sys/class/net/{BRIDGE}/brif/{member}/port_no");
+            let answer = self
+                .call(session, "file", "read", &json!({ "path": path }))
+                .await?;
+            if let Some(number) = answer.get("data").and_then(Value::as_str).and_then(port_number) {
+                ports.insert(number, member.to_owned());
+            }
+        }
+        let path = format!("/sys/class/net/{BRIDGE}/brforward");
+        let table = self
+            .call(session, "file", "read", &json!({ "path": path, "base64": true }))
+            .await?;
+        let data = table.get("data").and_then(Value::as_str).unwrap_or_default();
+        let bytes = BASE64.decode(data).map_err(|error| error.to_string())?;
+        Ok(forwarding_table(&bytes)
+            .into_iter()
+            .filter_map(|(mac, number)| {
+                Some(PortEntry {
+                    mac,
+                    switch: self.label.clone(),
+                    port: ports.get(&number)?.clone(),
+                })
+            })
+            .collect())
     }
 
     /// The devices connected to each Wi-Fi interface of the device.
@@ -651,6 +703,30 @@ fn neighbours(table: &str) -> Vec<Seen> {
                 ip: address.parse::<Ipv4Addr>().ok().filter(|ip| !ip.is_link_local()),
                 hostname: String::new(),
             })
+        })
+        .collect()
+}
+
+/// Whether a bridge member is a Wi-Fi interface. Its clients come from iwinfo, with their network.
+fn is_wifi(member: &str) -> bool {
+    member.starts_with("phy") || member.starts_with("wlan")
+}
+
+/// Reads a port number from sysfs, like `0x4`.
+fn port_number(text: &str) -> Option<u16> {
+    u16::from_str_radix(text.trim().trim_start_matches("0x"), 16).ok()
+}
+
+/// Reads the kernel's `__fdb_entry` records: the learned MAC addresses and their port numbers.
+fn forwarding_table(bytes: &[u8]) -> Vec<(String, u16)> {
+    bytes
+        .as_chunks::<FDB_ENTRY_BYTES>()
+        .0
+        .iter()
+        .filter(|entry| entry[7] == 0 && entry[0] & 1 == 0)
+        .map(|entry| {
+            let mac: Vec<String> = entry[..6].iter().map(|byte| format!("{byte:02x}")).collect();
+            (mac.join(":"), u16::from_le_bytes([entry[6], entry[12]]))
         })
         .collect()
 }

@@ -64,10 +64,15 @@ user may read and change, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
         "network.interface": ["dump"],
         "uci": ["get"],
         "iwinfo": ["devices", "info", "assoclist"],
+        "network.device": ["status"],
         "file": ["read"]
       },
       "uci": ["dhcp", "wireless"],
-      "file": { "/proc/net/arp": ["read"] }
+      "file": {
+        "/proc/net/arp": ["read"],
+        "/sys/class/net/br-lan/brforward": ["read"],
+        "/sys/class/net/br-lan/brif/*/port_no": ["read"]
+      }
     },
     "write": {
       "ubus": { "uci": ["add", "set", "delete", "apply", "confirm", "rollback", "revert"] },
@@ -99,6 +104,12 @@ openssl s_client -connect router.lan:443 </dev/null 2>/dev/null | openssl x509 -
 
 Assigning VLANs per Wi-Fi device needs the full `wpad` variant (`wpad-mbedtls` or `wpad-openssl`) on every access
 point; the basic variants cannot.
+
+### SNMP
+
+For a managed switch: lanlord reads with SNMP v2c which MAC addresses the switch learned on which port
+(`BRIDGE-MIB`, `Q-BRIDGE-MIB`) and changes nothing. Use a read-only community, in a file in the data directory with
+mode 0600, and link the plugin to the switch in the device list. SNMP v2c is not encrypted, so limit it to the LAN.
 
 ### Pi-hole
 
@@ -155,7 +166,9 @@ rest of its lease, and one with a static address and a cable is not seen at all.
 
 The Devices page also shows the network as a tree from the router down. Choose "Connected to", the port and cable or
 powerline on a device's page. Wi-Fi clients need none of that: a scan puts them under their access point, as long as
-its plugin is linked to a device. Devices that have no place yet are listed below the tree.
+its plugin is linked to a device. Cabled devices without "Connected to" are placed from the bridge table of a linked
+OpenWrt device (see the ACL) or a switch (see SNMP), if nothing else was learned on their port. What you set yourself
+wins. Devices that have no place yet are listed below the tree.
 
 ### Subnets
 

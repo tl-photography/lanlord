@@ -1,4 +1,5 @@
-//! The network as a tree: who hangs on whom. Wi-Fi clients are placed by the last scan, the rest by the device list.
+//! The network as a tree: who hangs on whom. Wi-Fi clients are placed by the last scan, the rest by the device list,
+//! or by the port a scan found them on if the list does not say.
 
 use std::collections::HashSet;
 
@@ -43,10 +44,14 @@ fn place(device: &Device, list: &DeviceList, live: &Live) -> Option<(String, Str
     {
         return Some((name.to_owned(), format!("Wi-Fi: {ssid}")));
     }
-    let uplink =
-        (!device.uplink.is_empty() && device.uplink != device.name).then(|| device.uplink.clone())?;
-    let exists = list.devices.iter().any(|other| other.name == uplink);
-    exists.then(|| {
+    let exists = |name: &str| list.devices.iter().any(|other| other.name == name);
+    if device.uplink.is_empty() {
+        let (switch, port) = live.wired(&device.mac)?;
+        return (switch != device.name && exists(switch))
+            .then(|| (switch.to_owned(), format!("{port}, detected")));
+    }
+    let uplink = (device.uplink != device.name).then(|| device.uplink.clone())?;
+    exists(&uplink).then(|| {
         let link = match (device.medium.label(), device.port.as_str()) {
             ("", port) => port.to_owned(),
             (medium, "") => medium.to_owned(),
