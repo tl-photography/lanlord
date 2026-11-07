@@ -95,7 +95,13 @@ fn find<'a>(changes: &'a [Change], id: &str) -> &'a Section {
 
 #[test]
 fn the_first_network_turns_the_bridge_into_vlans() {
-    let result = plan(&wanted_plan(), &router(), Role::Router, &passwords());
+    let result = plan(
+        &wanted_plan(),
+        &router(),
+        Role::Router,
+        &passwords(),
+        &BTreeMap::new(),
+    );
     assert_eq!(result.notes, Vec::<String>::new());
     let changes = &result.changes;
     assert_eq!(
@@ -162,10 +168,23 @@ fn the_first_network_turns_the_bridge_into_vlans() {
 
 #[test]
 fn nothing_is_left_after_applying() {
-    let first = plan(&wanted_plan(), &router(), Role::Router, &passwords());
+    let first = plan(
+        &wanted_plan(),
+        &router(),
+        Role::Router,
+        &passwords(),
+        &BTreeMap::new(),
+    );
     let after = applied(router(), &first.changes);
     assert_eq!(
-        plan(&wanted_plan(), &after, Role::Router, &passwords()).changes,
+        plan(
+            &wanted_plan(),
+            &after,
+            Role::Router,
+            &passwords(),
+            &BTreeMap::new()
+        )
+        .changes,
         []
     );
 }
@@ -174,7 +193,7 @@ fn nothing_is_left_after_applying() {
 fn without_a_dns_service_the_router_answers() {
     let mut wanted = wanted_plan();
     wanted.dns_service.clear();
-    let changes = plan(&wanted, &router(), Role::Router, &passwords()).changes;
+    let changes = plan(&wanted, &router(), Role::Router, &passwords(), &BTreeMap::new()).changes;
     let dns = find(&changes, "lanlordnet_iot_dns");
     assert_eq!(dns.get("dest"), None, "to the router itself");
     assert_eq!(
@@ -185,7 +204,14 @@ fn without_a_dns_service_the_router_answers() {
 
 #[test]
 fn an_access_point_only_bridges() {
-    let changes = plan(&wanted_plan(), &router(), Role::AccessPoint, &passwords()).changes;
+    let changes = plan(
+        &wanted_plan(),
+        &router(),
+        Role::AccessPoint,
+        &passwords(),
+        &BTreeMap::new(),
+    )
+    .changes;
     assert!(changes.iter().all(|change| match change {
         Change::Add(section, _) => section.config == "network" || section.config == "wireless",
         _ => true,
@@ -197,11 +223,17 @@ fn an_access_point_only_bridges() {
 
 #[test]
 fn a_removed_group_takes_its_sections_and_the_lan_stays() {
-    let first = plan(&wanted_plan(), &router(), Role::Router, &passwords());
+    let first = plan(
+        &wanted_plan(),
+        &router(),
+        Role::Router,
+        &passwords(),
+        &BTreeMap::new(),
+    );
     let after = applied(router(), &first.changes);
     let mut fewer = wanted_plan();
     fewer.groups.truncate(1);
-    let changes = plan(&fewer, &after, Role::Router, &passwords()).changes;
+    let changes = plan(&fewer, &after, Role::Router, &passwords(), &BTreeMap::new()).changes;
     assert_ne!(changes, []);
     assert!(
         changes
@@ -213,11 +245,17 @@ fn a_removed_group_takes_its_sections_and_the_lan_stays() {
 
 #[test]
 fn a_changed_subnet_changes_only_what_differs() {
-    let first = plan(&wanted_plan(), &router(), Role::Router, &passwords());
+    let first = plan(
+        &wanted_plan(),
+        &router(),
+        Role::Router,
+        &passwords(),
+        &BTreeMap::new(),
+    );
     let after = applied(router(), &first.changes);
     let mut moved = wanted_plan();
     moved.groups[1].subnet = "203.0.113.0/24".to_owned();
-    let changes = plan(&moved, &after, Role::Router, &passwords()).changes;
+    let changes = plan(&moved, &after, Role::Router, &passwords(), &BTreeMap::new()).changes;
     assert_eq!(
         changes.len(),
         1,
@@ -235,7 +273,13 @@ fn vlans_set_up_outside_lanlord_are_left_alone() {
         "bridge-vlan",
         &[("vlan", Opt::one("1"))],
     ));
-    let result = plan(&wanted_plan(), &current, Role::Router, &passwords());
+    let result = plan(
+        &wanted_plan(),
+        &current,
+        Role::Router,
+        &passwords(),
+        &BTreeMap::new(),
+    );
     assert_eq!(result.changes, []);
     assert!(result.notes[0].contains("outside lanlord"), "{:?}", result.notes);
 }
@@ -244,7 +288,13 @@ fn vlans_set_up_outside_lanlord_are_left_alone() {
 fn a_group_without_subnet_or_password_is_explained() {
     let mut wanted = wanted_plan();
     wanted.groups.push(group("guest", 30, "", ""));
-    let result = plan(&wanted, &router(), Role::Router, &HashMap::new());
+    let result = plan(
+        &wanted,
+        &router(),
+        Role::Router,
+        &HashMap::new(),
+        &BTreeMap::new(),
+    );
     assert!(
         result
             .notes
@@ -268,7 +318,74 @@ fn only_lan_groups_change_nothing() {
     let mut wanted = wanted_plan();
     wanted.groups.truncate(1);
     assert_eq!(
-        plan(&wanted, &router(), Role::Router, &passwords()),
+        plan(&wanted, &router(), Role::Router, &passwords(), &BTreeMap::new()),
         NetworkPlan::default()
     );
+}
+
+#[test]
+fn a_port_with_one_device_carries_its_vlan_untagged() {
+    let mut wanted = wanted_plan();
+    let interface = |name: &str, mac: &str, group: &str| crate::devices::Interface {
+        name: name.to_owned(),
+        mac: mac.to_owned(),
+        group: group.to_owned(),
+        ip: None,
+        self_assigned: false,
+        unreviewed: false,
+        note: String::new(),
+        device: String::new(),
+    };
+    wanted.devices.interfaces = vec![
+        interface("bridge", "aa:bb:cc:00:00:01", "iot"),
+        interface("nas", "aa:bb:cc:00:00:02", "lan"),
+        interface("tv", "aa:bb:cc:00:00:03", "iot"),
+    ];
+    let ports = BTreeMap::from([
+        (
+            "lan1".to_owned(),
+            BTreeSet::from(["aa:bb:cc:00:00:01".to_owned()]),
+        ),
+        (
+            "lan2".to_owned(),
+            BTreeSet::from(["aa:bb:cc:00:00:02".to_owned(), "aa:bb:cc:00:00:03".to_owned()]),
+        ),
+        (
+            "wan2".to_owned(),
+            BTreeSet::from(["aa:bb:cc:00:00:99".to_owned()]),
+        ),
+    ]);
+    let changes = plan(&wanted, &router(), Role::Router, &passwords(), &ports).changes;
+    assert_eq!(
+        find(&changes, "lanlordnet_vlan1").get("ports"),
+        Some(&Opt::list(&["lan2:u*", "wan2:u*"])),
+        "lan1 leaves the LAN, an unknown device stays"
+    );
+    assert_eq!(
+        find(&changes, "lanlordnet_iot_vlan").get("ports"),
+        Some(&Opt::list(&["lan1:u*", "lan2:t", "wan2:t"])),
+        "a shared port carries the VLAN tagged"
+    );
+}
+
+#[test]
+fn a_port_never_moves_into_a_network_that_is_not_built() {
+    let mut wanted = wanted_plan();
+    wanted.groups[1].subnet.clear();
+    wanted.devices.interfaces = vec![crate::devices::Interface {
+        name: "bridge".to_owned(),
+        mac: "aa:bb:cc:00:00:01".to_owned(),
+        group: "iot".to_owned(),
+        ip: None,
+        self_assigned: false,
+        unreviewed: false,
+        note: String::new(),
+        device: String::new(),
+    }];
+    let ports = BTreeMap::from([(
+        "lan1".to_owned(),
+        BTreeSet::from(["aa:bb:cc:00:00:01".to_owned()]),
+    )]);
+    let result = plan(&wanted, &router(), Role::Router, &passwords(), &ports);
+    assert_eq!(result.changes, [], "no network, no change: {:?}", result.changes);
 }

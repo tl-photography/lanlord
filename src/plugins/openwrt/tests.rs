@@ -621,3 +621,23 @@ async fn without_the_setting_networks_are_left_alone() {
     let preview = router.plan(plan_with_iot()).await.unwrap().unwrap();
     assert!(preview.steps.iter().all(|step| !step.description.contains("iot")));
 }
+
+#[test]
+fn the_forwarding_table_keeps_learned_addresses() {
+    let mut table = Vec::new();
+    let mut entry = |mac: [u8; 6], port: u8, local: u8| {
+        table.extend_from_slice(&mac);
+        table.extend_from_slice(&[port, local, 0, 0, 0, 0, 0, 0, 0, 0]);
+    };
+    entry([0xaa, 0xbb, 0xcc, 0, 0, 1], 3, 0);
+    entry([0xaa, 0xbb, 0xcc, 0, 0, 2], 3, 1);
+    entry([0x33, 0x33, 0, 0, 0, 1], 3, 0);
+    assert_eq!(forwarding_table(&table), [("aa:bb:cc:00:00:01".to_owned(), 3)]);
+    assert_eq!(port_number("0x4\n"), Some(4));
+    assert_eq!(port_number("none"), None);
+    assert!(is_wifi("phy0-ap0"));
+    assert!(!is_wifi("lan1"));
+    let history = read_port_history("lan1 AA:BB:CC:00:00:01\nlan1 aa:bb:cc:00:00:01\nbroken\nlan2 x\n");
+    assert_eq!(history.len(), 1);
+    assert_eq!(history["lan1"].len(), 1);
+}

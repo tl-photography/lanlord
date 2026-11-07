@@ -155,7 +155,14 @@ The first network turns the bridge into a VLAN bridge: VLAN 1 untagged on every 
 `br-lan.1`. Every other section lanlord adds is named `lanlordnet_`. A bridge with VLANs set up outside lanlord is left
 alone. Network changes are applied with a rollback after 60 seconds, so a change that cuts lanlord off undoes itself.
 
-The ACL then also needs `network`, `firewall` and `wireless` in `read.uci` and `write.uci`.
+Cabled devices get their VLAN on the bridge port: a port where only one known device was ever seen carries that
+device's VLAN untagged and nothing else, every other port carries VLAN 1 untagged and the other VLANs tagged. The
+plugin keeps every MAC address ever seen per port in `<plugin>.ports` in the data directory, so a device that was quiet
+for a while does not make a shared port look like it had one device.
+
+The ACL then also needs `network`, `firewall` and `wireless` in `read.uci` and `write.uci`, `network.device`
+`status` in `read.ubus`, and in `read.file` `/sys/class/net/br-lan/brforward` and
+`/sys/class/net/br-lan/brif/*/port_no`.
 
 ### DNS
 

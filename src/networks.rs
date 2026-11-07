@@ -6,7 +6,7 @@
 //! stays untagged on every port and the LAN interface moves to `<bridge>.1`. That is the one section outside its own
 //! that lanlord changes. A bridge with VLANs set up outside lanlord is left alone.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hash::BuildHasher;
 use std::net::Ipv4Addr;
 
@@ -451,6 +451,8 @@ struct Device<'a> {
     bridge: Bridge<'a>,
     radios: Vec<String>,
     dns: Option<(Ipv4Addr, String)>,
+    /// Ports that lead to one device, with its VLAN.
+    access: HashMap<String, u16>,
 }
 
 /// The sections a group needs on this device.
@@ -464,8 +466,6 @@ fn group_sections<S: BuildHasher>(
     let base = id(&group.name);
     let vlan = group.vlan.to_string();
     let bridge = &device.bridge;
-    let tagged: Vec<String> = bridge.ports.iter().map(|port| format!("{port}:t")).collect();
-    let tagged: Vec<&str> = tagged.iter().map(String::as_str).collect();
     let interface = format!("{}.{vlan}", bridge.name);
     let mut wanted = vec![Section::new(
         "network",
@@ -474,7 +474,7 @@ fn group_sections<S: BuildHasher>(
         &[
             ("device", Opt::one(&bridge.name)),
             ("vlan", Opt::one(&vlan)),
-            ("ports", Opt::list(&tagged)),
+            ("ports", vlan_ports(bridge, &device.access, group.vlan)),
         ],
     )];
     match role {
@@ -485,11 +485,7 @@ fn group_sections<S: BuildHasher>(
             &[("device", Opt::one(&interface)), ("proto", Opt::one("none"))],
         )),
         Role::Router => {
-            let Some(sections) = router_sections(group, &base, &interface, device.dns.as_ref()) else {
-                notes.push(format!("{} needs a subnet to become a network", group.title()));
-                return Vec::new();
-            };
-            wanted.extend(sections);
+            wanted.extend(router_sections(group, &base, &interface, device.dns.as_ref()).unwrap_or_default());
         }
     }
     if !group.ssid.is_empty() {
@@ -610,13 +606,63 @@ fn changes(wanted: &[Section], current: &[Section], bridge: &Bridge<'_>, move_la
     changes
 }
 
-/// Plans the networks of one device. `passwords` holds the Wi-Fi password per group name.
+/// The ports that lead to exactly one known device, ever: they carry that device's VLAN untagged and nothing else.
+/// Only VLANs in `built` count, so a port never ends up in a network that does not exist.
+fn access_ports(
+    plan: &Plan,
+    bridge: &Bridge<'_>,
+    ports: &BTreeMap<String, BTreeSet<String>>,
+    built: &[u16],
+) -> HashMap<String, u16> {
+    bridge
+        .ports
+        .iter()
+        .filter_map(|port| {
+            let macs = ports.get(port)?;
+            let [mac] = macs.iter().collect::<Vec<_>>()[..] else {
+                return None;
+            };
+            let interface = plan
+                .devices
+                .interfaces
+                .iter()
+                .find(|interface| interface.mac == *mac)?;
+            let vlan = plan
+                .groups
+                .iter()
+                .find(|group| group.name == interface.group)?
+                .vlan;
+            built.contains(&vlan).then(|| (port.clone(), vlan))
+        })
+        .collect()
+}
+
+/// The ports of a VLAN on the bridge: untagged on its access ports, tagged on the shared ones. VLAN 1 is untagged
+/// on every port that is not an access port of another VLAN.
+fn vlan_ports(bridge: &Bridge<'_>, access: &HashMap<String, u16>, vlan: u16) -> Opt {
+    Opt::List(
+        bridge
+            .ports
+            .iter()
+            .filter_map(|port| match access.get(port) {
+                Some(own) if *own == vlan => Some(format!("{port}:u*")),
+                Some(_) => None,
+                None if vlan == LAN_VLAN => Some(format!("{port}:u*")),
+                None => Some(format!("{port}:t")),
+            })
+            .collect(),
+    )
+}
+
+/// Plans the networks of one device. `passwords` holds the Wi-Fi password per group name, `ports` every MAC address
+/// ever seen per bridge port.
 #[must_use]
 pub fn plan<S: BuildHasher>(
     plan: &Plan,
     current: &[Section],
     role: Role,
     passwords: &HashMap<String, String, S>,
+    ports: &BTreeMap<String, BTreeSet<String>>,
 ) -> NetworkPlan {
     let mut result = NetworkPlan::default();
     let networks: Vec<&Group> = plan
@@ -642,22 +688,6 @@ pub fn plan<S: BuildHasher>(
         ));
         return result;
     }
-    let mut wanted = Vec::new();
-    if find(current, "network", &format!("{PREFIX}vlan1")).is_some() || !networks.is_empty() {
-        let untagged: Vec<String> = bridge.ports.iter().map(|port| format!("{port}:u*")).collect();
-        let untagged: Vec<&str> = untagged.iter().map(String::as_str).collect();
-        wanted.push(Section::new(
-            "network",
-            format!("{PREFIX}vlan1"),
-            "bridge-vlan",
-            &[
-                ("device", Opt::one(&bridge.name)),
-                ("vlan", Opt::one(LAN_VLAN.to_string())),
-                ("ports", Opt::list(&untagged)),
-            ],
-        ));
-    }
-    let move_lan = !wanted.is_empty() && bridge.lan.text("device") != format!("{}.{LAN_VLAN}", bridge.name);
     let taken: Vec<String> = current
         .iter()
         .filter(|section| {
@@ -665,6 +695,45 @@ pub fn plan<S: BuildHasher>(
         })
         .map(|section| section.text("name"))
         .collect();
+    let built: Vec<&Group> = networks
+        .into_iter()
+        .filter(|group| {
+            if role == Role::AccessPoint {
+                return true;
+            }
+            if router_address(group).is_none() {
+                result
+                    .notes
+                    .push(format!("{} needs a subnet to become a network", group.title()));
+                return false;
+            }
+            if taken.contains(&zone_name(group)) {
+                result.notes.push(format!(
+                    "{}: the firewall zone {} exists already, the network is left out",
+                    group.title(),
+                    zone_name(group)
+                ));
+                return false;
+            }
+            true
+        })
+        .collect();
+    let vlans: Vec<u16> = built.iter().map(|group| group.vlan).collect();
+    let access = access_ports(plan, &bridge, ports, &vlans);
+    let mut wanted = Vec::new();
+    if find(current, "network", &format!("{PREFIX}vlan1")).is_some() || !built.is_empty() {
+        wanted.push(Section::new(
+            "network",
+            format!("{PREFIX}vlan1"),
+            "bridge-vlan",
+            &[
+                ("device", Opt::one(&bridge.name)),
+                ("vlan", Opt::one(LAN_VLAN.to_string())),
+                ("ports", vlan_ports(&bridge, &access, LAN_VLAN)),
+            ],
+        ));
+    }
+    let move_lan = !wanted.is_empty() && bridge.lan.text("device") != format!("{}.{LAN_VLAN}", bridge.name);
     let device = Device {
         radios: current
             .iter()
@@ -673,16 +742,9 @@ pub fn plan<S: BuildHasher>(
             .collect(),
         dns: dns_target(plan, current),
         bridge,
+        access,
     };
-    for group in networks {
-        if role == Role::Router && taken.contains(&zone_name(group)) {
-            result.notes.push(format!(
-                "{}: the firewall zone {} exists already, the network is left out",
-                group.title(),
-                zone_name(group)
-            ));
-            continue;
-        }
+    for group in built {
         wanted.extend(group_sections(group, &device, role, passwords, &mut result.notes));
     }
     result.changes = changes(&wanted, current, &device.bridge, move_lan);
@@ -693,7 +755,7 @@ pub fn plan<S: BuildHasher>(
 fn describe(section: &Section, what: &str) -> String {
     let name = section.id.trim_start_matches(PREFIX);
     let thing = match (section.config.as_str(), section.kind.as_str()) {
-        ("network", "bridge-vlan") => format!("VLAN {}", section.text("vlan")),
+        ("network", "bridge-vlan") => format!("VLAN {} on {}", section.text("vlan"), section.text("ports")),
         ("network", "interface") => format!("interface {name}"),
         ("dhcp", _) => format!("DHCP pool {name}"),
         ("firewall", "zone") => format!("firewall zone {}", section.text("name")),
