@@ -141,6 +141,13 @@ you make in lanlord are no such thing, they wait for Apply.
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
 
+### What a scan saw
+
+The device list is the plan. After a scan, a dot on the card says whether a device was seen, and a card shows the
+address in use if it is not the planned one, for example for a device waiting for its VLAN. This stays in memory until
+the next start. A device counts as seen while it has a DHCP lease or is on the Wi-Fi, so it can stay green for the rest
+of its lease after it left.
+
 ### Network column
 
 A device that a plugin is linked to, like the router, an access point or the host of Pi-hole, appears in the Network

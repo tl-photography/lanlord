@@ -10,6 +10,7 @@ mod groups;
 pub mod history;
 mod history_ui;
 pub mod leases;
+mod live;
 mod machines;
 pub mod notify;
 pub mod origin;
@@ -97,6 +98,8 @@ struct Inner {
     pending: Mutex<Option<(Instant, usize)>>,
     /// What the background scan remembers.
     watch: Mutex<watch::WatchState>,
+    /// What the scans saw.
+    live: Mutex<live::Live>,
 }
 
 impl AppState {
@@ -145,6 +148,7 @@ impl AppState {
                 history_path: data_dir.join("history.log"),
                 pending: Mutex::new(None),
                 watch: Mutex::default(),
+                live: Mutex::default(),
             }),
         })
     }
@@ -278,6 +282,8 @@ struct DeviceRow {
     mac: String,
     ip: String,
     note: String,
+    /// What the scans saw.
+    status: live::Status,
 }
 
 #[derive(Clone)]
@@ -345,14 +351,21 @@ pub(crate) fn server_error(error: &impl std::fmt::Display) -> Response {
     (StatusCode::INTERNAL_SERVER_ERROR, "Internal error, see the log").into_response()
 }
 
-fn device_row(device: &devices::Device, links: &HashMap<String, Vec<String>>) -> DeviceRow {
+fn device_row(device: &devices::Device, links: &HashMap<String, Vec<String>>, seen: &Seen<'_>) -> DeviceRow {
     DeviceRow {
         plugins: links.get(&device.name).cloned().unwrap_or_default(),
         name: device.name.clone(),
         mac: device.mac.clone(),
         ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
         note: device.note.clone(),
+        status: seen.live.status(device, seen.time),
     }
+}
+
+/// The sightings at the moment the page is made.
+struct Seen<'a> {
+    live: &'a live::Live,
+    time: u64,
 }
 
 fn initial(name: &str) -> char {
@@ -366,6 +379,7 @@ fn group_cards(
     config: &Config,
     links: &HashMap<String, Vec<String>>,
     move_groups: &[MoveGroup],
+    seen: &Seen<'_>,
 ) -> Vec<CardView> {
     let members: Vec<&devices::Device> = list
         .devices
@@ -382,7 +396,7 @@ fn group_cards(
                 machine: false,
                 move_action: format!("/devices/{}/move", device.name),
                 group: group.name.clone(),
-                rows: vec![device_row(device, links)],
+                rows: vec![device_row(device, links, seen)],
                 plugins: Vec::new(),
                 vlan_label: String::new(),
                 also_in: String::new(),
@@ -399,7 +413,7 @@ fn group_cards(
         let mut rows: Vec<DeviceRow> = members
             .iter()
             .filter(|other| other.machine == device.machine)
-            .map(|other| device_row(other, links))
+            .map(|other| device_row(other, links, seen))
             .collect();
         rows.sort_by_key(|row| row.name.to_ascii_lowercase());
         let elsewhere: Vec<String> = config
@@ -448,14 +462,22 @@ async fn index(State(state): State<AppState>) -> Response {
             label: group.title().to_owned(),
         })
         .collect();
+    let Ok(sightings) = state.inner.live.lock() else {
+        return server_error(&"scan results lock poisoned");
+    };
+    let seen = Seen {
+        live: &sightings,
+        time: live::now(),
+    };
     let mut network: Vec<CardView> = Vec::new();
     let groups = config
         .groups
         .iter()
         .map(|group| {
-            let (linked, cards): (Vec<_>, Vec<_>) = group_cards(group, &list, &config, &links, &move_groups)
-                .into_iter()
-                .partition(CardView::is_linked);
+            let (linked, cards): (Vec<_>, Vec<_>) =
+                group_cards(group, &list, &config, &links, &move_groups, &seen)
+                    .into_iter()
+                    .partition(CardView::is_linked);
             let in_network: usize = linked.iter().map(|card| card.rows.len()).sum();
             let all = in_network + cards.iter().map(|card| card.rows.len()).sum::<usize>();
             network.extend(linked.into_iter().map(|mut card| {

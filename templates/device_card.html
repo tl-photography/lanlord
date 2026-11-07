@@ -8,8 +8,8 @@
       {% if !card.also_in.is_empty() %}<span class="note">Also in {{ card.also_in }}</span>{% endif %}
       <ul class="connections{% if !overview.show_mac && !overview.show_ip %} compact{% endif %}">
         {% for row in card.rows %}
-        <li><span class="badge interface" title="Interface of {{ card.title }}">{{ row.name }}</span>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
-          {% include "device_meta.html" %}</li>
+        <li>{% include "device_status.html" %}<span class="badge interface" title="Interface of {{ card.title }}">{{ row.name }}</span>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
+          {% include "device_meta.html" %}{% if !row.status.away.is_empty() %}<span class="note">{{ row.status.away }}</span>{% endif %}</li>
         {% endfor %}
       </ul>
     </div>
@@ -19,9 +19,9 @@
   <a class="card" href="/devices/{{ row.name }}">
     <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
     <span class="text">
-      <strong>{{ row.name }}</strong>
+      <strong>{% include "device_status.html" %}{{ row.name }}</strong>
 <span class="badges">{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}{% if !card.vlan_label.is_empty() %}<span class="badge vlan" title="In group {{ card.vlan_label }}">{{ card.vlan_label }}</span>{% endif %}</span>
-      {% include "device_meta.html" %}
+      {% include "device_meta.html" %}{% if !row.status.away.is_empty() %}<span class="note">{{ row.status.away }}</span>{% endif %}
       {% if !row.note.is_empty() %}<span class="note">{{ row.note }}</span>{% endif %}
     </span>
   </a>

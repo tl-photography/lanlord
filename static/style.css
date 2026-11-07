@@ -153,6 +153,10 @@ code { font-size: 0.9em; }
 }
 .text { display: grid; min-width: 0; }
 .text strong { overflow-wrap: anywhere; }
+.dot { display: inline-block; width: 0.6rem; height: 0.6rem; margin-right: 0.35rem; border-radius: 50%; }
+.dot.seen { background: var(--interface); }
+.dot.away { border: 2px solid var(--muted); }
+.actual { color: var(--text); font-weight: 600; }
 .badges { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .badges:not(:empty) { margin: 0.15rem 0; }
 .meta, .note { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
@@ -225,5 +229,5 @@ button.secondary { background: transparent; color: var(--text); border-color: va
 .connections { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
 .connections li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.5rem; align-items: baseline; }
 .connections.compact { display: flex; flex-wrap: wrap; }
-.connections .meta { flex-basis: 100%; }
+.connections .meta, .connections .note { flex-basis: 100%; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
