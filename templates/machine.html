@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ name }}{% endblock %}
+{% block content %}
+<h1>{{ name }}</h1>
+{% if !error.is_empty() %}
+<p class="error" role="alert">{{ error }}</p>
+{% endif %}
+<p>Each interface has its own MAC address, lease and DNS name, and can be in its own group.</p>
+<table class="history">
+  <thead><tr><th scope="col">Interface</th><th scope="col">Address</th><th scope="col">MAC</th><th scope="col">Group</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
+  <tbody>
+    {% for interface in interfaces %}
+    <tr>
+      <td><a href="/devices/{{ interface.name }}">{{ interface.name }}</a></td>
+      <td>{{ interface.ip }}</td>
+      <td><code>{{ interface.mac }}</code></td>
+      <td>{{ interface.group }}</td>
+      <td><form method="post" action="/devices/{{ interface.name }}/delete" class="inline"><button type="submit">Delete</button></form></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if !available.is_empty() %}
+<h2>Add an existing device</h2>
+<form method="post" action="/machines/{{ name }}/interfaces" class="row">
+  <select name="device" aria-label="Device">
+    {% for device in available %}
+    <option value="{{ device.name }}">{{ device.name }}{% if !device.machine.is_empty() %} (in {{ device.machine }}){% endif %}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Add</button>
+</form>
+{% endif %}
+
+<h2>Add a new interface</h2>
+<form method="post" action="/devices">
+  <input type="hidden" name="machine" value="{{ name }}">
+  <input type="hidden" name="then" value="machine">
+  <label>Name <input name="name" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="{{ name }}-wifi"></label>
+  <label>MAC address <input name="mac" required autocapitalize="off" spellcheck="false" placeholder="aa:bb:cc:dd:ee:ff"></label>
+  <label>Group
+    <select name="group">
+      {% for group in groups %}
+      <option value="{{ group.name }}"{% if group.name == default_group %} selected{% endif %}>{{ group.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>IP address <input name="ip" inputmode="decimal" placeholder="optional"></label>
+  <button type="submit">Add interface</button>
+</form>
+
+<h2>Rename</h2>
+<form method="post" action="/machines/{{ name }}">
+  <label>Name <input name="new_name" value="{{ name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false"></label>
+  <p>The interfaces keep their names and DNS names.</p>
+  <button type="submit">Rename</button>
+</form>
+{% endblock %}

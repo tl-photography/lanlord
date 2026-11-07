@@ -24,4 +24,14 @@
     {% if has_targets %}<button type="submit" name="then" value="review" class="secondary">Save and review changes</button>{% endif %}
   </div>
 </form>
+{% if !original.is_empty() %}
+<div class="actions">
+  {% if form.machine.is_empty() %}
+  <form method="post" action="/devices/{{ original }}/interfaces" class="inline"><button type="submit">Add more interfaces</button></form>
+  {% else %}
+  <a href="/machines/{{ form.machine }}">All interfaces of {{ form.machine }}</a>
+  {% endif %}
+  <form method="post" action="/devices/{{ original }}/delete" class="inline"><button type="submit">Delete {{ original }}</button></form>
+</div>
+{% endif %}
 {% endblock %}

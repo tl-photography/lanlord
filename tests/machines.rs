@@ -78,8 +78,10 @@ async fn connections_of_a_machine_share_one_card_and_move_together() {
 
     let (status, _) = send(&app, post("/machines/ThinkPad/move", "group=iot")).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
-    let list = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
-    assert_eq!(list.matches("group = \"iot\"").count(), 3, "{list}");
+    let groups = ["lan".to_owned(), "iot".to_owned()];
+    let list = lanlord::devices::DeviceList::load(&data.path().join("devices.toml"), &groups).unwrap();
+    let in_iot = list.devices.iter().filter(|device| device.group == "iot").count();
+    assert_eq!(in_iot, 3, "{list:?}");
     let (_, page) = send(&app, get("/")).await;
     assert_eq!(page.matches(r#"data-device="machine:ThinkPad""#).count(), 1);
     assert!(!page.contains("Also in"));
@@ -112,4 +114,128 @@ async fn the_form_offers_machines_and_checks_the_name() {
     let (status, page) = send(&app, post("/devices/tv", bad)).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(page.contains("invalid machine name"));
+}
+
+#[tokio::test]
+async fn the_machine_page_shows_and_changes_its_interfaces() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+
+    let (status, page) = send(&app, get("/machines/ThinkPad")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        page.contains(r#"<a href="/devices/ThinkPadCable">ThinkPadCable</a>"#),
+        "{page}"
+    );
+    assert!(page.contains("Add a new interface"));
+    assert_eq!(
+        send(&app, get("/machines/Nothing")).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    let add = "name=ThinkPadUsb&mac=00:00:00:00:00:05&group=iot&ip=&machine=ThinkPad&then=machine";
+    let response = app.clone().oneshot(post("/devices", add)).await.unwrap();
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert_eq!(response.headers()[header::LOCATION], "/machines/ThinkPad");
+    let (_, page) = send(&app, get("/machines/ThinkPad")).await;
+    assert!(page.contains("ThinkPadUsb"));
+
+    let (status, _) = send(&app, post("/machines/ThinkPad", "new_name=Laptop")).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let (_, page) = send(&app, get("/machines/Laptop")).await;
+    assert!(
+        page.contains("ThinkPadDock"),
+        "the interfaces keep their names: {page}"
+    );
+    let (status, page) = send(&app, post("/machines/Laptop", "new_name=a%20b")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(page.contains("Invalid machine name"));
+
+    let response = app
+        .clone()
+        .oneshot(post("/devices/ThinkPadUsb/delete", ""))
+        .await
+        .unwrap();
+    assert_eq!(response.headers()[header::LOCATION], "/machines/Laptop");
+    let (_, page) = send(&app, get("/machines/Laptop")).await;
+    assert!(!page.contains("ThinkPadUsb"));
+    assert_eq!(
+        send(&app, post("/devices/ThinkPadUsb/delete", "")).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    let (_, history) = send(&app, get("/history")).await;
+    assert!(
+        history.contains("Machine ThinkPad renamed to Laptop"),
+        "{history}"
+    );
+    assert!(history.contains("Device ThinkPadUsb deleted"));
+}
+
+#[tokio::test]
+async fn a_device_becomes_a_machine_and_a_deleted_one_goes_home() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+
+    let (_, page) = send(&app, get("/devices/tv")).await;
+    assert!(page.contains("Add more interfaces"), "{page}");
+    let response = app
+        .clone()
+        .oneshot(post("/devices/tv/interfaces", ""))
+        .await
+        .unwrap();
+    assert_eq!(response.headers()[header::LOCATION], "/machines/tv");
+    let (_, page) = send(&app, get("/devices/tv")).await;
+    assert!(page.contains("All interfaces of tv"), "{page}");
+
+    let response = app.clone().oneshot(post("/devices/tv/delete", "")).await.unwrap();
+    assert_eq!(
+        response.headers()[header::LOCATION],
+        "/",
+        "the last interface of the machine"
+    );
+    assert_eq!(send(&app, get("/machines/tv")).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        send(&app, post("/devices/nothing/interfaces", "")).await.0,
+        StatusCode::NOT_FOUND
+    );
+}
+
+#[tokio::test]
+async fn an_existing_device_is_picked_as_an_interface() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+
+    let (_, page) = send(&app, get("/machines/ThinkPad")).await;
+    assert!(page.contains("<option value=\"tv\">tv</option>"), "{page}");
+    assert!(!page.contains("<option value=\"ThinkPadWifi\">"), "{page}");
+
+    let (status, _) = send(&app, post("/machines/ThinkPad/interfaces", "device=tv")).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let (_, page) = send(&app, get("/machines/ThinkPad")).await;
+    assert!(page.contains("href=\"/devices/tv\""), "{page}");
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("Device tv added to machine ThinkPad"), "{log}");
+
+    let (status, _) = send(&app, post("/machines/ThinkPad/interfaces", "device=gone")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = send(&app, post("/machines/nothing/interfaces", "device=tv")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_device_of_another_machine_says_where_it_is_and_moves() {
+    let data = data();
+    let path = data.path().join("devices.toml");
+    let list = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(&path, format!("{list}\n[[device]]\nname = \"dock\"\nmac = \"00:00:00:00:00:0a\"\ngroup = \"lan\"\nmachine = \"desk\"\n")).unwrap();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+
+    let (_, page) = send(&app, get("/machines/ThinkPad")).await;
+    assert!(page.contains("dock (in desk)"), "{page}");
+
+    let (status, _) = send(&app, post("/machines/ThinkPad/interfaces", "device=dock")).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let (status, _) = send(&app, get("/machines/desk")).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }

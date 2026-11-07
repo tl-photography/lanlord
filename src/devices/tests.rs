@@ -105,3 +105,50 @@ fn missing_file_is_an_empty_list_and_unknown_fields_are_rejected() {
     .unwrap();
     assert!(matches!(DeviceList::load(&path, &groups()), Err(Error::Parse(_))));
 }
+
+#[test]
+fn interfaces_are_nested_in_the_file_and_older_files_still_load() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("devices.toml");
+    let older = "[[device]]\nname = \"Dock\"\nmac = \"00:00:00:00:00:01\"\ngroup = \"lan\"\nmachine = \"ThinkPad\"\n\n\
+                 [[device]]\nname = \"Wifi\"\nmac = \"00:00:00:00:00:02\"\ngroup = \"iot\"\nmachine = \"ThinkPad\"\n\n\
+                 [[device]]\nname = \"tv\"\nmac = \"00:00:00:00:00:03\"\ngroup = \"lan\"\n";
+    fs::write(&path, older).unwrap();
+    let list = DeviceList::load(&path, &groups()).unwrap();
+    assert_eq!(list.devices.len(), 3);
+    assert_eq!(list.devices[1].machine, "ThinkPad");
+
+    list.save(&path, &groups()).unwrap();
+    let saved = fs::read_to_string(&path).unwrap();
+    assert!(saved.contains("[[device.interface]]"), "{saved}");
+    assert_eq!(saved.matches("machine").count(), 0, "{saved}");
+    assert_eq!(
+        saved.matches("[[device]]").count(),
+        2,
+        "a machine and a plain device: {saved}"
+    );
+    assert!(
+        saved.contains("name = \"tv\"\nmac = "),
+        "plain devices stay flat: {saved}"
+    );
+    assert_eq!(
+        DeviceList::load(&path, &groups()).unwrap(),
+        list,
+        "the same list comes back"
+    );
+}
+
+#[test]
+fn a_device_needs_a_mac_or_interfaces() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("devices.toml");
+    fs::write(&path, "[[device]]\nname = \"a\"\ngroup = \"lan\"\n").unwrap();
+    assert!(matches!(DeviceList::load(&path, &groups()), Err(Error::Parse(_))));
+    fs::write(
+        &path,
+        "[[device]]\nname = \"a\"\nmac = \"00:00:00:00:00:01\"\ngroup = \"lan\"\n\n\
+         [[device.interface]]\nname = \"b\"\nmac = \"00:00:00:00:00:02\"\n",
+    )
+    .unwrap();
+    assert!(matches!(DeviceList::load(&path, &groups()), Err(Error::Parse(_))));
+}
