@@ -141,6 +141,11 @@ you make in lanlord are no such thing, they wait for Apply.
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
 
+### Settings
+
+The Settings page chooses what the device overview shows: MAC and IP addresses are both on by default (`[overview]`
+in `lanlord.toml`, `show_mac` and `show_ip`).
+
 ### Login
 
 lanlord asks for one password. Its Argon2id hash is `password.hash` in the data directory; set it with

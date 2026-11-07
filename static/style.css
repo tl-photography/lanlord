@@ -13,6 +13,10 @@
   --accent: #0284c7;
   --accent-soft: #e0f2fe;
   --accent-text: #ffffff;
+  --linked: #6d28d9;
+  --linked-soft: #ede9fe;
+  --interface: #047857;
+  --interface-soft: #d1fae5;
   --topbar: #0f2a43;
   --topbar-text: #e6f1fb;
   --error: #b42318;
@@ -37,6 +41,10 @@
     --accent: #38bdf8;
     --accent-soft: #0c3550;
     --accent-text: #08131d;
+    --linked: #c4b5fd;
+    --linked-soft: #2e2350;
+    --interface: #6ee7b7;
+    --interface-soft: #0f3d2e;
     --topbar: #08131d;
     --topbar-text: #e6f1fb;
     --error: #ff8a80;
@@ -86,6 +94,8 @@ code { font-size: 0.9em; }
 .badge, .count { flex: 0 0 auto; white-space: nowrap; }
 .count { margin-left: auto; font-size: 0.85rem; }
 .badge { font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 1rem; background: var(--accent-soft); color: var(--accent); }
+.badge.linked { background: var(--linked-soft); color: var(--linked); }
+.badge.interface { background: var(--interface-soft); color: var(--interface); }
 .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
 .device-item {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem; align-items: center;
@@ -188,7 +198,14 @@ input:focus, select:focus, button:focus, a:focus-visible { outline: 2px solid va
 .actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
 button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
 .switch { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; }
-.connections { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.25rem; }
+.switch input { flex: none; width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--accent); }
+.panel { padding: 1.25rem; border: 1px solid var(--border); border-radius: 0.8rem; background: var(--surface); box-shadow: var(--shadow); }
+.panel h2 { margin: 0; }
+.panel p { margin: -0.6rem 0 0.2rem; color: var(--muted); font-size: 0.9rem; }
+.panel button { justify-self: start; }
+.connections { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
 .connections li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.5rem; align-items: baseline; }
-.connections a { font-weight: 600; }
+.connections.compact { display: flex; flex-wrap: wrap; }
+.connections .meta { flex-basis: 100%; }
+.text .badge { justify-self: start; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

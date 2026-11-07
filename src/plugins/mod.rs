@@ -187,6 +187,9 @@ pub struct Settings {
     /// The background scan.
     #[serde(default)]
     pub scan: ScanSettings,
+    /// What the device overview shows.
+    #[serde(default)]
+    pub overview: OverviewSettings,
     /// Configured plugin instances.
     #[serde(default, rename = "plugin")]
     pub plugins: Vec<toml::Table>,
@@ -202,6 +205,25 @@ pub struct ScanSettings {
     /// Whether changes made outside lanlord are undone automatically.
     #[serde(default)]
     pub restore: bool,
+}
+
+/// What the device overview shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct OverviewSettings {
+    /// Whether device cards show the MAC address.
+    pub show_mac: bool,
+    /// Whether device cards show the IP address.
+    pub show_ip: bool,
+}
+
+impl Default for OverviewSettings {
+    fn default() -> Self {
+        Self {
+            show_mac: true,
+            show_ip: true,
+        }
+    }
 }
 
 /// The plugins of `lanlord.toml`: the enabled ones that work, and a problem for every entry that could not be built.

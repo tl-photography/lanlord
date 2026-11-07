@@ -16,6 +16,7 @@ pub mod origin;
 mod plugin_ui;
 pub mod plugins;
 pub mod preview;
+mod settings_ui;
 pub mod watch;
 
 use std::collections::HashMap;
@@ -221,6 +222,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
+        .route("/settings", get(settings_ui::show).post(settings_ui::save))
         .route("/plugins", get(plugin_ui::list).post(plugin_ui::create))
         .route("/plugins/scan", axum::routing::post(plugin_ui::scan))
         .route("/plugins/background", axum::routing::post(plugin_ui::background))
@@ -309,6 +311,7 @@ struct IndexPage {
     nav: &'static str,
     groups: Vec<GroupView>,
     has_targets: bool,
+    overview: plugins::OverviewSettings,
 }
 
 impl IndexPage {
@@ -413,9 +416,8 @@ async fn index(State(state): State<AppState>) -> Response {
         Err(error) => return server_error(&error),
     };
     let config = state.groups();
-    let links = plugins::read_settings(&state.inner.plugins_path)
-        .map(|settings| plugins::linked_plugins(&settings))
-        .unwrap_or_default();
+    let settings = plugins::read_settings(&state.inner.plugins_path).unwrap_or_default();
+    let links = plugins::linked_plugins(&settings);
     let move_groups: Vec<MoveGroup> = config
         .groups
         .iter()
@@ -444,6 +446,7 @@ async fn index(State(state): State<AppState>) -> Response {
         nav: "devices",
         groups,
         has_targets,
+        overview: settings.overview,
     };
     match page.render() {
         Ok(html) => Html(html).into_response(),

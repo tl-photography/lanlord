@@ -24,6 +24,7 @@
       <a href="/plugins"{% if nav == "plugins" %} aria-current="page"{% endif %}>Plugins</a>
       <a href="/apply"{% if nav == "apply" %} aria-current="page"{% endif %}>Apply <span class="badge pending" id="pending-count" hidden></span></a>
       <a href="/history"{% if nav == "history" %} aria-current="page"{% endif %}>History</a>
+      <a href="/settings"{% if nav == "settings" %} aria-current="page"{% endif %}>Settings</a>
     </nav>
     <a class="button add" href="/devices/new">Add device</a>
     <form class="logout" method="post" action="/logout"><button type="submit">Log out</button></form>
