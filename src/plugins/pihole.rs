@@ -17,6 +17,7 @@ use super::openwrt::{MAX_RESPONSE_BYTES, client, parse_fingerprint, read_passwor
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Observation, Present};
 use crate::devices::{DeviceList, Error, normalize_mac};
+use crate::plan::Plan;
 use crate::preview::{Preview, Step};
 
 /// Start of the comment of the clients lanlord owns.
@@ -162,12 +163,12 @@ struct Planned {
 }
 
 #[derive(Debug, Default, PartialEq, Eq)]
-struct Plan {
+struct ClientPlan {
     changes: Vec<Planned>,
     notes: Vec<String>,
 }
 
-impl Plan {
+impl ClientPlan {
     fn preview(&self) -> Preview {
         Preview {
             steps: self
@@ -196,8 +197,8 @@ fn group_names(ids: &[u64], groups: &HashMap<String, u64>) -> BTreeSet<String> {
 
 /// Plans the groups and clients: missing groups first, then the clients of the devices with a fixed address, then
 /// the removal of own clients that no device needs any more.
-fn plan(devices: &DeviceList, state: &PiHoleState) -> Plan {
-    let mut plan = Plan::default();
+fn plan(devices: &DeviceList, state: &PiHoleState) -> ClientPlan {
+    let mut plan = ClientPlan::default();
     let with_address: Vec<_> = devices
         .interfaces
         .iter()
@@ -594,12 +595,12 @@ impl Plugin for PiHole {
         true
     }
 
-    fn plan(&self, devices: DeviceList) -> BoxFuture<'_, Result<Option<Preview>, String>> {
-        Box::pin(self.preview(devices))
+    fn plan(&self, plan: Plan) -> BoxFuture<'_, Result<Option<Preview>, String>> {
+        Box::pin(self.preview(plan.devices))
     }
 
-    fn apply(&self, devices: DeviceList, digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
-        Box::pin(self.write(devices, digest))
+    fn apply(&self, plan: Plan, digest: String) -> BoxFuture<'_, Result<Vec<String>, String>> {
+        Box::pin(self.write(plan.devices, digest))
     }
 }
 

@@ -14,6 +14,7 @@ pub mod leases;
 mod machines;
 pub mod notify;
 pub mod origin;
+pub mod plan;
 mod plugin_ui;
 pub mod plugins;
 pub mod preview;
@@ -193,6 +194,14 @@ impl AppState {
         if let Ok(mut pending) = self.inner.pending.lock() {
             *pending = None;
         }
+    }
+
+    /// The plan for the targets: devices and groups.
+    pub(crate) fn plan(&self) -> Result<plan::Plan, Error> {
+        Ok(plan::Plan {
+            devices: self.devices()?,
+            groups: self.groups().groups,
+        })
     }
 
     fn devices(&self) -> Result<DeviceList, Error> {

@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use crate::compare;
-use crate::devices::DeviceList;
 use crate::notify::Notification;
+use crate::plan::Plan;
 use crate::plugins::{self, Plugin};
 use crate::{AppState, apply, guests, history, plugin_ui};
 
@@ -46,8 +46,8 @@ pub fn spawn(state: AppState) {
     });
 }
 
-fn fingerprint(devices: &DeviceList) -> String {
-    let digest = ring::digest::digest(&ring::digest::SHA256, format!("{devices:?}").as_bytes());
+fn fingerprint(plan: &Plan) -> String {
+    let digest = ring::digest::digest(&ring::digest::SHA256, format!("{plan:?}").as_bytes());
     digest.as_ref()[..16].iter().fold(String::new(), |mut hex, byte| {
         let _ = write!(hex, "{byte:02x}");
         hex
@@ -74,20 +74,15 @@ fn check_drift(state: &AppState, name: &str, list: &str, steps: usize, digest: &
 }
 
 /// Finds drift on the targets; restores it if that is switched on. Returns texts for the notifications.
-async fn drift(
-    state: &AppState,
-    active: &[Arc<dyn Plugin>],
-    devices: &DeviceList,
-    restore: bool,
-) -> Vec<String> {
+async fn drift(state: &AppState, active: &[Arc<dyn Plugin>], plan: &Plan, restore: bool) -> Vec<String> {
     let targets: Vec<Arc<dyn Plugin>> = active
         .iter()
         .filter(|plugin| plugin.is_target())
         .cloned()
         .collect();
-    let list = fingerprint(devices);
+    let list = fingerprint(plan);
     let mut texts = Vec::new();
-    for (plugin, result) in targets.iter().zip(apply::previews(&targets, devices).await) {
+    for (plugin, result) in targets.iter().zip(apply::previews(&targets, plan).await) {
         let Ok(Some(preview)) = result else { continue };
         let name = plugin.name();
         let digest = preview.digest();
@@ -154,8 +149,8 @@ pub async fn run_once(state: &AppState) {
     let seconds = guests::now();
     let found = guests::take_in(state, &observations, complete, seconds);
     send(state, &active, "lanlord: devices", &found).await;
-    let Ok(devices) = state.devices() else { return };
-    let changed = drift(state, &active, &devices, restore).await;
+    let Ok(plan) = state.plan() else { return };
+    let changed = drift(state, &active, &plan, restore).await;
     send(state, &active, "lanlord: change outside lanlord", &changed).await;
     if let Ok(mut watch) = state.inner.watch.lock() {
         watch.last = format!(

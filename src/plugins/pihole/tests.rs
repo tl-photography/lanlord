@@ -43,7 +43,7 @@ fn state(groups: &[(&str, u64)], clients: Vec<ClientEntry>) -> PiHoleState {
     }
 }
 
-fn details(plan: &Plan) -> Vec<String> {
+fn details(plan: &ClientPlan) -> Vec<String> {
     plan.changes
         .iter()
         .map(|change| change.operation.detail())
@@ -292,9 +292,9 @@ async fn applies_groups_then_clients_and_always_logs_out() {
     assert!(pihole.is_target());
     assert_eq!(pihole.kind(), "pihole");
 
-    let preview = pihole.plan(devices()).await.unwrap().unwrap();
+    let preview = pihole.plan(devices().into()).await.unwrap().unwrap();
     assert_eq!(preview.steps.len(), 3);
-    let applied = pihole.apply(devices(), preview.digest()).await.unwrap();
+    let applied = pihole.apply(devices().into(), preview.digest()).await.unwrap();
     assert_eq!(applied.len(), 3);
     {
         let fake = fake.lock().unwrap();
@@ -308,7 +308,7 @@ async fn applies_groups_then_clients_and_always_logs_out() {
         );
         assert_eq!(fake.sessions, 0, "every session is ended");
     }
-    assert_eq!(pihole.plan(devices()).await.unwrap().unwrap().steps, []);
+    assert_eq!(pihole.plan(devices().into()).await.unwrap().unwrap().steps, []);
 
     assert_eq!(
         pihole.observe().await.unwrap(),
@@ -327,21 +327,24 @@ async fn stale_previews_wrong_passwords_and_refusals_are_reported() {
     let password = random_password();
     let (url, fake) = fake_pihole(with_old_client(&password)).await;
     let pihole = plugin(&url, data.path(), &password);
-    let error = pihole.apply(devices(), "stale".to_owned()).await.unwrap_err();
+    let error = pihole
+        .apply(devices().into(), "stale".to_owned())
+        .await
+        .unwrap_err();
     assert!(error.contains("changed since the preview"), "{error}");
     assert_eq!(fake.lock().unwrap().calls, Vec::<String>::new());
 
     let other = tempfile::tempdir().unwrap();
     let wrong = plugin(&url, other.path(), &random_password());
-    let error = wrong.plan(devices()).await.unwrap_err();
+    let error = wrong.plan(devices().into()).await.unwrap_err();
     assert!(
         error.contains("HTTP 401: password incorrect, check the app password"),
         "{error}"
     );
 
     fake.lock().unwrap().refuse_clients = true;
-    let digest = pihole.plan(devices()).await.unwrap().unwrap().digest();
-    let error = pihole.apply(devices(), digest).await.unwrap_err();
+    let digest = pihole.plan(devices().into()).await.unwrap().unwrap().digest();
+    let error = pihole.apply(devices().into(), digest).await.unwrap_err();
     assert!(error.contains("HTTP 400: Invalid client"), "{error}");
     assert!(
         error.contains("made before: Add the Pi-hole group iot"),
