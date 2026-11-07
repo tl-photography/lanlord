@@ -183,3 +183,41 @@ pub async fn add_interface(
         Err(error) => server_error(&error),
     }
 }
+
+/// Takes an interface out of its machine; it stays in the list as a device of its own.
+pub async fn remove_interface(
+    State(state): State<AppState>,
+    Path((name, device)): Path<(String, String)>,
+) -> Response {
+    let Ok(_guard) = state.inner.write_lock.lock() else {
+        return server_error(&"device list lock poisoned");
+    };
+    let mut list = match state.devices() {
+        Ok(list) => list,
+        Err(error) => return server_error(&error),
+    };
+    let Some(entry) = list
+        .devices
+        .iter_mut()
+        .find(|entry| entry.name == device && entry.machine == name)
+    else {
+        return (StatusCode::NOT_FOUND, "No such interface").into_response();
+    };
+    entry.machine.clear();
+    let machine_left = list.devices.iter().any(|entry| entry.machine == name);
+    match list.save(&state.inner.devices_path, &state.groups().group_names()) {
+        Ok(()) => {
+            history::record(
+                &state.inner.history_path,
+                &[format!("Device {device} removed from machine {name}")],
+            );
+            let next = if machine_left {
+                format!("/machines/{name}")
+            } else {
+                format!("/devices/{device}")
+            };
+            Redirect::to(&next).into_response()
+        }
+        Err(error) => server_error(&error),
+    }
+}

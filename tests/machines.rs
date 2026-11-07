@@ -244,3 +244,46 @@ async fn a_device_of_another_machine_says_where_it_is_and_moves() {
     let (status, _) = send(&app, get("/machines/desk")).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn an_interface_is_removed_from_its_machine_and_stays_a_device() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let remove = |device: &str| post(&format!("/machines/ThinkPad/interfaces/{device}/remove"), "");
+
+    let (_, page) = send(&app, get("/machines/ThinkPad")).await;
+    assert!(page.contains("Remove ThinkPadWifi from ThinkPad"), "{page}");
+    assert!(!page.contains("/delete"), "{page}");
+
+    let response = app.clone().oneshot(remove("ThinkPadWifi")).await.unwrap();
+    assert_eq!(response.headers()[header::LOCATION], "/machines/ThinkPad");
+    assert_eq!(send(&app, get("/devices/ThinkPadWifi")).await.0, StatusCode::OK);
+    let (_, page) = send(&app, get("/machines/ThinkPad")).await;
+    assert!(!page.contains("/devices/ThinkPadWifi"), "{page}");
+    assert_eq!(send(&app, remove("ThinkPadWifi")).await.0, StatusCode::NOT_FOUND);
+
+    let response = app.clone().oneshot(remove("ThinkPadDock")).await.unwrap();
+    assert_eq!(response.headers()[header::LOCATION], "/machines/ThinkPad");
+    let response = app.clone().oneshot(remove("ThinkPadCable")).await.unwrap();
+    assert_eq!(response.headers()[header::LOCATION], "/devices/ThinkPadCable");
+    assert_eq!(
+        send(&app, get("/machines/ThinkPad")).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(
+        log.contains("Device ThinkPadWifi removed from machine ThinkPad"),
+        "{log}"
+    );
+}
+
+#[tokio::test]
+async fn deleting_asks_first() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let (_, page) = send(&app, get("/devices/tv")).await;
+    assert!(page.contains(r#"data-confirm="Delete tv?""#), "{page}");
+    let (_, script) = send(&app, get("/app.js")).await;
+    assert!(script.contains("window.confirm"), "{script}");
+}

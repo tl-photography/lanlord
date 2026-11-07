@@ -19,7 +19,7 @@
       <td data-label="Devices">{{ group.devices }}</td>
       <td>
         {% if group.devices == 0 %}
-        <form method="post" action="/groups/{{ group.name }}/delete" class="inline"><button type="submit">Delete</button></form>
+        <form method="post" action="/groups/{{ group.name }}/delete" class="inline" data-confirm="Delete group {{ group.title }}?"><button type="submit">Delete</button></form>
         {% endif %}
       </td>
     </tr>

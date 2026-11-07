@@ -219,6 +219,10 @@ pub fn app(state: AppState) -> Router {
             "/machines/{name}/interfaces",
             axum::routing::post(machines::add_interface),
         )
+        .route(
+            "/machines/{name}/interfaces/{device}/remove",
+            axum::routing::post(machines::remove_interface),
+        )
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
@@ -300,6 +304,8 @@ struct CardView {
 }
 
 struct GroupView {
+    /// Devices of this group that the Network column shows.
+    in_network: usize,
     name: String,
     label: String,
     vlan: u16,
@@ -447,6 +453,8 @@ async fn index(State(state): State<AppState>) -> Response {
             let (linked, cards): (Vec<_>, Vec<_>) = group_cards(group, &list, &config, &links, &move_groups)
                 .into_iter()
                 .partition(CardView::is_linked);
+            let in_network: usize = linked.iter().map(|card| card.rows.len()).sum();
+            let all = in_network + cards.iter().map(|card| card.rows.len()).sum::<usize>();
             network.extend(linked.into_iter().map(|mut card| {
                 group.title().clone_into(&mut card.vlan_label);
                 card
@@ -455,7 +463,8 @@ async fn index(State(state): State<AppState>) -> Response {
                 name: group.name.clone(),
                 label: group.title().to_owned(),
                 vlan: group.vlan,
-                count: cards.iter().map(|card| card.rows.len()).sum(),
+                count: all,
+                in_network,
                 cards,
             }
         })

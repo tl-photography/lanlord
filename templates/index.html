@@ -20,7 +20,7 @@
   {% endif %}
   {% for group in groups %}
   <section class="group" data-group="{{ group.name }}">
-    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.count }} {% if group.count == 1 %}device{% else %}devices{% endif %}</span></h2>
+    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.count }} {% if group.count == 1 %}device{% else %}devices{% endif %}{% if group.in_network > 0 %}, {{ group.in_network }} in Network{% endif %}</span></h2>
     {% if group.cards.is_empty() %}
     <p class="empty">No devices.</p>
     {% else %}

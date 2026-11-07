@@ -156,7 +156,7 @@ async fn a_linked_device_moves_to_the_network_column_and_keeps_its_group() {
     assert!(network.contains(r#"<span class="badge vlan""#), "{page}");
     assert!(network.contains(r#"aria-label="Move tv""#), "{page}");
     assert!(!groups.contains("<strong>tv</strong>"), "{page}");
-    assert!(groups.contains("1 device<"), "{page}");
+    assert!(groups.contains("2 devices, 1 in Network<"), "{page}");
 }
 
 #[tokio::test]

@@ -69,7 +69,7 @@
       <span class="badge">{{ plugin.title }}</span>
       {% if !plugin.device.is_empty() %}<span class="badge linked" title="Linked to device {{ plugin.device }}">{{ plugin.device }}</span>{% endif %}
       <form class="plugin-toggle" method="post" action="/plugins/{{ plugin.name }}/enabled">
-        <label><input type="checkbox" name="enabled" value="true"{% if plugin.enabled %} checked{% endif %}> Enabled</label>
+        <label class="switch"><input type="checkbox" name="enabled" value="true"{% if plugin.enabled %} checked{% endif %}> Enabled</label>
         <noscript><button type="submit">Save</button></noscript>
       </form>
     </div>
@@ -101,7 +101,7 @@
         <button type="submit">Send test notification</button>
       </form>
       {% endif %}
-      <form method="post" action="/plugins/{{ plugin.name }}/delete" class="inline">
+      <form method="post" action="/plugins/{{ plugin.name }}/delete" class="inline" data-confirm="Delete {{ plugin.name }} and its settings?">
         <button type="submit">Delete {{ plugin.name }}</button>
       </form>
     </details>

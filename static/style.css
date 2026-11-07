@@ -10,7 +10,8 @@
   --surface-strong: #ffffff;
   --field: #ffffff;
   --border: #d3dce6;
-  --accent: #0284c7;
+  --field-border: #7c8a99;
+  --accent: #0369a1;
   --accent-soft: #e0f2fe;
   --accent-text: #ffffff;
   --linked: #6d28d9;
@@ -38,6 +39,7 @@
     --surface-strong: #1a222c;
     --field: #202a35;
     --border: #2e3a47;
+    --field-border: #7c8a99;
     --accent: #38bdf8;
     --accent-soft: #0c3550;
     --accent-text: #08131d;
@@ -112,6 +114,8 @@ code { font-size: 0.9em; }
 @media (prefers-reduced-motion: reduce) { .card { transition: none; } }
 .move-menu { position: relative; display: none; }
 .move-menu[open] { display: block; }
+/* Touch screens have no hover, so the button stays visible. */
+@media (hover: none) { .move-menu { display: block; } }
 /* Keyboard users reach the menu by tabbing to the card. */
 .device-item:focus-within .move-menu { display: block; }
 .move-menu summary {
@@ -163,7 +167,7 @@ form.row { display: flex; gap: 0.5rem; max-width: 32rem; }
 form.row select { flex: 1; }
 label { display: grid; gap: 0.25rem; font-weight: 600; }
 input, select {
-  font: inherit; font-weight: normal; padding: 0.55rem; border: 1px solid var(--border); border-radius: 0.5rem;
+  font: inherit; font-weight: normal; padding: 0.55rem; border: 1px solid var(--field-border); border-radius: 0.5rem;
   background: var(--field); color: var(--text); width: 100%;
 }
 /* The open list of a select uses these colors in most browsers. */

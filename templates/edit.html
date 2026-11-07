@@ -32,7 +32,7 @@
   {% else %}
   <a href="/machines/{{ form.machine }}">All interfaces of {{ form.machine }}</a>
   {% endif %}
-  <form method="post" action="/devices/{{ original }}/delete" class="inline"><button type="submit">Delete {{ original }}</button></form>
+  <form method="post" action="/devices/{{ original }}/delete" class="inline" data-confirm="Delete {{ original }}?"><button type="submit">Delete {{ original }}</button></form>
 </div>
 {% endif %}
 {% endblock %}
