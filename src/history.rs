@@ -169,6 +169,13 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
                         changes.push(format!("{what} {} → {}", optional(before), optional(after)));
                     }
                 }
+                if old.reachable_from != group.reachable_from {
+                    changes.push(format!(
+                        "reachable from {} → {}",
+                        optional(&old.reachable_from.join(", ")),
+                        optional(&group.reachable_from.join(", "))
+                    ));
+                }
                 texts.push(format!("Group {} changed: {}", group.name, changes.join(", ")));
             }
             Some(_) => {}

@@ -30,6 +30,9 @@ pub struct Group {
     /// File in the data directory with the password of `ssid`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ssid_password_file: String,
+    /// Groups whose devices may open connections into this group, like `lan` for a smart home server.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reachable_from: Vec<String>,
 }
 
 /// Reads `192.0.2.0/24`.
@@ -163,6 +166,16 @@ impl Config {
                     "{}: duplicate VLAN {}",
                     group.name, group.vlan
                 )));
+            }
+        }
+        for group in &self.groups {
+            for source in &group.reachable_from {
+                if source == &group.name || !names.contains(source) {
+                    return Err(Error::Invalid(format!(
+                        "{}: cannot be reachable from {source}",
+                        group.name
+                    )));
+                }
             }
         }
         let networks: Vec<(&Group, Network)> = self

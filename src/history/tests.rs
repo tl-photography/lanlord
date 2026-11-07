@@ -75,6 +75,7 @@ fn group_changes_are_listed() {
         label: String::new(),
         ssid: String::new(),
         ssid_password_file: String::new(),
+        reachable_from: Vec::new(),
     };
     let before = Config {
         default_group: "lan".to_owned(),
@@ -96,6 +97,7 @@ fn group_changes_are_listed() {
                 label: String::new(),
                 ssid: String::new(),
                 ssid_password_file: String::new(),
+                reachable_from: Vec::new(),
             },
         ],
     };

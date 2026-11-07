@@ -1,6 +1,7 @@
 //! Plans the networks of an `OpenWrt` router or access point from the groups: a VLAN on the bridge, an interface, and
-//! on a router a DHCP pool and a firewall zone that reaches only the internet and the DNS service. A group with an SSID
-//! of its own also gets a Wi-Fi network on every radio.
+//! on a router a DHCP pool and a firewall zone that reaches only the internet and the DNS service. The groups it is
+//! reachable from may open connections into it. A group with an SSID of its own also gets a Wi-Fi network on every
+//! radio.
 //!
 //! lanlord owns the sections it names `lanlordnet_`. The first network turns the bridge into a VLAN bridge: VLAN 1
 //! stays untagged on every port and the LAN interface moves to `<bridge>.1`. That is the one section outside its own
@@ -501,6 +502,50 @@ fn group_sections<S: BuildHasher>(
     wanted
 }
 
+/// The firewall zone of a group on this router, if it is a network here.
+fn zone_here(group: &Group, built: &[&Group], current: &[Section]) -> Option<String> {
+    if group.vlan == LAN_VLAN {
+        Some(zone_of(current, "lan").unwrap_or_else(|| "lan".to_owned()))
+    } else {
+        built
+            .iter()
+            .any(|other| other.name == group.name)
+            .then(|| zone_name(group))
+    }
+}
+
+/// A forwarding into every network from each group it is reachable from.
+fn reach_sections(
+    plan: &Plan,
+    built: &[&Group],
+    current: &[Section],
+    notes: &mut Vec<String>,
+) -> Vec<Section> {
+    let mut wanted = Vec::new();
+    for group in built {
+        for source in &group.reachable_from {
+            let Some(from) = plan.groups.iter().find(|other| &other.name == source) else {
+                continue;
+            };
+            let Some(zone) = zone_here(from, built, current) else {
+                notes.push(format!(
+                    "{}: {} is not a network yet and cannot reach it",
+                    group.title(),
+                    from.title()
+                ));
+                continue;
+            };
+            wanted.push(Section::new(
+                "firewall",
+                format!("{}_from_{}", id(&group.name), zone_name(from)),
+                "forwarding",
+                &[("src", Opt::one(zone)), ("dest", Opt::one(zone_name(group)))],
+            ));
+        }
+    }
+    wanted
+}
+
 /// Where the DNS service is: its address and the firewall zone it is in.
 fn dns_target(plan: &Plan, current: &[Section]) -> Option<(Ipv4Addr, String)> {
     let address = plan.dns()?;
@@ -744,8 +789,11 @@ pub fn plan<S: BuildHasher>(
         bridge,
         access,
     };
-    for group in built {
+    for group in &built {
         wanted.extend(group_sections(group, &device, role, passwords, &mut result.notes));
+    }
+    if role == Role::Router {
+        wanted.extend(reach_sections(plan, &built, current, &mut result.notes));
     }
     result.changes = changes(&wanted, current, &device.bridge, move_lan);
     result
@@ -759,7 +807,10 @@ fn describe(section: &Section, what: &str) -> String {
         ("network", "interface") => format!("interface {name}"),
         ("dhcp", _) => format!("DHCP pool {name}"),
         ("firewall", "zone") => format!("firewall zone {}", section.text("name")),
-        ("firewall", "forwarding") => format!("{} may reach the internet", section.text("src")),
+        ("firewall", "forwarding") => match section.text("dest").as_str() {
+            "wan" => format!("{} may reach the internet", section.text("src")),
+            dest => format!("{} may reach {dest}", section.text("src")),
+        },
         ("firewall", _) => format!("firewall {}", section.text("name")),
         ("wireless", _) => format!("Wi-Fi {} on {}", section.text("ssid"), section.text("device")),
         _ => format!("{} {name}", section.kind),

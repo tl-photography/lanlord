@@ -9,7 +9,7 @@
 <p class="notice">No groups yet. Every group is a VLAN; add one for each, for example LAN, IoT and guests.</p>
 {% else %}
 <table>
-  <thead><tr><th>Name</th><th>ID</th><th>VLAN</th><th>Subnet</th><th>Own Wi-Fi</th><th>Devices</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>ID</th><th>VLAN</th><th>Subnet</th><th>Own Wi-Fi</th><th>Reachable from</th><th>Devices</th><th></th></tr></thead>
   <tbody>
     {% for group in groups %}
     <tr>
@@ -25,6 +25,13 @@
           <input form="network-{{ group.name }}" name="password_file" value="{{ group.password_file }}" aria-label="Password file of {{ group.title }}" placeholder="iot.wifi" autocapitalize="off" spellcheck="false">
         </span>
       </td>
+      <td data-label="Reachable from">
+        <span class="checks">
+          {% for source in group.sources %}
+          <label class="switch"><input type="checkbox" form="network-{{ group.name }}" name="from_{{ source.name }}"{% if source.checked %} checked{% endif %}> {{ source.title }}</label>
+          {% endfor %}
+        </span>
+      </td>
       <td data-label="Devices">{{ group.devices }}</td>
       <td>
         <form method="post" action="/groups/{{ group.name }}/network" id="network-{{ group.name }}" class="inline"><button type="submit" class="secondary" aria-label="Save {{ group.title }}">Save</button></form>
@@ -36,6 +43,7 @@
     {% endfor %}
   </tbody>
 </table>
+<p><small>A network reaches only the internet and the DNS server, and the groups ticked under "Reachable from" may open connections into it.</small></p>
 <h2>DNS</h2>
 <p>All networks use this DNS server. Devices may reach it from every network, and DNS to anywhere else goes to it.</p>
 <form method="post" action="/groups/dns" class="row">

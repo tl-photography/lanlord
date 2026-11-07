@@ -223,7 +223,45 @@ async fn one_save_keeps_the_subnet_and_the_wifi_of_a_group() {
     let page = String::from_utf8(body.to_vec()).unwrap();
     assert_eq!(
         page.matches(r#"form="network-guest""#).count(),
-        3,
+        4,
         "every field of the row is in its form: {page}"
     );
+}
+
+#[tokio::test]
+async fn a_group_is_reachable_from_the_ticked_groups() {
+    let data = setup().await;
+    let form = "subnet=192.0.2.0%2F24&from_lan=on";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let file = groups_file(&data);
+    assert!(file.contains("reachable_from = [\"lan\"]"), "{file}");
+    let request = Request::get("/groups").body(Body::empty()).unwrap();
+    let response = app(&data).oneshot(request).await.unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let page = String::from_utf8(body.to_vec()).unwrap();
+    assert!(page.contains(r#"name="from_lan" checked"#), "{page}");
+    assert_eq!(
+        post(&data, "/groups/guest/network", "subnet=192.0.2.0%2F24")
+            .await
+            .0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("reachable_from"));
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("reachable from none → lan"), "{log}");
+    assert!(log.contains("reachable from lan → none"), "{log}");
+}
+
+#[tokio::test]
+async fn a_group_cannot_be_reachable_from_itself() {
+    let data = setup().await;
+    let form = "from_guest=on";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("reachable_from"));
 }

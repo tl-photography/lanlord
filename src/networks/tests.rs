@@ -15,6 +15,7 @@ fn group(name: &str, vlan: u16, subnet: &str, ssid: &str) -> Group {
         } else {
             format!("{name}.wifi")
         },
+        reachable_from: Vec::new(),
     }
 }
 
@@ -388,4 +389,66 @@ fn a_port_never_moves_into_a_network_that_is_not_built() {
     )]);
     let result = plan(&wanted, &router(), Role::Router, &passwords(), &ports);
     assert_eq!(result.changes, [], "no network, no change: {:?}", result.changes);
+}
+
+#[test]
+fn the_lan_reaches_a_network_it_is_allowed_into() {
+    let mut wanted = wanted_plan();
+    wanted.groups[1].reachable_from = vec!["lan".to_owned()];
+    wanted.groups.push(group("guest", 30, "203.0.113.0/24", ""));
+    wanted.groups[2].reachable_from = vec!["iot".to_owned()];
+    let result = plan(&wanted, &router(), Role::Router, &passwords(), &BTreeMap::new());
+    let into_iot = find(&result.changes, "lanlordnet_iot_from_lan");
+    assert_eq!(into_iot.get("src"), Some(&Opt::one("lan")));
+    assert_eq!(into_iot.get("dest"), Some(&Opt::one("iot")));
+    let into_guest = find(&result.changes, "lanlordnet_guest_from_iot");
+    assert_eq!(into_guest.get("src"), Some(&Opt::one("iot")));
+    assert!(
+        result
+            .preview()
+            .steps
+            .iter()
+            .any(|step| step.description == "lan may reach iot: new")
+    );
+    let after = applied(router(), &result.changes);
+    wanted.groups[1].reachable_from.clear();
+    let again = plan(&wanted, &after, Role::Router, &passwords(), &BTreeMap::new());
+    assert!(again.changes.iter().any(|change| matches!(
+        change,
+        Change::Delete { id, .. } if id == "lanlordnet_iot_from_lan"
+    )));
+}
+
+#[test]
+fn a_group_that_is_no_network_reaches_nothing() {
+    let mut wanted = wanted_plan();
+    wanted.groups.push(group("guest", 30, "", ""));
+    wanted.groups[1].reachable_from = vec!["guest".to_owned()];
+    let result = plan(&wanted, &router(), Role::Router, &passwords(), &BTreeMap::new());
+    assert!(
+        result
+            .notes
+            .contains(&"iot: guest is not a network yet and cannot reach it".to_owned())
+    );
+    assert!(!result.changes.iter().any(|change| matches!(
+        change,
+        Change::Add(section, _) if section.id.contains("_from_")
+    )));
+}
+
+#[test]
+fn an_access_point_gets_no_forwardings() {
+    let mut wanted = wanted_plan();
+    wanted.groups[1].reachable_from = vec!["lan".to_owned()];
+    let result = plan(
+        &wanted,
+        &router(),
+        Role::AccessPoint,
+        &passwords(),
+        &BTreeMap::new(),
+    );
+    assert!(!result.changes.iter().any(|change| matches!(
+        change,
+        Change::Add(section, _) if section.config == "firewall"
+    )));
 }
