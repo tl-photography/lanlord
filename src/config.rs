@@ -33,6 +33,33 @@ pub struct Group {
     /// Groups whose devices may open connections into this group, like `lan` for a smart home server.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reachable_from: Vec<String>,
+    /// Single ports in other groups its devices may open, like `Server:1883/tcp`: a device name, a port and a protocol.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reaches: Vec<String>,
+}
+
+/// One port a group may reach on a device in another group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reach {
+    /// Device or interface name.
+    pub device: String,
+    /// Port, 1 to 65535.
+    pub port: u16,
+    /// `tcp` or `udp`.
+    pub proto: String,
+}
+
+/// Reads `Server:1883/tcp`.
+#[must_use]
+pub fn parse_reach(text: &str) -> Option<Reach> {
+    let (device, rest) = text.split_once(':')?;
+    let (port, proto) = rest.split_once('/')?;
+    let port: u16 = port.parse().ok().filter(|port| *port > 0)?;
+    (is_valid_name(device) && matches!(proto, "tcp" | "udp")).then(|| Reach {
+        device: device.to_owned(),
+        port,
+        proto: proto.to_owned(),
+    })
 }
 
 /// Reads `192.0.2.0/24`.
@@ -47,6 +74,15 @@ pub fn parse_subnet(text: &str) -> Option<Network> {
 }
 
 impl Group {
+    /// The ports it may reach, skipping any that do not parse.
+    #[must_use]
+    pub fn reaches(&self) -> Vec<Reach> {
+        self.reaches
+            .iter()
+            .filter_map(|reach| parse_reach(reach))
+            .collect()
+    }
+
     /// The network, if one is set.
     #[must_use]
     pub fn network(&self) -> Option<Network> {
@@ -169,6 +205,12 @@ impl Config {
             }
         }
         for group in &self.groups {
+            if let Some(bad) = group.reaches.iter().find(|reach| parse_reach(reach).is_none()) {
+                return Err(Error::Invalid(format!(
+                    "{}: {bad} must look like Server:1883/tcp",
+                    group.name
+                )));
+            }
             for source in &group.reachable_from {
                 if source == &group.name || !names.contains(source) {
                     return Err(Error::Invalid(format!(

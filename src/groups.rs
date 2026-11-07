@@ -55,6 +55,7 @@ struct Source {
 
 struct GroupRow {
     name: String,
+    reaches: String,
     sources: Vec<Source>,
     vlan: u16,
     subnet: String,
@@ -97,6 +98,7 @@ fn page(state: &AppState, form: GroupForm, error: String) -> Response {
         .iter()
         .map(|group| GroupRow {
             name: group.name.clone(),
+            reaches: group.reaches.join(", "),
             sources: config
                 .groups
                 .iter()
@@ -192,6 +194,7 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<GroupForm>) 
         ssid: String::new(),
         ssid_password_file: String::new(),
         reachable_from: Vec::new(),
+        reaches: Vec::new(),
     };
     change(&state, form, |config, _| {
         if config.groups.is_empty() {
@@ -224,6 +227,11 @@ pub async fn set_network(
             field("password_file")
         };
         file.clone_into(&mut group.ssid_password_file);
+        group.reaches = field("reaches")
+            .split([',', ' '])
+            .filter(|reach| !reach.is_empty())
+            .map(str::to_owned)
+            .collect();
         group.reachable_from = names
             .into_iter()
             .filter(|source| *source != name && form.contains_key(&format!("{FROM}{source}")))

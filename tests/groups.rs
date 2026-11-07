@@ -223,7 +223,7 @@ async fn one_save_keeps_the_subnet_and_the_wifi_of_a_group() {
     let page = String::from_utf8(body.to_vec()).unwrap();
     assert_eq!(
         page.matches(r#"form="network-guest""#).count(),
-        4,
+        5,
         "every field of the row is in its form: {page}"
     );
 }
@@ -264,4 +264,28 @@ async fn a_group_cannot_be_reachable_from_itself() {
         StatusCode::SEE_OTHER
     );
     assert!(!groups_file(&data).contains("reachable_from"));
+}
+
+#[tokio::test]
+async fn a_group_reaches_single_ports() {
+    let data = setup().await;
+    let form = "reaches=Server%3A1883%2Ftcp%2C+Server%3A5683%2Fudp";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let file = groups_file(&data);
+    assert!(file.contains("\"Server:1883/tcp\""), "{file}");
+    assert!(file.contains("\"Server:5683/udp\""), "{file}");
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(
+        log.contains("reaches none → Server:1883/tcp, Server:5683/udp"),
+        "{log}"
+    );
+    let (status, page) = post(&data, "/groups/guest/network", "reaches=Server%3A1883").await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        page.contains("Server:1883 must look like Server:1883/tcp"),
+        "{page}"
+    );
 }

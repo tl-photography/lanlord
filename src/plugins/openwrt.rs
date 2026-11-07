@@ -28,7 +28,12 @@ use crate::plan::Plan;
 use crate::preview::Preview;
 
 /// Static leases, DNS names and served networks of a device.
-type LeaseState = (Vec<HostSection>, Vec<NameSection>, Vec<Network>);
+type LeaseState = (
+    Vec<HostSection>,
+    Vec<NameSection>,
+    Vec<Network>,
+    HashMap<String, Ipv4Addr>,
+);
 
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -318,15 +323,24 @@ impl OpenWrt {
             .await?;
         let served = served_interfaces(&dhcp);
         if served.is_empty() {
-            return Ok((host_sections(&dhcp), name_sections(&dhcp), Vec::new()));
+            return Ok((
+                host_sections(&dhcp),
+                name_sections(&dhcp),
+                Vec::new(),
+                HashMap::new(),
+            ));
         }
         let dump = self
             .call(session, "network.interface", "dump", &json!({}))
+            .await?;
+        let leases = self
+            .call(session, "luci-rpc", "getDHCPLeases", &json!({}))
             .await?;
         Ok((
             host_sections(&dhcp),
             name_sections(&dhcp),
             served_networks(&served, &dump),
+            held_addresses(&leases),
         ))
     }
 
@@ -358,9 +372,9 @@ impl OpenWrt {
     }
 
     async fn plan_in(&self, session: &str, plan: &Plan) -> Result<DevicePlan, String> {
-        let (hosts, names, served) = self.lease_state(session).await?;
+        let (hosts, names, served, held) = self.lease_state(session).await?;
         let leases = (!served.is_empty()).then(|| {
-            let mut lease_plan = leases::plan(&plan.devices, &hosts, &served);
+            let mut lease_plan = leases::plan(&plan.devices, &hosts, &served, &held);
             leases::plan_names(&plan.devices, &names, &served, &mut lease_plan);
             lease_plan
         });
@@ -688,6 +702,15 @@ fn sections(data: &Value) -> impl Iterator<Item = &Value> {
         .and_then(Value::as_object)
         .into_iter()
         .flat_map(|values| values.values())
+}
+
+/// The address each MAC holds now, from the DHCP leases.
+fn held_addresses(leases: &Value) -> HashMap<String, Ipv4Addr> {
+    observation(leases, &json!({}), &json!({}))
+        .present
+        .into_iter()
+        .filter_map(|present| Some((present.mac, present.ip?)))
+        .collect()
 }
 
 /// Builds the observation from the leases, the static leases and the Wi-Fi stations. One entry per MAC address;

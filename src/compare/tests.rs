@@ -13,6 +13,7 @@ fn groups() -> Vec<Group> {
             ssid: String::new(),
             ssid_password_file: String::new(),
             reachable_from: Vec::new(),
+            reaches: Vec::new(),
         },
         Group {
             name: "iot".to_owned(),
@@ -22,6 +23,7 @@ fn groups() -> Vec<Group> {
             ssid: String::new(),
             ssid_password_file: String::new(),
             reachable_from: Vec::new(),
+            reaches: Vec::new(),
         },
     ]
 }

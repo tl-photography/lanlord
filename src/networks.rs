@@ -1,7 +1,7 @@
 //! Plans the networks of an `OpenWrt` router or access point from the groups: a VLAN on the bridge, an interface, and
 //! on a router a DHCP pool and a firewall zone that reaches only the internet and the DNS service. The groups it is
-//! reachable from may open connections into it. A group with an SSID of its own also gets a Wi-Fi network on every
-//! radio.
+//! reachable from may open connections into it, and it may open the single ports it reaches elsewhere. A group with
+//! an SSID of its own also gets a Wi-Fi network on every radio.
 //!
 //! lanlord owns the sections it names `lanlordnet_`. The first network turns the bridge into a VLAN bridge: VLAN 1
 //! stays untagged on every port and the LAN interface moves to `<bridge>.1`. That is the one section outside its own
@@ -540,6 +540,88 @@ fn reach_sections(
                 format!("{}_from_{}", id(&group.name), zone_name(from)),
                 "forwarding",
                 &[("src", Opt::one(zone)), ("dest", Opt::one(zone_name(group)))],
+            ));
+        }
+        wanted.extend(port_sections(plan, group, built, current, notes));
+    }
+    wanted
+}
+
+/// A rule for each single port a network may reach on a device elsewhere.
+fn port_sections(
+    plan: &Plan,
+    group: &Group,
+    built: &[&Group],
+    current: &[Section],
+    notes: &mut Vec<String>,
+) -> Vec<Section> {
+    let src = zone_name(group);
+    let mut wanted = Vec::new();
+    for reach in group.reaches() {
+        let targets: Vec<_> = plan
+            .devices
+            .interfaces
+            .iter()
+            .filter(|interface| {
+                interface.name.eq_ignore_ascii_case(&reach.device)
+                    || interface.device.eq_ignore_ascii_case(&reach.device)
+            })
+            .filter_map(|interface| Some((interface, interface.ip?)))
+            .collect();
+        if targets.is_empty() {
+            notes.push(format!(
+                "{}: {} has no fixed address, {}/{} is left out",
+                group.title(),
+                reach.device,
+                reach.port,
+                reach.proto
+            ));
+        }
+        for (interface, ip) in targets {
+            let Some(dest) = plan
+                .groups
+                .iter()
+                .find(|other| other.name == interface.group)
+                .and_then(|other| zone_here(other, built, current))
+            else {
+                notes.push(format!(
+                    "{}: {} is not in a network yet, {}/{} is left out",
+                    group.title(),
+                    interface.name,
+                    reach.port,
+                    reach.proto
+                ));
+                continue;
+            };
+            if dest == src {
+                continue;
+            }
+            wanted.push(Section::new(
+                "firewall",
+                format!(
+                    "{}_to_{}_{}_{}",
+                    id(&group.name),
+                    interface.name.to_ascii_lowercase().replace('-', "_"),
+                    reach.port,
+                    reach.proto
+                ),
+                "rule",
+                &[
+                    (
+                        "name",
+                        Opt::one(format!(
+                            "{src} to {} {}/{}",
+                            interface.name, reach.port, reach.proto
+                        )),
+                    ),
+                    ("src", Opt::one(&src)),
+                    ("dest", Opt::one(dest)),
+                    ("dest_ip", Opt::one(ip.to_string())),
+                    ("dest_port", Opt::one(reach.port.to_string())),
+                    ("proto", Opt::one(&reach.proto)),
+                    ("family", Opt::one("ipv4")),
+                    ("target", Opt::one("ACCEPT")),
+                ],
             ));
         }
     }

@@ -347,6 +347,7 @@ async fn fake_target(fake: FakeUci) -> (String, Arc<std::sync::Mutex<FakeUci>>) 
                         { "interface": "wan", "ipv4-address": [{ "address": "198.51.100.2", "mask": 24 }] }
                     ] }]),
                 "uci" => state.lock().unwrap().answer(method, &params[3]),
+                "luci-rpc" => json!([0, { "dhcp_leases": [] }]),
                 _ => json!([3]),
             };
             Json(json!({ "jsonrpc": "2.0", "id": 1, "result": result }))
@@ -556,6 +557,7 @@ fn plan_with_iot() -> Plan {
         ssid: String::new(),
         ssid_password_file: String::new(),
         reachable_from: Vec::new(),
+        reaches: Vec::new(),
     };
     Plan {
         devices: devices(),

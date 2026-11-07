@@ -4,6 +4,8 @@
 //! when it sets that device's lease, and leaves every other entry alone. A device whose address is not in a
 //! network the router serves is waiting: its entry stays as it is until that network exists.
 
+use std::collections::HashMap;
+use std::hash::BuildHasher;
 use std::net::Ipv4Addr;
 
 use crate::devices::DeviceList;
@@ -228,9 +230,15 @@ fn update(device: &str, own: &HostSection, wanted: Vec<(String, String)>) -> Opt
 }
 
 /// Plans the static leases: devices with an address in a served network get a `lanlord_` section, sections of
-/// devices without an address or of removed devices go away.
+/// devices without an address or of removed devices go away. `seen` has the addresses devices hold now, by MAC: a
+/// device that is still in another served network keeps a lease there until it has moved, so its name stays right.
 #[must_use]
-pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> LeasePlan {
+pub fn plan<S: BuildHasher>(
+    list: &DeviceList,
+    hosts: &[HostSection],
+    networks: &[Network],
+    seen: &HashMap<String, Ipv4Addr, S>,
+) -> LeasePlan {
     let mut plan = LeasePlan::default();
     let mut kept_own: Vec<String> = Vec::new();
     let mut deleted: Vec<&str> = Vec::new();
@@ -261,6 +269,17 @@ pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> L
             kept_own.push(id);
             continue;
         }
+        let network_of = |address: Ipv4Addr| networks.iter().position(|network| network.contains(address));
+        let ip = match seen.get(&device.mac) {
+            Some(&now) if network_of(now).is_some() && network_of(now) != network_of(ip) => {
+                plan.notes.push(format!(
+                    "{} waits at {now}: it gets {ip} once it is in that network",
+                    device.name
+                ));
+                now
+            }
+            _ => ip,
+        };
         let others: Vec<&HostSection> = hosts
             .iter()
             .filter(|host| host.id != id && host.macs.contains(&device.mac))

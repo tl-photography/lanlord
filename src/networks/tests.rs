@@ -16,6 +16,7 @@ fn group(name: &str, vlan: u16, subnet: &str, ssid: &str) -> Group {
             format!("{name}.wifi")
         },
         reachable_from: Vec::new(),
+        reaches: Vec::new(),
     }
 }
 
@@ -451,4 +452,64 @@ fn an_access_point_gets_no_forwardings() {
         change,
         Change::Add(section, _) if section.config == "firewall"
     )));
+}
+
+#[test]
+fn a_network_reaches_single_ports_of_a_server() {
+    let mut wanted = wanted_plan();
+    wanted.groups[1].reaches = vec![
+        "Server:1883/tcp".to_owned(),
+        "Server:5683/udp".to_owned(),
+        "gone:80/tcp".to_owned(),
+    ];
+    wanted.devices.interfaces = vec![crate::devices::Interface {
+        name: "Server".to_owned(),
+        mac: "aa:bb:cc:00:00:02".to_owned(),
+        group: "lan".to_owned(),
+        ip: Some(Ipv4Addr::new(192, 0, 2, 10)),
+        self_assigned: false,
+        unreviewed: false,
+        note: String::new(),
+        device: String::new(),
+    }];
+    let result = plan(&wanted, &router(), Role::Router, &passwords(), &BTreeMap::new());
+    let mqtt = find(&result.changes, "lanlordnet_iot_to_server_1883_tcp");
+    assert_eq!(mqtt.get("src"), Some(&Opt::one("iot")));
+    assert_eq!(mqtt.get("dest"), Some(&Opt::one("lan")));
+    assert_eq!(mqtt.get("dest_ip"), Some(&Opt::one("192.0.2.10")));
+    assert_eq!(mqtt.get("dest_port"), Some(&Opt::one("1883")));
+    assert_eq!(mqtt.get("proto"), Some(&Opt::one("tcp")));
+    assert_eq!(
+        find(&result.changes, "lanlordnet_iot_to_server_5683_udp").get("proto"),
+        Some(&Opt::one("udp"))
+    );
+    assert!(
+        result
+            .notes
+            .contains(&"iot: gone has no fixed address, 80/tcp is left out".to_owned())
+    );
+    assert!(
+        result
+            .preview()
+            .steps
+            .iter()
+            .any(|step| step.description == "firewall iot to Server 1883/tcp: new")
+    );
+}
+
+#[test]
+fn a_reached_port_must_look_like_a_port() {
+    assert_eq!(
+        crate::config::parse_reach("Server:1883/tcp").map(|reach| reach.port),
+        Some(1883)
+    );
+    for bad in [
+        "Server:0/tcp",
+        "Server:1883",
+        "Server:1883/icmp",
+        ":1883/tcp",
+        "Server:99999/udp",
+    ] {
+        assert!(crate::config::parse_reach(bad).is_none(), "{bad}");
+    }
 }
