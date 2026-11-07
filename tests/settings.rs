@@ -50,7 +50,7 @@ async fn addresses_are_shown_until_switched_off() {
 
     let (_, page) = send(&app, get("/")).await;
     assert!(
-        page.contains("192.0.2.9 · <code>00:00:00:00:00:09</code>"),
+        page.contains("<span>192.0.2.9</span><code>00:00:00:00:00:09</code>"),
         "{page}"
     );
     let (_, page) = send(&app, get("/settings")).await;
@@ -61,7 +61,6 @@ async fn addresses_are_shown_until_switched_off() {
     let (_, page) = send(&app, get("/")).await;
     assert!(page.contains("192.0.2.9"), "{page}");
     assert!(!page.contains("<code>"), "{page}");
-    assert!(!page.contains(" · "), "{page}");
 
     let (status, _) = send(&app, post("/settings", "show_mac=true")).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
@@ -174,4 +173,16 @@ async fn the_switch_for_a_self_assigned_address_is_saved() {
     assert!(page.contains(r#"value="true" checked"#), "{page}");
     let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
     assert!(log.contains("address set on the device"), "{log}");
+}
+
+#[tokio::test]
+async fn a_bad_scan_interval_stays_on_the_settings_page() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let (status, page) = send(&app, post("/settings/background", "interval=soon")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        page.contains("The interval must be a number of minutes"),
+        "{page}"
+    );
 }

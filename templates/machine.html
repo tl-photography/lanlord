@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ name }}{% endblock %}
 {% block content %}
+<p class="back"><a href="/">Devices</a></p>
 <h1>{{ name }}</h1>
 {% if !error.is_empty() %}
 <p class="error" role="alert">{{ error }}</p>
 {% endif %}
 <p>Each interface has its own MAC address, lease and DNS name, and can be in its own group. Remove keeps the device in the list.</p>
-<table class="history">
+<table>
   <thead><tr><th scope="col">Interface</th><th scope="col">Address</th><th scope="col">MAC</th><th scope="col">Group</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
   <tbody>
     {% for interface in interfaces %}
@@ -24,7 +25,8 @@
 {% if !available.is_empty() %}
 <h2>Add an existing device</h2>
 <form method="post" action="/machines/{{ name }}/interfaces" class="row">
-  <select name="device" aria-label="Device">
+  <select name="device" aria-label="Device" required>
+    <option value="" selected disabled>Choose a device</option>
     {% for device in available %}
     <option value="{{ device.name }}">{{ device.name }}{% if !device.machine.is_empty() %} (in {{ device.machine }}){% endif %}</option>
     {% endfor %}

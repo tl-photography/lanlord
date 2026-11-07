@@ -1,1 +1,1 @@
-{% let ip = overview.show_ip && !row.ip.is_empty() %}{% if ip || overview.show_mac %}<span class="meta">{% if ip %}{{ row.ip }}{% endif %}{% if ip && overview.show_mac %} · {% endif %}{% if overview.show_mac %}<code>{{ row.mac }}</code>{% endif %}</span>{% endif %}
+{% let ip = overview.show_ip && !row.ip.is_empty() %}{% if ip || overview.show_mac %}<span class="meta">{% if ip %}<span>{{ row.ip }}</span>{% endif %}{% if overview.show_mac %}<code>{{ row.mac }}</code>{% endif %}</span>{% endif %}

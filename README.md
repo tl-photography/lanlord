@@ -133,7 +133,7 @@ servers are checked against the usual certificate authorities, built into lanlor
 
 ### Background scan
 
-Set on the Plugins page: every how many minutes lanlord scans on its own (0 is off, the default). The notification
+Set on the Settings page: every how many minutes lanlord scans on its own (0 is off, the default). The notification
 plugins then hear about new unknown devices, each once, and about changes made outside lanlord, for example a
 lease edited in LuCI: open changes on a target while the device list did not change since it last matched. Changes
 you make in lanlord are no such thing, they wait for Apply.

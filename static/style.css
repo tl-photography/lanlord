@@ -76,7 +76,7 @@ code { font-size: 0.9em; }
 .brand-node { fill: #7dd3fc; }
 .brand-name { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 1.35rem; letter-spacing: -0.5px; }
 .brand-name b { color: #38bdf8; font-weight: 800; }
-.topbar nav { display: flex; gap: 0.25rem; overflow-x: auto; flex: 1; }
+.topbar nav { display: flex; flex-wrap: wrap; gap: 0.25rem; flex: 1; }
 .topbar nav a {
   color: var(--topbar-text); text-decoration: none; padding: 0.5rem 0.8rem; border: 1px solid transparent; border-radius: 0.4rem; white-space: nowrap; opacity: 0.85;
 }
@@ -152,8 +152,11 @@ code { font-size: 0.9em; }
   background: var(--accent-soft); color: var(--accent); font-weight: 700;
 }
 .text { display: grid; min-width: 0; }
-.text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.text strong { overflow-wrap: anywhere; }
+.badges { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.badges:not(:empty) { margin: 0.15rem 0; }
 .meta, .note { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }
+.meta { display: flex; flex-wrap: wrap; gap: 0 0.6rem; align-items: baseline; }
 
 /* Tables, forms and messages. */
 table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: 0.8rem; box-shadow: var(--shadow); overflow: hidden; }
@@ -161,8 +164,12 @@ th, td { text-align: left; padding: 0.55rem 0.8rem; border-bottom: 1px solid var
 th { color: var(--muted); font-weight: 600; }
 tr:last-child td { border-bottom: 0; }
 form { display: grid; gap: 0.9rem; max-width: 32rem; }
+form > button { justify-self: start; }
+.login form > button { justify-self: stretch; }
 form.inline { display: inline; }
 form.inline button { padding: 0.25rem 0.75rem; background: transparent; color: var(--text); border-color: var(--border); font-weight: normal; }
+form.inline button.danger { color: var(--error); border-color: var(--error); }
+.plugin-config > form.inline { display: inline-block; margin-top: 0.6rem; }
 form.row { display: flex; gap: 0.5rem; max-width: 32rem; }
 form.row select { flex: 1; }
 label { display: grid; gap: 0.25rem; font-weight: 600; }
@@ -176,12 +183,16 @@ input:focus, select:focus, button:focus, a:focus-visible { outline: 2px solid va
 .notice { padding: 0.7rem 0.9rem; border: 1px solid var(--border); border-radius: 0.6rem; background: var(--surface); box-shadow: var(--shadow); }
 .error { padding: 0.7rem 0.9rem; border: 1px solid var(--error); border-radius: 0.6rem; background: var(--error-surface); color: var(--error); }
 
-/* Phones: tables become one card per row, the action button moves into the menu row. */
-@media (max-width: 40rem) {
-  main { padding: 1rem 0.75rem 3rem; }
+/* The menu gets its own row before it runs into the buttons. */
+@media (max-width: 60rem) {
   .topbar { flex-wrap: wrap; gap: 0.5rem; }
   .topbar nav { order: 3; flex-basis: 100%; }
   .add { margin-left: auto; }
+}
+
+/* Phones: tables become one card per row. */
+@media (max-width: 40rem) {
+  main { padding: 1rem 0.75rem 3rem; }
   thead { display: none; }
   table, tbody, tr, td { display: block; width: 100%; }
   table { background: none; box-shadow: none; }
@@ -205,12 +216,14 @@ button.secondary { background: transparent; color: var(--text); border-color: va
 .switch { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; }
 .switch input { flex: none; width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--accent); }
 .panel { padding: 1.25rem; border: 1px solid var(--border); border-radius: 0.8rem; background: var(--surface); box-shadow: var(--shadow); }
+.panel + .panel { margin-top: 1rem; }
 .panel h2 { margin: 0; }
-.panel p { margin: -0.6rem 0 0.2rem; color: var(--muted); font-size: 0.9rem; }
-.panel button { justify-self: start; }
+.panel p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.panel h2 + p { margin: -0.6rem 0 0.2rem; }
+.legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 1.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
+.back { margin: 0.25rem 0 0; }
 .connections { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.4rem; }
 .connections li { display: flex; flex-wrap: wrap; gap: 0.2rem 0.5rem; align-items: baseline; }
 .connections.compact { display: flex; flex-wrap: wrap; }
 .connections .meta { flex-basis: 100%; }
-.text .badge { justify-self: start; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -237,7 +237,7 @@ async fn changes_in_the_list_wait_for_apply() {
         send(&app, post("/devices/OMV", change)).await.0,
         StatusCode::SEE_OTHER
     );
-    let (status, _) = send(&app, post("/plugins/background", "interval=5&restore=true")).await;
+    let (status, _) = send(&app, post("/settings/background", "interval=5&restore=true")).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
     lanlord::watch::run_once(&state).await;
     assert_eq!(
@@ -252,9 +252,9 @@ async fn restore_undoes_outside_changes() {
     let (data, uci, received) = setup().await;
     let state = lanlord::AppState::load_without_login(data.path()).unwrap();
     let app = lanlord::app(state.clone());
-    let (status, _) = send(&app, post("/plugins/background", "interval=5&restore=true")).await;
+    let (status, _) = send(&app, post("/settings/background", "interval=5&restore=true")).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
-    let (_, page) = send(&app, Request::get("/plugins").body(Body::empty()).unwrap()).await;
+    let (_, page) = send(&app, Request::get("/settings").body(Body::empty()).unwrap()).await;
     assert!(
         page.contains(r#"name="interval" min="0" max="1440" value="5""#),
         "{page}"
@@ -276,7 +276,7 @@ async fn restore_undoes_outside_changes() {
             .unwrap()
             .starts_with("Restored after a change outside lanlord: router: 1 change applied")
     );
-    let (_, page) = send(&app, Request::get("/plugins").body(Body::empty()).unwrap()).await;
+    let (_, page) = send(&app, Request::get("/settings").body(Body::empty()).unwrap()).await;
     assert!(page.contains("Last scan:"), "{page}");
     let (_, history) = send(&app, Request::get("/history").body(Body::empty()).unwrap()).await;
     assert!(

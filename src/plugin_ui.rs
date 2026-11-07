@@ -15,7 +15,7 @@ use crate::compare::{self, Finding, Observation};
 use crate::devices::Error;
 use crate::history;
 use crate::notify::Notification;
-use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, ScanSettings, Settings};
+use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, Settings};
 use crate::{AppState, server_error};
 
 /// Longest time one plugin may take for a scan.
@@ -93,9 +93,6 @@ struct PluginsPage {
     can_import: bool,
     message: String,
     error: String,
-    scan: ScanSettings,
-    /// One line about the last background scan.
-    last_scan: String,
 }
 
 fn input(field: &Field) -> &'static str {
@@ -225,13 +222,6 @@ fn page_with_message(
         can_import: !state.groups().default_group.is_empty(),
         message,
         error: if error.is_empty() { file_problem } else { error },
-        scan: settings.scan,
-        last_scan: state
-            .inner
-            .watch
-            .lock()
-            .map(|watch| watch.last.clone())
-            .unwrap_or_default(),
     };
     match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
@@ -417,34 +407,6 @@ pub(crate) async fn observe_all(
     }
     results.sort_by_key(|(index, _)| *index);
     results.into_iter().map(|(_, result)| result).collect()
-}
-
-/// Sets the interval and the restore option of the background scan.
-pub async fn background(
-    State(state): State<AppState>,
-    Form(form): Form<HashMap<String, String>>,
-) -> Response {
-    let Ok(interval_minutes) = form
-        .get("interval")
-        .map_or("0", String::as_str)
-        .trim()
-        .parse::<u32>()
-    else {
-        return page(
-            &state,
-            Vec::new(),
-            false,
-            "The interval must be a number of minutes".to_owned(),
-        );
-    };
-    let restore = form.get("restore").is_some_and(|value| value == "true");
-    change(&state, |settings| {
-        settings.scan = ScanSettings {
-            interval_minutes,
-            restore,
-        };
-        Ok(())
-    })
 }
 
 /// Scans every enabled plugin at the same time, each with a time limit, without changing anything.

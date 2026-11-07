@@ -227,9 +227,12 @@ pub fn app(state: AppState) -> Router {
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))
+        .route(
+            "/settings/background",
+            axum::routing::post(settings_ui::background),
+        )
         .route("/plugins", get(plugin_ui::list).post(plugin_ui::create))
         .route("/plugins/scan", axum::routing::post(plugin_ui::scan))
-        .route("/plugins/background", axum::routing::post(plugin_ui::background))
         .route("/plugins/{name}/enabled", axum::routing::post(plugin_ui::toggle))
         .route("/plugins/{name}/delete", axum::routing::post(plugin_ui::delete))
         .route(
