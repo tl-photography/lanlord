@@ -43,6 +43,7 @@ fn sample() -> Device {
         group: "lan".to_owned(),
         ip: None,
         note: String::new(),
+        machine: String::new(),
     }
 }
 

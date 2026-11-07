@@ -10,6 +10,7 @@ fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Device {
         group: "lan".to_owned(),
         ip: ip.map(Ipv4Addr::from),
         note: String::new(),
+        machine: String::new(),
     }
 }
 

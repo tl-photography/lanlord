@@ -19,6 +19,7 @@ fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Device {
         group: group.to_owned(),
         ip: ip.map(Ipv4Addr::from),
         note: String::new(),
+        machine: String::new(),
     }
 }
 

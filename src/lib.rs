@@ -16,6 +16,7 @@ mod plugin_ui;
 pub mod plugins;
 pub mod preview;
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::{Duration, Instant};
@@ -201,6 +202,7 @@ pub fn app(state: AppState) -> Router {
         .route("/devices/new", get(edit::new_form))
         .route("/devices/{name}", get(edit::edit_form).post(edit::update))
         .route("/devices/{name}/move", axum::routing::post(edit::move_device))
+        .route("/machines/{name}/move", axum::routing::post(edit::move_machine))
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
@@ -244,15 +246,12 @@ pub fn app(state: AppState) -> Router {
 }
 
 struct DeviceRow {
-    initial: char,
     name: String,
     /// Plugins that talk to this device.
     plugins: Vec<String>,
-    group: String,
     mac: String,
     ip: String,
     note: String,
-    move_groups: Vec<MoveGroup>,
 }
 
 #[derive(Clone)]
@@ -261,11 +260,30 @@ struct MoveGroup {
     label: String,
 }
 
+/// One card on the devices page: a device, or a machine with its connections in this group.
+struct CardView {
+    /// Identifies the card for drag and drop.
+    key: String,
+    title: String,
+    initial: char,
+    machine: bool,
+    /// Where the move forms post to.
+    move_action: String,
+    group: String,
+    rows: Vec<DeviceRow>,
+    /// Plugins linked to the machine itself.
+    plugins: Vec<String>,
+    /// Other groups with connections of the same machine.
+    also_in: String,
+    move_groups: Vec<MoveGroup>,
+}
+
 struct GroupView {
     name: String,
     label: String,
     vlan: u16,
-    devices: Vec<DeviceRow>,
+    count: usize,
+    cards: Vec<CardView>,
 }
 
 #[derive(Template)]
@@ -287,6 +305,91 @@ pub(crate) fn server_error(error: &impl std::fmt::Display) -> Response {
     (StatusCode::INTERNAL_SERVER_ERROR, "Internal error, see the log").into_response()
 }
 
+fn device_row(device: &devices::Device, links: &HashMap<String, Vec<String>>) -> DeviceRow {
+    DeviceRow {
+        plugins: links.get(&device.name).cloned().unwrap_or_default(),
+        name: device.name.clone(),
+        mac: device.mac.clone(),
+        ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
+        note: device.note.clone(),
+    }
+}
+
+fn initial(name: &str) -> char {
+    name.chars().next().unwrap_or('?').to_ascii_uppercase()
+}
+
+/// The cards of one group: one per device, one per machine with its connections in this group.
+fn group_cards(
+    group: &config::Group,
+    list: &DeviceList,
+    config: &Config,
+    links: &HashMap<String, Vec<String>>,
+    move_groups: &[MoveGroup],
+) -> Vec<CardView> {
+    let members: Vec<&devices::Device> = list
+        .devices
+        .iter()
+        .filter(|device| device.group == group.name)
+        .collect();
+    let mut cards: Vec<CardView> = Vec::new();
+    for device in &members {
+        if device.machine.is_empty() {
+            cards.push(CardView {
+                key: device.name.clone(),
+                title: device.name.clone(),
+                initial: initial(&device.name),
+                machine: false,
+                move_action: format!("/devices/{}/move", device.name),
+                group: group.name.clone(),
+                rows: vec![device_row(device, links)],
+                plugins: Vec::new(),
+                also_in: String::new(),
+                move_groups: move_groups.to_vec(),
+            });
+            continue;
+        }
+        if cards
+            .iter()
+            .any(|card| card.machine && card.title == device.machine)
+        {
+            continue;
+        }
+        let mut rows: Vec<DeviceRow> = members
+            .iter()
+            .filter(|other| other.machine == device.machine)
+            .map(|other| device_row(other, links))
+            .collect();
+        rows.sort_by_key(|row| row.name.to_ascii_lowercase());
+        let elsewhere: Vec<String> = config
+            .groups
+            .iter()
+            .filter(|other| {
+                other.name != group.name
+                    && list
+                        .devices
+                        .iter()
+                        .any(|entry| entry.machine == device.machine && entry.group == other.name)
+            })
+            .map(|other| other.title().to_owned())
+            .collect();
+        cards.push(CardView {
+            key: format!("machine:{}", device.machine),
+            title: device.machine.clone(),
+            initial: initial(&device.machine),
+            machine: true,
+            move_action: format!("/machines/{}/move", device.machine),
+            group: group.name.clone(),
+            rows,
+            plugins: links.get(&device.machine).cloned().unwrap_or_default(),
+            also_in: elsewhere.join(", "),
+            move_groups: move_groups.to_vec(),
+        });
+    }
+    cards.sort_by_key(|card| card.title.to_ascii_lowercase());
+    cards
+}
+
 async fn index(State(state): State<AppState>) -> Response {
     let list = match state.devices() {
         Ok(list) => list,
@@ -304,33 +407,19 @@ async fn index(State(state): State<AppState>) -> Response {
             label: group.title().to_owned(),
         })
         .collect();
-    let groups = state
-        .groups()
+    let groups = config
         .groups
         .iter()
-        .map(|group| {
-            let mut devices: Vec<DeviceRow> = list
+        .map(|group| GroupView {
+            name: group.name.clone(),
+            label: group.title().to_owned(),
+            vlan: group.vlan,
+            count: list
                 .devices
                 .iter()
                 .filter(|device| device.group == group.name)
-                .map(|device| DeviceRow {
-                    initial: device.name.chars().next().unwrap_or('?').to_ascii_uppercase(),
-                    plugins: links.get(&device.name).cloned().unwrap_or_default(),
-                    name: device.name.clone(),
-                    group: device.group.clone(),
-                    mac: device.mac.clone(),
-                    ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
-                    note: device.note.clone(),
-                    move_groups: move_groups.clone(),
-                })
-                .collect();
-            devices.sort_by_key(|device| device.name.to_ascii_lowercase());
-            GroupView {
-                name: group.name.clone(),
-                label: group.title().to_owned(),
-                vlan: group.vlan,
-                devices,
-            }
+                .count(),
+            cards: group_cards(group, &list, &config, &links, &move_groups),
         })
         .collect();
     let has_targets = state.has_targets();
