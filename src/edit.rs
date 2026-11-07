@@ -27,6 +27,9 @@ pub struct DeviceForm {
     ip: String,
     #[serde(default)]
     note: String,
+    /// Machine the connection belongs to.
+    #[serde(default)]
+    machine: String,
     /// `review` to go to the apply preview after saving.
     #[serde(default)]
     then: String,
@@ -40,6 +43,7 @@ impl DeviceForm {
             group: device.group.clone(),
             ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
             note: device.note.clone(),
+            machine: device.machine.clone(),
             then: String::new(),
         }
     }
@@ -64,6 +68,7 @@ impl DeviceForm {
             group: self.group.clone(),
             ip,
             note: note.to_owned(),
+            machine: self.machine.trim().to_owned(),
         })
     }
 }
@@ -83,6 +88,8 @@ struct EditPage {
     groups: Vec<GroupOption>,
     error: String,
     has_targets: bool,
+    /// Machine names in use, offered in the form.
+    machines: Vec<String>,
 }
 
 fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: String) -> Response {
@@ -112,11 +119,28 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
         groups,
         error,
         has_targets: state.has_targets(),
+        machines: machine_names(state),
     };
     match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
         Err(error) => server_error(&error),
     }
+}
+
+fn machine_names(state: &AppState) -> Vec<String> {
+    let mut names: Vec<String> = state
+        .devices()
+        .map(|list| {
+            list.devices
+                .into_iter()
+                .map(|device| device.machine)
+                .filter(|machine| !machine.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort_by_key(|name| name.to_ascii_lowercase());
+    names.dedup();
+    names
 }
 
 /// Form for a new device, in the default group.
@@ -233,6 +257,41 @@ pub async fn move_device(
         ..DeviceForm::from_device(device)
     };
     save(&state, Some(&name), form)
+}
+
+/// Moves every connection of a machine to another group.
+pub async fn move_machine(
+    State(state): State<AppState>,
+    Path(machine): Path<String>,
+    Form(target): Form<MoveForm>,
+) -> Response {
+    let Ok(_guard) = state.inner.write_lock.lock() else {
+        return server_error(&"device list lock poisoned");
+    };
+    let mut list = match state.devices() {
+        Ok(list) => list,
+        Err(error) => return server_error(&error),
+    };
+    let mut changes = Vec::new();
+    for device in list.devices.iter_mut().filter(|device| device.machine == machine) {
+        if device.group != target.group {
+            let before = device.clone();
+            device.group.clone_from(&target.group);
+            changes.extend(history::device(Some(&before), device));
+        }
+    }
+    if list.devices.iter().all(|device| device.machine != machine) {
+        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+    }
+    match list.save(&state.inner.devices_path, &state.groups().group_names()) {
+        Ok(()) => {
+            history::record(&state.inner.history_path, &changes);
+            state.forget_pending();
+            Redirect::to("/").into_response()
+        }
+        Err(Error::Invalid(message)) => (StatusCode::UNPROCESSABLE_ENTITY, message).into_response(),
+        Err(error) => server_error(&error),
+    }
 }
 
 /// Keeps the plugins linked to a device in step: a new name goes into their settings (logged), and they are built

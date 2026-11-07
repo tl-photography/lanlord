@@ -10,27 +10,45 @@
 <div class="columns">
   {% for group in groups %}
   <section class="group" data-group="{{ group.name }}">
-    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.devices.len() }} {% if group.devices.len() == 1 %}device{% else %}devices{% endif %}</span></h2>
-    {% if group.devices.is_empty() %}
+    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.count }} {% if group.count == 1 %}device{% else %}devices{% endif %}</span></h2>
+    {% if group.cards.is_empty() %}
     <p class="empty">No devices.</p>
     {% else %}
     <ul class="cards">
-      {% for device in group.devices %}
-      <li class="device-item" data-device="{{ device.name }}" draggable="false">
-        <a class="card" href="/devices/{{ device.name }}">
-          <span class="avatar" aria-hidden="true">{{ device.initial }}</span>
+      {% for card in group.cards %}
+      <li class="device-item" data-device="{{ card.key }}" draggable="false">
+        {% if card.machine %}
+        <div class="card machine">
+          <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
           <span class="text">
-            <strong>{{ device.name }}</strong>{% for plugin in device.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
-            <span class="meta">{% if !device.ip.is_empty() %}{{ device.ip }} · {% endif %}<code>{{ device.mac }}</code></span>
-            {% if !device.note.is_empty() %}<span class="note">{{ device.note }}</span>{% endif %}
+            <strong>{{ card.title }}</strong>{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this machine">{{ plugin }}</span>{% endfor %}
+            {% if !card.also_in.is_empty() %}<span class="note">Also in {{ card.also_in }}</span>{% endif %}
+            <ul class="connections">
+              {% for row in card.rows %}
+              <li><a href="/devices/{{ row.name }}">{{ row.name }}</a>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
+                <span class="meta">{% if !row.ip.is_empty() %}{{ row.ip }} · {% endif %}<code>{{ row.mac }}</code></span></li>
+              {% endfor %}
+            </ul>
+          </span>
+        </div>
+        {% else %}
+        {% for row in card.rows %}
+        <a class="card" href="/devices/{{ row.name }}">
+          <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
+          <span class="text">
+            <strong>{{ row.name }}</strong>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
+            <span class="meta">{% if !row.ip.is_empty() %}{{ row.ip }} · {% endif %}<code>{{ row.mac }}</code></span>
+            {% if !row.note.is_empty() %}<span class="note">{{ row.note }}</span>{% endif %}
           </span>
         </a>
+        {% endfor %}
+        {% endif %}
         <details class="move-menu">
-          <summary aria-label="Move {{ device.name }}">Move</summary>
+          <summary aria-label="Move {{ card.title }}">Move</summary>
           <div class="move-options">
-            {% for target in device.move_groups %}
-            {% if target.name != device.group %}
-            <form method="post" action="/devices/{{ device.name }}/move" data-move-group="{{ target.name }}">
+            {% for target in card.move_groups %}
+            {% if target.name != card.group %}
+            <form method="post" action="{{ card.move_action }}" data-move-group="{{ target.name }}">
               <input type="hidden" name="group" value="{{ target.name }}">
               <button type="submit">Move to {{ target.label }}</button>
             </form>

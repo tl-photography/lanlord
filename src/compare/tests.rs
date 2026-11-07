@@ -27,6 +27,7 @@ fn list() -> DeviceList {
                 group: "lan".to_owned(),
                 ip: Some(Ipv4Addr::new(192, 0, 2, 2)),
                 note: String::new(),
+                machine: String::new(),
             },
             Device {
                 name: "plug".to_owned(),
@@ -34,6 +35,7 @@ fn list() -> DeviceList {
                 group: "iot".to_owned(),
                 ip: None,
                 note: String::new(),
+                machine: String::new(),
             },
         ],
     }

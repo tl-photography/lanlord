@@ -15,6 +15,7 @@ fn device(name: &str, mac: &str) -> Device {
         group: "lan".to_owned(),
         ip: None,
         note: String::new(),
+        machine: String::new(),
     }
 }
 

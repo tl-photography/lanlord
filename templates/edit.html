@@ -17,6 +17,8 @@
   </label>
   <label>IP address <input name="ip" value="{{ form.ip }}" inputmode="decimal" placeholder="optional"></label>
   <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
+  <label>Belongs to <input name="machine" value="{{ form.machine }}" list="machines" maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="optional, e.g. a laptop with Wi-Fi and cable"></label>
+  <datalist id="machines">{% for machine in machines %}<option value="{{ machine }}">{% endfor %}</datalist>
   <div class="actions">
     <button type="submit">Save</button>
     {% if has_targets %}<button type="submit" name="then" value="review" class="secondary">Save and review changes</button>{% endif %}

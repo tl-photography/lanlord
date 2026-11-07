@@ -358,6 +358,7 @@ fn devices() -> DeviceList {
         group: "lan".to_owned(),
         ip: Some(Ipv4Addr::from(ip)),
         note: String::new(),
+        machine: String::new(),
     };
     DeviceList {
         devices: vec![

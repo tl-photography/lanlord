@@ -26,6 +26,10 @@ pub struct Device {
     /// Free text.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
+    /// The machine this connection belongs to, for example `ThinkPad` for its dock, Wi-Fi and cable; empty for a
+    /// device with one connection.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub machine: String,
 }
 
 /// All devices, in the order of the file.
@@ -154,6 +158,12 @@ impl DeviceList {
                 return Err(Error::Invalid(format!(
                     "{name}: invalid MAC address {}",
                     device.mac
+                )));
+            }
+            if !device.machine.is_empty() && !is_valid_name(&device.machine) {
+                return Err(Error::Invalid(format!(
+                    "{name}: invalid machine name {}",
+                    device.machine
                 )));
             }
             if !groups.contains(&device.group) {
