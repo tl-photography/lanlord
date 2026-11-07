@@ -630,23 +630,27 @@ pub(super) fn parse_fingerprint(text: &str) -> Option<[u8; 32]> {
 
 /// HTTP client that trusts exactly the certificate with this fingerprint, whatever its name or issuer.
 pub(super) fn client(fingerprint: [u8; 32]) -> Result<Client, String> {
+    Client::builder()
+        .use_preconfigured_tls(pinned_tls(fingerprint)?)
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| error.to_string())
+}
+
+/// TLS settings that trust exactly the certificate with this fingerprint, whatever its name or issuer.
+pub(super) fn pinned_tls(fingerprint: [u8; 32]) -> Result<rustls::ClientConfig, String> {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let verifier = PinnedCertificate {
         fingerprint,
         provider: provider.clone(),
     };
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
+    Ok(rustls::ClientConfig::builder_with_provider(provider)
         .with_safe_default_protocol_versions()
         .map_err(|error| error.to_string())?
         .dangerous()
         .with_custom_certificate_verifier(Arc::new(verifier))
-        .with_no_client_auth();
-    Client::builder()
-        .use_preconfigured_tls(tls)
-        .connect_timeout(Duration::from_secs(5))
-        .timeout(REQUEST_TIMEOUT)
-        .build()
-        .map_err(|error| error.to_string())
+        .with_no_client_auth())
 }
 
 /// Accepts the server certificate only if its SHA-256 fingerprint is the pinned one. The signatures of the

@@ -40,6 +40,8 @@ differences.
 | `leases-file` | the devices in a dnsmasq lease file in the data directory               | -                                        |
 | `webhook`     | -                                                                       | notifications as JSON to a URL           |
 | `ntfy`        | -                                                                       | notifications to an ntfy topic           |
+| `mqtt`        | -                                                                       | notifications to an MQTT topic           |
+| `email`       | -                                                                       | notifications by mail                    |
 
 File settings, like password files, are file names in the data directory. Paths outside it are rejected.
 OpenWrt and Pi-hole plugins can be linked to the device they talk to. With a device and no address, lanlord uses
@@ -119,7 +121,12 @@ openssl s_client -connect pi.hole:443 </dev/null 2>/dev/null | openssl x509 -noo
 
 Notification plugins send lanlord's messages: `webhook` posts `{"title", "text", "source"}` as JSON to a URL, `ntfy`
 posts to a topic on an ntfy server. Both take an optional token file in the data directory (mode `0600`), sent as
-bearer token; with a token, the address must use `https://` (plain `http://` only to the own host). Public
+bearer token; with a token, the address must use `https://` (plain `http://` only to the own host).
+
+`mqtt` publishes the same JSON with QoS 1 to a topic, optionally with a user and password file. With TLS, a broker
+with a self-signed certificate needs its SHA-256 fingerprint. `email` sends through an SMTP server with `starttls`,
+`tls` or `none`, optionally with a user and password file; a password is never sent with `none`.
+ Public
 servers are checked against the usual certificate authorities, built into lanlord. Each notification plugin has a
 "Send test notification" button on the Plugins page.
 
