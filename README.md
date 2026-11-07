@@ -18,7 +18,8 @@ differences.
 - The Apply page shows what a router would change, as uci commands like LuCI. Nothing changes before the Apply
   button. lanlord applies with rollback and confirms only after reading the changes back; otherwise the router
   undoes them after 30 seconds. The top bar shows how many changes are open; "Save and review changes" in the device
-  form opens that preview.
+  form opens that preview. With open changes on several targets, "Apply all" applies them one after the other; a
+  failed target does not stop the others.
 - Static leases on a router are sections `dhcp.lanlord_<name>`. When lanlord sets a device's lease, it replaces an
   unnamed entry of the same MAC address; other entries stay. A device whose address is not in a network the router
   serves waits, its entry stays as it is.

@@ -46,6 +46,21 @@ struct ApplyPage {
     error: String,
 }
 
+impl ApplyPage {
+    /// The number of targets with open changes.
+    fn open_targets(&self) -> usize {
+        self.targets
+            .iter()
+            .filter(|target| !target.changes.is_empty())
+            .count()
+    }
+
+    /// The number of open changes of all targets.
+    fn open_changes(&self) -> usize {
+        self.targets.iter().map(|target| target.changes.len()).sum()
+    }
+}
+
 /// The enabled plugins that apply changes; `None` if the plugin lock is poisoned.
 fn targets(state: &AppState) -> Option<Vec<Arc<dyn Plugin>>> {
     let plugins = state.inner.plugins.read().ok()?;
@@ -185,6 +200,42 @@ pub async fn list(State(state): State<AppState>) -> Response {
     page(&state, String::new(), String::new()).await
 }
 
+/// Applies the changes of one target, if they are still the ones shown; logs the result and returns it as text.
+async fn apply_target(state: &AppState, plugin: &dyn Plugin, digest: String) -> Result<String, String> {
+    let name = plugin.name();
+    let devices = state.devices().map_err(|error| error.to_string())?;
+    let history = &state.inner.history_path;
+    state.forget_pending();
+    match tokio::time::timeout(APPLY_TIMEOUT, plugin.apply(devices, digest)).await {
+        Ok(Ok(applied)) if applied.is_empty() => Ok(format!("{name}: nothing to apply")),
+        Ok(Ok(applied)) => {
+            let count = applied.len();
+            tracing::info!("{name}: {count} changes applied");
+            let entries: Vec<String> = applied
+                .iter()
+                .map(|change| format!("Applied to {name}: {change}"))
+                .collect();
+            history::record(history, &entries);
+            let changes = if count == 1 { "change" } else { "changes" };
+            Ok(format!("{name}: {count} {changes} applied"))
+        }
+        Ok(Err(error)) => {
+            tracing::warn!("{name}: apply failed: {error}");
+            history::record(history, &[format!("Apply to {name} failed: {error}")]);
+            Err(error)
+        }
+        Err(_) => {
+            let error = format!(
+                "{name}: no answer within {} s; unconfirmed changes are undone by the router",
+                APPLY_TIMEOUT.as_secs()
+            );
+            tracing::warn!("{error}");
+            history::record(history, &[format!("Apply to {name} failed: {error}")]);
+            Err(error)
+        }
+    }
+}
+
 /// Applies the changes of one target, if they are still the ones shown (`digest`).
 pub async fn apply(
     State(state): State<AppState>,
@@ -195,49 +246,30 @@ pub async fn apply(
     let Some(active) = targets(&state) else {
         return server_error(&"plugin lock poisoned");
     };
-    let plugin = active.into_iter().find(|plugin| plugin.name() == name);
-    let Some(plugin) = plugin else {
+    let Some(plugin) = active.iter().find(|plugin| plugin.name() == name) else {
         return page(&state, String::new(), format!("No target named {name}")).await;
     };
-    let devices = match state.devices() {
-        Ok(devices) => devices,
-        Err(error) => return server_error(&error),
+    match apply_target(&state, plugin.as_ref(), digest).await {
+        Ok(message) => page(&state, message, String::new()).await,
+        Err(error) => page(&state, String::new(), error).await,
+    }
+}
+
+/// Applies every target the form has a digest for, one after the other; a failed target does not stop the others.
+pub async fn apply_all(State(state): State<AppState>, Form(form): Form<HashMap<String, String>>) -> Response {
+    let Some(active) = targets(&state) else {
+        return server_error(&"plugin lock poisoned");
     };
-    let history = &state.inner.history_path;
-    state.forget_pending();
-    match tokio::time::timeout(APPLY_TIMEOUT, plugin.apply(devices, digest)).await {
-        Ok(Ok(applied)) if applied.is_empty() => {
-            page(&state, format!("{name}: nothing to apply"), String::new()).await
-        }
-        Ok(Ok(applied)) => {
-            let count = applied.len();
-            tracing::info!("{name}: {count} changes applied");
-            let entries: Vec<String> = applied
-                .iter()
-                .map(|change| format!("Applied to {name}: {change}"))
-                .collect();
-            history::record(history, &entries);
-            let changes = if count == 1 { "change" } else { "changes" };
-            page(
-                &state,
-                format!("{name}: {count} {changes} applied"),
-                String::new(),
-            )
-            .await
-        }
-        Ok(Err(error)) => {
-            tracing::warn!("{name}: apply failed: {error}");
-            history::record(history, &[format!("Apply to {name} failed: {error}")]);
-            page(&state, String::new(), error).await
-        }
-        Err(_) => {
-            let error = format!(
-                "{name}: no answer within {} s; unconfirmed changes are undone by the router",
-                APPLY_TIMEOUT.as_secs()
-            );
-            tracing::warn!("{error}");
-            history::record(history, &[format!("Apply to {name} failed: {error}")]);
-            page(&state, String::new(), error).await
+    let mut messages = Vec::new();
+    let mut errors = Vec::new();
+    for plugin in &active {
+        let Some(digest) = form.get(&format!("digest-{}", plugin.name())) else {
+            continue;
+        };
+        match apply_target(&state, plugin.as_ref(), digest.clone()).await {
+            Ok(message) => messages.push(message),
+            Err(error) => errors.push(error),
         }
     }
+    page(&state, messages.join("; "), errors.join("; ")).await
 }
