@@ -136,3 +136,42 @@ async fn interface_badges_sit_side_by_side_without_addresses() {
     let (_, page) = send(&app, get("/")).await;
     assert!(page.contains("connections compact"), "{page}");
 }
+
+#[tokio::test]
+async fn a_linked_device_moves_to_the_network_column_and_keeps_its_group() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let (_, page) = send(&app, get("/")).await;
+    assert!(!page.contains("group network"), "{page}");
+
+    std::fs::write(
+        data.path().join("lanlord.toml"),
+        "[[plugin]]\nname = \"router\"\ntype = \"openwrt\"\nenabled = false\ndevice = \"tv\"\nuser = \"lanlord\"\npassword_file = \"router.password\"\ncertificate_sha256 = \"00\"\n",
+    )
+    .unwrap();
+    let (_, page) = send(&app, get("/")).await;
+    let (network, groups) = page.split_once(r#"data-group="lan""#).unwrap();
+    assert!(network.contains("group network"), "{page}");
+    assert!(network.contains("<strong>tv</strong>"), "{page}");
+    assert!(network.contains(r#"<span class="badge vlan""#), "{page}");
+    assert!(network.contains(r#"aria-label="Move tv""#), "{page}");
+    assert!(!groups.contains("<strong>tv</strong>"), "{page}");
+    assert!(groups.contains("1 device<"), "{page}");
+}
+
+#[tokio::test]
+async fn the_switch_for_a_self_assigned_address_is_saved() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let form = "name=tv&mac=00%3A00%3A00%3A00%3A00%3A09&group=lan&ip=192.0.2.9&self_assigned=true";
+    assert_eq!(
+        send(&app, post("/devices/tv", form)).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let saved = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
+    assert!(saved.contains("self_assigned = true"), "{saved}");
+    let (_, page) = send(&app, get("/devices/tv")).await;
+    assert!(page.contains(r#"value="true" checked"#), "{page}");
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("address set on the device"), "{log}");
+}

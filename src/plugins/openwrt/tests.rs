@@ -357,6 +357,7 @@ fn devices() -> DeviceList {
         mac: mac.to_owned(),
         group: "lan".to_owned(),
         ip: Some(Ipv4Addr::from(ip)),
+        self_assigned: false,
         note: String::new(),
         machine: String::new(),
     };

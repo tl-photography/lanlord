@@ -141,6 +141,14 @@ you make in lanlord are no such thing, they wait for Apply.
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
 
+### Network column
+
+A device that a plugin is linked to, like the router, an access point or the host of Pi-hole, appears in the Network
+column ahead of the groups. It keeps its group, which decides its VLAN, and shows it as a badge.
+
+A device that sets its address itself, like the router, has "Address is set on the device itself" switched on: the
+address is shown and used for the plugin link, but it gets no static lease.
+
 ### Settings
 
 The Settings page chooses what the device overview shows: MAC and IP addresses are both on by default (`[overview]`

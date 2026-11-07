@@ -223,14 +223,16 @@ pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> P
     for device in &list.devices {
         let id = section_id(&device.name);
         let own = hosts.iter().find(|host| host.id == id);
-        let Some(ip) = device.ip else {
+        let Some(ip) = device.ip.filter(|_| !device.self_assigned) else {
             if let Some(own) = own {
+                let reason = if device.self_assigned {
+                    "sets its address itself"
+                } else {
+                    "has no fixed address any more"
+                };
                 plan.changes.push(Change::Delete {
                     section: own.id.clone(),
-                    why: format!(
-                        "{} has no fixed address any more: remove its static lease",
-                        device.name
-                    ),
+                    why: format!("{} {reason}: remove its static lease", device.name),
                 });
                 deleted.push(&own.id);
             }

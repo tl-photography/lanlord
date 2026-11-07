@@ -18,6 +18,7 @@ fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Device {
         mac: format!("00:00:00:00:00:{:02x}", name.len()),
         group: group.to_owned(),
         ip: ip.map(Ipv4Addr::from),
+        self_assigned: false,
         note: String::new(),
         machine: String::new(),
     }

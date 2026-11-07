@@ -133,9 +133,11 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
     let by_mac: HashMap<&str, &Entry> = entries.iter().map(|entry| (entry.mac.as_str(), entry)).collect();
     for device in &list.devices {
         let Some(entry) = by_mac.get(device.mac.as_str()) else {
-            findings.push(Finding::Missing {
-                device: device.name.clone(),
-            });
+            if !device.self_assigned {
+                findings.push(Finding::Missing {
+                    device: device.name.clone(),
+                });
+            }
             continue;
         };
         // Entries without a name, like a Wi-Fi station without a static lease, have no name to compare.
@@ -145,7 +147,7 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
                 actual: entry.name.clone(),
             });
         }
-        if entry.ip != device.ip {
+        if !device.self_assigned && entry.ip != device.ip {
             findings.push(Finding::WrongIp {
                 device: device.name.clone(),
                 expected: device.ip,

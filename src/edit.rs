@@ -25,6 +25,9 @@ pub struct DeviceForm {
     group: String,
     #[serde(default)]
     ip: String,
+    /// The address is set on the device itself.
+    #[serde(default)]
+    self_assigned: bool,
     #[serde(default)]
     note: String,
     /// Machine the connection belongs to.
@@ -42,6 +45,7 @@ impl DeviceForm {
             mac: device.mac.clone(),
             group: device.group.clone(),
             ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
+            self_assigned: device.self_assigned,
             note: device.note.clone(),
             machine: device.machine.clone(),
             then: String::new(),
@@ -67,6 +71,7 @@ impl DeviceForm {
             mac,
             group: self.group.clone(),
             ip,
+            self_assigned: self.self_assigned,
             note: note.to_owned(),
             machine: self.machine.trim().to_owned(),
         })

@@ -96,6 +96,7 @@ code { font-size: 0.9em; }
 .badge { font-size: 0.75rem; font-weight: 600; padding: 0.1rem 0.5rem; border-radius: 1rem; background: var(--accent-soft); color: var(--accent); }
 .badge.linked { background: var(--linked-soft); color: var(--linked); }
 .badge.interface { background: var(--interface-soft); color: var(--interface); }
+.badge.vlan { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 .cards { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
 .device-item {
   position: relative; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.35rem; align-items: center;
