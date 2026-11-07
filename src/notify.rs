@@ -25,23 +25,31 @@ impl Notification {
     }
 }
 
+/// TLS settings that trust the usual public certificate authorities.
+///
+/// # Errors
+///
+/// If the TLS configuration cannot be built.
+pub fn public_tls() -> Result<rustls::ClientConfig, String> {
+    let provider = Arc::new(rustls::crypto::ring::default_provider());
+    let roots = rustls::RootCertStore {
+        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
+    };
+    Ok(rustls::ClientConfig::builder_with_provider(provider)
+        .with_safe_default_protocol_versions()
+        .map_err(|error| error.to_string())?
+        .with_root_certificates(roots)
+        .with_no_client_auth())
+}
+
 /// An HTTP client that trusts the usual public certificate authorities (built in, the image has no CA files).
 ///
 /// # Errors
 ///
 /// If the TLS configuration cannot be built.
 pub fn public_client() -> Result<Client, String> {
-    let provider = Arc::new(rustls::crypto::ring::default_provider());
-    let roots = rustls::RootCertStore {
-        roots: webpki_roots::TLS_SERVER_ROOTS.to_vec(),
-    };
-    let tls = rustls::ClientConfig::builder_with_provider(provider)
-        .with_safe_default_protocol_versions()
-        .map_err(|error| error.to_string())?
-        .with_root_certificates(roots)
-        .with_no_client_auth();
     Client::builder()
-        .use_preconfigured_tls(tls)
+        .use_preconfigured_tls(public_tls()?)
         .connect_timeout(Duration::from_secs(5))
         .timeout(Duration::from_secs(10))
         .build()
