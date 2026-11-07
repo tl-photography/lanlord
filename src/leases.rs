@@ -281,9 +281,23 @@ pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> P
             && !kept_own.contains(&host.id)
             && !deleted.contains(&host.id.as_str())
         {
+            let renamed = list
+                .devices
+                .iter()
+                .find(|device| host.macs.contains(&device.mac) && device.name != host.name);
+            let why = match renamed {
+                Some(device) => {
+                    plan.notes.push(format!(
+                        "{} is now {}: its DNS name changes, update what still uses the old name",
+                        host.name, device.name
+                    ));
+                    format!("Rename {} to {}: remove the old lease", label(host), device.name)
+                }
+                None => format!("Remove {}: no device in the list", label(host)),
+            };
             plan.changes.push(Change::Delete {
                 section: host.id.clone(),
-                why: format!("Remove {}: no device in the list", label(host)),
+                why,
             });
         }
     }

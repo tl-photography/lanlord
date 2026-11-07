@@ -161,3 +161,34 @@ fn the_digest_follows_the_changes() {
     let other = list(vec![device("OMV", "00:00:00:00:00:01", Some([192, 0, 2, 3]))]);
     assert_ne!(first.digest(), plan(&other, &[], &[LAN]).digest());
 }
+
+#[test]
+fn a_renamed_device_gets_a_warning() {
+    let devices = list(vec![device("New", "00:00:00:00:00:01", Some([192, 0, 2, 2]))]);
+    let hosts = [host("lanlord_old", "Old", &["00:00:00:00:00:01"], "192.0.2.2")];
+    let plan = plan(&devices, &hosts, &[LAN]);
+    let commands: Vec<String> = plan.changes.iter().flat_map(Change::commands).collect();
+    assert!(
+        commands.contains(&"uci delete dhcp.lanlord_old".to_owned()),
+        "{commands:?}"
+    );
+    assert!(
+        commands.contains(&"uci set dhcp.lanlord_new=host".to_owned()),
+        "{commands:?}"
+    );
+    let delete = plan
+        .changes
+        .iter()
+        .find(|change| matches!(change, Change::Delete { .. }))
+        .unwrap();
+    assert!(
+        delete
+            .description()
+            .starts_with("Rename Old (lanlord_old) to New"),
+        "{delete:?}"
+    );
+    assert_eq!(
+        plan.notes,
+        ["Old is now New: its DNS name changes, update what still uses the old name"]
+    );
+}

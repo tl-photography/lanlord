@@ -83,3 +83,43 @@ async fn a_plugin_linked_to_a_device_follows_its_rename() {
     let (_, page) = send(&app, get("/")).await;
     assert!(page.contains(">ap</span>"), "the badge moved with the name");
 }
+
+#[tokio::test]
+async fn a_rename_reaches_plugin_addresses_with_the_old_name() {
+    let data = data();
+    std::fs::write(
+        data.path().join("lanlord.toml"),
+        format!(
+            "[[plugin]]\ntype = \"openwrt\"\nname = \"ap\"\nenabled = true\nurl = \"https://livingroomap.lan:8443\"\n\
+             user = \"lanlord\"\npassword_file = \"ap.password\"\ncertificate = \"{}\"\n\n\
+             [[plugin]]\ntype = \"openwrt\"\nname = \"other\"\nenabled = true\nurl = \"https://router.lan\"\n\
+             user = \"lanlord\"\npassword_file = \"ap.password\"\ncertificate = \"{}\"\n",
+            "00".repeat(32),
+            "00".repeat(32)
+        ),
+    )
+    .unwrap();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+
+    let rename = "name=Devolo&mac=00:00:00:00:00:01&group=lan&ip=192.0.2.5&note=";
+    assert_eq!(
+        send(&app, post("/devices/LivingRoomAP", rename)).await.0,
+        StatusCode::SEE_OTHER
+    );
+
+    let settings = lanlord::plugins::read_settings(&data.path().join("lanlord.toml")).unwrap();
+    assert_eq!(
+        settings.plugins[0]["url"].as_str(),
+        Some("https://devolo.lan:8443")
+    );
+    assert_eq!(
+        settings.plugins[1]["url"].as_str(),
+        Some("https://router.lan"),
+        "other hosts stay"
+    );
+    let (_, page) = send(&app, get("/history")).await;
+    assert!(
+        page.contains("Plugin ap changed: url https://livingroomap.lan:8443 → https://devolo.lan:8443"),
+        "{page}"
+    );
+}
