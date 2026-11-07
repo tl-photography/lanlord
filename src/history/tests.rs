@@ -73,6 +73,8 @@ fn group_changes_are_listed() {
         vlan: 1,
         subnet: String::new(),
         label: String::new(),
+        ssid: String::new(),
+        ssid_password_file: String::new(),
     };
     let before = Config {
         default_group: "lan".to_owned(),
@@ -92,6 +94,8 @@ fn group_changes_are_listed() {
                 vlan: 30,
                 subnet: String::new(),
                 label: String::new(),
+                ssid: String::new(),
+                ssid_password_file: String::new(),
             },
         ],
     };

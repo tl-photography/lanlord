@@ -9,7 +9,7 @@
 <p class="notice">No groups yet. Every group is a VLAN; add one for each, for example LAN, IoT and guests.</p>
 {% else %}
 <table>
-  <thead><tr><th>Name</th><th>ID</th><th>VLAN</th><th>Subnet</th><th>Devices</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>ID</th><th>VLAN</th><th>Subnet</th><th>Own Wi-Fi</th><th>Devices</th><th></th></tr></thead>
   <tbody>
     {% for group in groups %}
     <tr>
@@ -20,6 +20,13 @@
         <form method="post" action="/groups/{{ group.name }}/subnet" class="row">
           <input name="subnet" value="{{ group.subnet }}" aria-label="Subnet of {{ group.title }}" placeholder="192.168.1.0/24" autocapitalize="off" spellcheck="false">
           <button type="submit" class="secondary" aria-label="Save the subnet of {{ group.title }}">Save</button>
+        </form>
+      </td>
+      <td data-label="Own Wi-Fi">
+        <form method="post" action="/groups/{{ group.name }}/wifi" class="row">
+          <input name="ssid" value="{{ group.ssid }}" maxlength="32" aria-label="SSID of {{ group.title }}" placeholder="optional SSID" spellcheck="false">
+          <input name="password_file" value="{{ group.password_file }}" aria-label="Password file of {{ group.title }}" placeholder="iot.wifi" autocapitalize="off" spellcheck="false">
+          <button type="submit" class="secondary" aria-label="Save the Wi-Fi of {{ group.title }}">Save</button>
         </form>
       </td>
       <td data-label="Devices">{{ group.devices }}</td>

@@ -148,6 +148,12 @@ and says so in the history and a notification. It is off by default.
 On the Groups page: the DNS server of all networks, the router or a plugin that offers DNS, like Pi-hole. A plugin
 offers it at the fixed address of the device it is linked to.
 
+### Own Wi-Fi
+
+The main Wi-Fi puts each device into the VLAN of its group. A group can also have an SSID of its own, for devices that
+cannot use the main one, like ESP8266 devices that fail with fast roaming. Its password is in a file in the data
+directory with mode 0600, named on the Groups page.
+
 ### Subnets
 
 Every group can have a subnet on the Groups page. A device with a fixed address outside it gets a warning on its card

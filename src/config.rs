@@ -24,6 +24,12 @@ pub struct Group {
     /// Text shown in the interface.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
+    /// A Wi-Fi network of its own, for devices that cannot use the main one; empty for none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ssid: String,
+    /// File in the data directory with the password of `ssid`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ssid_password_file: String,
 }
 
 /// Reads `192.0.2.0/24`.
@@ -129,6 +135,20 @@ impl Config {
             if !group.subnet.is_empty() && group.network().is_none() {
                 return Err(Error::Invalid(format!(
                     "{}: the subnet must look like 192.0.2.0/24",
+                    group.name
+                )));
+            }
+            if !(group.ssid.is_empty() || (1..=32).contains(&group.ssid.len()))
+                || group.ssid.chars().any(char::is_control)
+            {
+                return Err(Error::Invalid(format!(
+                    "{}: the SSID must be 1 to 32 bytes",
+                    group.name
+                )));
+            }
+            if !group.ssid.is_empty() && !crate::plugins::is_data_file(&group.ssid_password_file) {
+                return Err(Error::Invalid(format!(
+                    "{}: the SSID needs a password file in the data directory",
                     group.name
                 )));
             }

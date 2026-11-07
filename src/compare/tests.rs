@@ -10,12 +10,16 @@ fn groups() -> Vec<Group> {
             vlan: 1,
             subnet: String::new(),
             label: String::new(),
+            ssid: String::new(),
+            ssid_password_file: String::new(),
         },
         Group {
             name: "iot".to_owned(),
             vlan: 20,
             subnet: String::new(),
             label: String::new(),
+            ssid: String::new(),
+            ssid_password_file: String::new(),
         },
     ]
 }

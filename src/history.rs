@@ -158,6 +158,16 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
                     optional(&group.subnet)
                 ));
             }
+            Some(old) if old.ssid != group.ssid || old.ssid_password_file != group.ssid_password_file => {
+                texts.push(format!(
+                    "Group {} changed: SSID {} → {}, password file {} → {}",
+                    group.name,
+                    optional(&old.ssid),
+                    optional(&group.ssid),
+                    optional(&old.ssid_password_file),
+                    optional(&group.ssid_password_file)
+                ));
+            }
             Some(old) if old != group => texts.push(format!(
                 "Group {} changed: VLAN {} → {}, label {} → {}",
                 group.name,

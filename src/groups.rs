@@ -29,6 +29,15 @@ pub struct SubnetForm {
     subnet: String,
 }
 
+/// Fields of the form for the Wi-Fi of a group.
+#[derive(Debug, Deserialize)]
+pub struct WifiForm {
+    #[serde(default)]
+    ssid: String,
+    #[serde(default)]
+    password_file: String,
+}
+
 /// Field of the form for the DNS service.
 #[derive(Debug, Deserialize)]
 pub struct DnsForm {
@@ -51,6 +60,8 @@ struct GroupRow {
     name: String,
     vlan: u16,
     subnet: String,
+    ssid: String,
+    password_file: String,
     title: String,
     devices: usize,
     is_default: bool,
@@ -90,6 +101,8 @@ fn page(state: &AppState, form: GroupForm, error: String) -> Response {
             name: group.name.clone(),
             vlan: group.vlan,
             subnet: group.subnet.clone(),
+            ssid: group.ssid.clone(),
+            password_file: group.ssid_password_file.clone(),
             title: group.title().to_owned(),
             devices: devices.iter().filter(|device| device.group == group.name).count(),
             is_default: group.name == config.default_group,
@@ -168,6 +181,8 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<GroupForm>) 
         vlan,
         subnet: form.subnet.trim().to_owned(),
         label: form.label.trim().to_owned(),
+        ssid: String::new(),
+        ssid_password_file: String::new(),
     };
     change(&state, form, |config, _| {
         if config.groups.is_empty() {
@@ -191,6 +206,29 @@ pub async fn set_subnet(
             .find(|group| group.name == name)
             .ok_or_else(|| format!("No such group: {name}"))?;
         form.subnet.trim().clone_into(&mut group.subnet);
+        Ok(())
+    })
+}
+
+/// Sets or clears the SSID of a group and the file with its password.
+pub async fn set_wifi(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Form(form): Form<WifiForm>,
+) -> Response {
+    change(&state, GroupForm::default(), |config, _| {
+        let group = config
+            .groups
+            .iter_mut()
+            .find(|group| group.name == name)
+            .ok_or_else(|| format!("No such group: {name}"))?;
+        form.ssid.trim().clone_into(&mut group.ssid);
+        let file = if group.ssid.is_empty() {
+            ""
+        } else {
+            form.password_file.trim()
+        };
+        file.clone_into(&mut group.ssid_password_file);
         Ok(())
     })
 }

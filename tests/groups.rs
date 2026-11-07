@@ -157,3 +157,46 @@ async fn a_linked_dns_plugin_can_serve_all_networks() {
     );
     assert!(!groups_file(&data).contains("dns_service"));
 }
+
+#[tokio::test]
+async fn a_group_gets_its_own_wifi_with_a_password_file() {
+    let data = setup().await;
+    let form = "ssid=Home+IoT&password_file=iot.wifi";
+    assert_eq!(
+        post(&data, "/groups/guest/wifi", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let file = groups_file(&data);
+    assert!(
+        file.contains("ssid = \"Home IoT\"\nssid_password_file = \"iot.wifi\""),
+        "{file}"
+    );
+
+    let (status, page) = post(
+        &data,
+        "/groups/guest/wifi",
+        "ssid=Home+IoT&password_file=..%2Fsecret",
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        page.contains("needs a password file in the data directory"),
+        "{page}"
+    );
+    let long = "x".repeat(33);
+    let (status, _) = post(
+        &data,
+        "/groups/guest/wifi",
+        &format!("ssid={long}&password_file=iot.wifi"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    assert_eq!(
+        post(&data, "/groups/guest/wifi", "ssid=&password_file=iot.wifi")
+            .await
+            .0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("ssid"), "{}", groups_file(&data));
+}

@@ -272,6 +272,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups/dns", axum::routing::post(groups::set_dns))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/groups/{name}/subnet", axum::routing::post(groups::set_subnet))
+        .route("/groups/{name}/wifi", axum::routing::post(groups::set_wifi))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))
         .route(
             "/settings/background",
