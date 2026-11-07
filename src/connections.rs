@@ -15,7 +15,6 @@ use crate::{AppState, server_error};
 #[derive(Debug, PartialEq, Eq)]
 struct Node {
     name: String,
-    role: &'static str,
     /// How it is connected, like `lan1` or `Wi-Fi: Home`.
     link: String,
     status: live::Status,
@@ -36,29 +35,24 @@ struct Loose {
     status: live::Status,
 }
 
-/// Where a device hangs and how, from the Wi-Fi it is on or from the list.
+/// Where a device hangs and through which port: its Wi-Fi, else "Connected to", else the port a scan found it on.
 fn place(device: &Device, list: &DeviceList, live: &Live) -> Option<(String, String)> {
-    let access_point = live.access_point(&device.mac);
-    if let Some((name, ssid)) = access_point.split_once(": ")
-        && list.devices.iter().any(|other| other.name == name)
+    let exists = |name: &str| list.devices.iter().any(|other| other.name == name);
+    if let Some((name, ssid)) = live.access_point(&device.mac).split_once(": ")
+        && exists(name)
     {
         return Some((name.to_owned(), format!("Wi-Fi: {ssid}")));
     }
-    let exists = |name: &str| list.devices.iter().any(|other| other.name == name);
-    if device.uplink.is_empty() {
-        let (switch, port) = live.wired(&device.mac)?;
-        return (switch != device.name && exists(switch))
-            .then(|| (switch.to_owned(), format!("{port}, detected")));
+    let wired = live.wired(&device.mac);
+    if !device.uplink.is_empty() {
+        let port = wired
+            .filter(|(switch, _)| *switch == device.uplink)
+            .map_or("", |(_, port)| port);
+        return (device.uplink != device.name && exists(&device.uplink))
+            .then(|| (device.uplink.clone(), port.to_owned()));
     }
-    let uplink = (device.uplink != device.name).then(|| device.uplink.clone())?;
-    exists(&uplink).then(|| {
-        let link = match (device.medium.label(), device.port.as_str()) {
-            ("", port) => port.to_owned(),
-            (medium, "") => medium.to_owned(),
-            (medium, port) => format!("{medium}, {port}"),
-        };
-        (uplink, link)
-    })
+    let (switch, port) = wired?;
+    (switch != device.name && exists(switch)).then(|| (switch.to_owned(), port.to_owned()))
 }
 
 struct Tree<'a> {
@@ -76,11 +70,6 @@ impl Tree<'_> {
         let device = &self.list.devices[index];
         self.tokens.push(Token::Node(Node {
             name: device.name.clone(),
-            role: if device.role.is_client() {
-                ""
-            } else {
-                device.role.label()
-            },
             link,
             status: self.live.status(device, self.time),
         }));
@@ -96,10 +85,7 @@ impl Tree<'_> {
                     .map(|(_, link)| (child, link.clone()))
             })
             .collect();
-        children.sort_by_key(|(child, _)| {
-            let other = &self.list.devices[*child];
-            (other.role, other.name.to_ascii_lowercase())
-        });
+        children.sort_by_key(|(child, _)| self.list.devices[*child].name.to_ascii_lowercase());
         if !children.is_empty() {
             self.tokens.push(Token::Open);
             for (child, link) in children {
@@ -113,8 +99,8 @@ impl Tree<'_> {
     }
 }
 
-/// The tree from the routers and from unplaced devices others hang on, and the indexes of the connections outside it.
-/// A loop stays outside.
+/// The tree from the unplaced devices others hang on, and the indexes of the connections outside it. A loop stays
+/// outside.
 fn build(list: &DeviceList, live: &Live, time: u64) -> (Vec<Token>, Vec<usize>) {
     let mut tree = Tree {
         list,
@@ -134,17 +120,13 @@ fn build(list: &DeviceList, live: &Live, time: u64) -> (Vec<Token>, Vec<usize>) 
             .flatten()
             .any(|(parent, _)| *parent == device.name)
     };
-    let mut roots: Vec<usize> = list
+    let roots: Vec<usize> = list
         .devices
         .iter()
         .enumerate()
-        .filter(|(index, device)| {
-            tree.places[*index].is_none()
-                && (device.role == crate::devices::Role::Router || has_children(device))
-        })
+        .filter(|(index, device)| tree.places[*index].is_none() && has_children(device))
         .map(|(index, _)| index)
         .collect();
-    roots.sort_by_key(|index| list.devices[*index].role);
     if !roots.is_empty() {
         tree.tokens.push(Token::Open);
         for root in roots {

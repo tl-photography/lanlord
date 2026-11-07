@@ -12,11 +12,8 @@ fn device(ip: [u8; 4]) -> Device {
         group: "iot".to_owned(),
         ip: Some(ip.into()),
         self_assigned: false,
-        role: crate::devices::Role::Client,
         unreviewed: false,
         uplink: String::new(),
-        port: String::new(),
-        medium: crate::devices::Medium::Cable,
         note: String::new(),
         machine: String::new(),
     }

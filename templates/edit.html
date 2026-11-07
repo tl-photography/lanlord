@@ -21,13 +21,6 @@
       {% endfor %}
     </select>
   </label>
-  <label>Role
-    <select name="role">
-      {% for role in roles %}
-      <option value="{{ role.value() }}"{% if *role == form.role %} selected{% endif %}>{{ role.label() }}</option>
-      {% endfor %}
-    </select>
-  </label>
   <label>IP address <input name="ip" value="{{ form.ip }}" inputmode="decimal" placeholder="optional"></label>
   <label>Address comes from
     <select name="self_assigned">
@@ -44,15 +37,7 @@
       {% endfor %}
     </select>
   </label>
-  <label>Port <input name="port" value="{{ form.port }}" maxlength="30" autocapitalize="off" spellcheck="false" placeholder="optional, e.g. lan1"></label>
-  <label>Connected by
-    <select name="medium">
-      {% for medium in media %}
-      <option value="{{ medium.value() }}"{% if *medium == form.medium %} selected{% endif %}>{% if medium.label().is_empty() %}Cable{% else %}{{ medium.label() }}{% endif %}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <small>A scan places Wi-Fi clients by itself; this is for cables and powerline.</small>
+  <small>Optional. A scan finds Wi-Fi clients and devices on a detected port by itself; this overrides it.</small>
   <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
   <label>Belongs to <input name="machine" value="{{ form.machine }}" list="machines" maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="optional, e.g. a laptop with Wi-Fi and cable"></label>
   <datalist id="machines">{% for machine in machines %}<option value="{{ machine }}">{% endfor %}</datalist>

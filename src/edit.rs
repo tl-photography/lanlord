@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
-use crate::devices::{Device, Error, Medium, Role, is_valid_name, normalize_mac};
+use crate::devices::{Device, Error, is_valid_name, normalize_mac};
 use crate::history;
 use crate::plugins;
 use crate::{AppState, server_error};
@@ -29,13 +29,7 @@ pub struct DeviceForm {
     #[serde(default)]
     self_assigned: bool,
     #[serde(default)]
-    role: Role,
-    #[serde(default)]
     uplink: String,
-    #[serde(default)]
-    port: String,
-    #[serde(default)]
-    medium: Medium,
     /// Not in the form: saving a device means it has been looked at.
     #[serde(skip)]
     unreviewed: bool,
@@ -57,11 +51,8 @@ impl DeviceForm {
             group: device.group.clone(),
             ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
             self_assigned: device.self_assigned,
-            role: device.role,
             unreviewed: device.unreviewed,
             uplink: device.uplink.clone(),
-            port: device.port.clone(),
-            medium: device.medium,
             note: device.note.clone(),
             machine: device.machine.clone(),
             then: String::new(),
@@ -88,11 +79,8 @@ impl DeviceForm {
             group: self.group.clone(),
             ip,
             self_assigned: self.self_assigned,
-            role: self.role,
             unreviewed: self.unreviewed,
             uplink: self.uplink.trim().to_owned(),
-            port: self.port.trim().to_owned(),
-            medium: self.medium,
             note: note.to_owned(),
             machine: self.machine.trim().to_owned(),
         })
@@ -133,8 +121,6 @@ struct EditPage {
     original: String,
     /// The address is outside the subnet of the group.
     warning: String,
-    roles: [Role; 6],
-    media: [Medium; 2],
     /// The other devices, as possible uplinks.
     uplinks: Vec<String>,
 }
@@ -167,8 +153,6 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
     let page = EditPage {
         nav: "devices",
         warning,
-        roles: Role::ALL,
-        media: Medium::ALL,
         uplinks,
         title,
         action,
@@ -334,7 +318,6 @@ pub async fn delete(State(state): State<AppState>, Path(name): Path<String>) -> 
     let removed = list.devices.remove(position);
     for other in list.devices.iter_mut().filter(|other| other.uplink == name) {
         other.uplink.clear();
-        other.port.clear();
     }
     let machine_left = !removed.machine.is_empty()
         && list

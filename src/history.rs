@@ -128,10 +128,6 @@ pub fn device(before: Option<&Device>, after: &Device) -> Option<String> {
     compare("note", &before.note, &after.note);
     compare("machine", &before.machine, &after.machine);
     compare("uplink", &before.uplink, &after.uplink);
-    compare("port", &before.port, &after.port);
-    if before.role != after.role {
-        changes.push(format!("role {} → {}", before.role.label(), after.role.label()));
-    }
     if before.unreviewed && !after.unreviewed {
         changes.push("reviewed".to_owned());
     }

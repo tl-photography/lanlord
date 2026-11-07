@@ -289,7 +289,6 @@ struct DeviceRow {
     status: live::Status,
     /// The fixed address is outside the subnet of the group.
     warning: String,
-    role: devices::Role,
     /// Found by a scan and not looked at yet.
     unreviewed: bool,
 }
@@ -313,18 +312,12 @@ struct CardView {
     rows: Vec<DeviceRow>,
     /// Plugins linked to the machine itself.
     plugins: Vec<String>,
-    /// The group, shown on the Network column only.
-    vlan_label: String,
-    /// The role, shown on the Network column only.
-    role_label: &'static str,
     /// Other groups with connections of the same machine.
     also_in: String,
     move_groups: Vec<MoveGroup>,
 }
 
 struct GroupView {
-    /// Devices of this group that the Network column shows.
-    in_network: usize,
     name: String,
     label: String,
     vlan: u16,
@@ -336,27 +329,9 @@ struct GroupView {
 #[template(path = "index.html")]
 struct IndexPage {
     nav: &'static str,
-    /// Cards of routers, access points, switches, bridges and servers.
-    network: Vec<CardView>,
     groups: Vec<GroupView>,
     has_targets: bool,
     overview: plugins::OverviewSettings,
-}
-
-impl CardView {
-    /// The role of the device; a machine has the role of its first interface that has one.
-    fn role(&self) -> devices::Role {
-        self.rows
-            .iter()
-            .map(|row| row.role)
-            .find(|role| !role.is_client())
-            .unwrap_or_default()
-    }
-
-    /// Whether the card belongs to the Network column.
-    fn is_network(&self) -> bool {
-        !self.role().is_client()
-    }
 }
 
 impl IndexPage {
@@ -383,7 +358,6 @@ fn device_row(
         ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
         note: device.note.clone(),
         status: seen.live.status(device, seen.time),
-        role: device.role,
         unreviewed: device.unreviewed,
         warning: device
             .ip
@@ -428,8 +402,6 @@ fn group_cards(
                 group: group.name.clone(),
                 rows: vec![device_row(device, group, links, seen)],
                 plugins: Vec::new(),
-                vlan_label: String::new(),
-                role_label: "",
                 also_in: String::new(),
                 move_groups: move_groups.to_vec(),
             });
@@ -468,8 +440,6 @@ fn group_cards(
             group: group.name.clone(),
             rows,
             plugins: links.get(&device.machine).cloned().unwrap_or_default(),
-            vlan_label: String::new(),
-            role_label: "",
             also_in: elsewhere.join(", "),
             move_groups: move_groups.to_vec(),
         });
@@ -501,37 +471,23 @@ async fn index(State(state): State<AppState>) -> Response {
         live: &sightings,
         time: live::now(),
     };
-    let mut network: Vec<CardView> = Vec::new();
     let groups = config
         .groups
         .iter()
         .map(|group| {
-            let (linked, cards): (Vec<_>, Vec<_>) =
-                group_cards(group, &list, &config, &links, &move_groups, &seen)
-                    .into_iter()
-                    .partition(CardView::is_network);
-            let in_network: usize = linked.iter().map(|card| card.rows.len()).sum();
-            let all = in_network + cards.iter().map(|card| card.rows.len()).sum::<usize>();
-            network.extend(linked.into_iter().map(|mut card| {
-                group.title().clone_into(&mut card.vlan_label);
-                card.role_label = card.role().label();
-                card
-            }));
+            let cards = group_cards(group, &list, &config, &links, &move_groups, &seen);
             GroupView {
                 name: group.name.clone(),
                 label: group.title().to_owned(),
                 vlan: group.vlan,
-                count: all,
-                in_network,
+                count: cards.iter().map(|card| card.rows.len()).sum(),
                 cards,
             }
         })
         .collect();
-    network.sort_by_key(|card| (card.role(), card.title.to_ascii_lowercase()));
     let has_targets = state.has_targets();
     let page = IndexPage {
         nav: "devices",
-        network,
         groups,
         has_targets,
         overview: settings.overview,

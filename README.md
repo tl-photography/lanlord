@@ -164,27 +164,15 @@ rest of its lease, and one with a static address and a cable is not seen at all.
 
 ### Connections
 
-The Devices page also shows the network as a tree, from the router or any device others hang on. Choose "Connected to", the port and cable or
-powerline on a device's page. Wi-Fi clients need none of that: a scan puts them under their access point, as long as
-its plugin is linked to a device. Cabled devices without "Connected to" are placed from the bridge table of a linked
-OpenWrt device (see the ACL) or a switch (see SNMP), if nothing else was learned on their port. What you set yourself
-wins. Devices that have no place yet are listed below the tree.
+The Devices page also shows the network as a tree, from any device others hang on. A scan puts Wi-Fi clients under
+their access point, as long as its plugin is linked to a device, and cabled devices under the linked OpenWrt device
+(see the ACL) or switch (see SNMP) they were found on, if nothing else was learned on that port. "Connected to" on a
+device's page overrides that. Devices that have no place yet are listed below the tree.
 
 ### Subnets
 
 Every group can have a subnet on the Groups page. A device with a fixed address outside it gets a warning on its card
 and page; moving it to another group stays possible, so it is not refused.
-
-### Network column
-
-A device with a role (router, access point, switch, bridge, server) appears in the Network column ahead of the groups.
-It keeps its group, which decides its VLAN, and shows it as a badge.
-
-A device added from a scan is marked "New" until it is saved or moved, so it can be told from a real guest.
-
-Every fixed address says where it comes from. "Static lease from the router" is the default. "Set on the device" is for
-devices like the router itself: they get no lease, and lanlord adds a DNS name for them instead (a `domain` section
-`lanlordname_<device>`). A scan with neighbours reports a device that does not behave the way the list says.
 
 ### Settings
 

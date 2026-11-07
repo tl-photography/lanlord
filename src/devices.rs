@@ -10,109 +10,6 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// What a device does in the network.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Role {
-    /// Routes between the networks.
-    Router,
-    /// Brings the Wi-Fi.
-    AccessPoint,
-    /// Connects cables.
-    Switch,
-    /// Links two parts of the network, like a powerline adapter.
-    Bridge,
-    /// Offers services to the others.
-    Server,
-    /// Everything else.
-    #[default]
-    Client,
-}
-
-impl Role {
-    /// All roles, in the order of the form.
-    pub const ALL: [Self; 6] = [
-        Self::Client,
-        Self::Server,
-        Self::Router,
-        Self::AccessPoint,
-        Self::Switch,
-        Self::Bridge,
-    ];
-
-    /// The name in the form and in `devices.toml`.
-    #[must_use]
-    pub const fn value(self) -> &'static str {
-        match self {
-            Self::Router => "router",
-            Self::AccessPoint => "access-point",
-            Self::Switch => "switch",
-            Self::Bridge => "bridge",
-            Self::Server => "server",
-            Self::Client => "client",
-        }
-    }
-
-    /// The text for people.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Router => "Router",
-            Self::AccessPoint => "Access point",
-            Self::Switch => "Switch",
-            Self::Bridge => "Bridge",
-            Self::Server => "Server",
-            Self::Client => "Client",
-        }
-    }
-
-    /// Whether this is an ordinary device.
-    #[must_use]
-    pub fn is_client(&self) -> bool {
-        *self == Self::Client
-    }
-}
-
-/// How a device hangs on its uplink.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Medium {
-    /// A network cable.
-    #[default]
-    Cable,
-    /// Over the power lines.
-    Powerline,
-}
-
-impl Medium {
-    /// All media, in the order of the form.
-    pub const ALL: [Self; 2] = [Self::Cable, Self::Powerline];
-
-    /// The name in the form and in `devices.toml`.
-    #[must_use]
-    pub const fn value(self) -> &'static str {
-        match self {
-            Self::Cable => "cable",
-            Self::Powerline => "powerline",
-        }
-    }
-
-    /// What the connections page says; a cable is the normal case and goes without saying.
-    #[must_use]
-    pub const fn label(self) -> &'static str {
-        match self {
-            Self::Cable => "",
-            Self::Powerline => "Powerline",
-        }
-    }
-
-    /// Whether this is the default.
-    #[must_use]
-    pub fn is_cable(&self) -> bool {
-        *self == Self::Cable
-    }
-}
-
 /// One connection of the network: a device with one MAC address, or one interface of a machine. Leases, DNS names
 /// and clients work per connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,16 +24,10 @@ pub struct Device {
     pub ip: Option<Ipv4Addr>,
     /// The address is set on the device itself, so it gets no static lease.
     pub self_assigned: bool,
-    /// What the device does.
-    pub role: Role,
     /// Found by a scan and not looked at yet.
     pub unreviewed: bool,
     /// The device this one hangs on; Wi-Fi clients are placed by the scan instead.
     pub uplink: String,
-    /// The port on the uplink.
-    pub port: String,
-    /// How it hangs on the uplink.
-    pub medium: Medium,
     /// Free text.
     pub note: String,
     /// The machine this connection is an interface of, for example `ThinkPad` for its dock, Wi-Fi and cable; empty
@@ -175,16 +66,10 @@ struct FileDevice {
     ip: Option<Ipv4Addr>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     self_assigned: bool,
-    #[serde(default, skip_serializing_if = "Role::is_client")]
-    role: Role,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     unreviewed: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     uplink: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    port: String,
-    #[serde(default, skip_serializing_if = "Medium::is_cable")]
-    medium: Medium,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     note: String,
     #[serde(default, rename = "interface", skip_serializing_if = "Vec::is_empty")]
@@ -203,16 +88,10 @@ struct FileInterface {
     ip: Option<Ipv4Addr>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     self_assigned: bool,
-    #[serde(default, skip_serializing_if = "Role::is_client")]
-    role: Role,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     unreviewed: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     uplink: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    port: String,
-    #[serde(default, skip_serializing_if = "Medium::is_cable")]
-    medium: Medium,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     note: String,
 }
@@ -233,11 +112,8 @@ impl TryFrom<FileList> for DeviceList {
                     group: entry.group,
                     ip: entry.ip,
                     self_assigned: entry.self_assigned,
-                    role: entry.role,
                     unreviewed: entry.unreviewed,
                     uplink: entry.uplink,
-                    port: entry.port,
-                    medium: entry.medium,
                     note: entry.note,
                     machine: entry.machine,
                 });
@@ -253,11 +129,8 @@ impl TryFrom<FileList> for DeviceList {
                     group: interface.group.unwrap_or_else(|| entry.group.clone()),
                     ip: interface.ip,
                     self_assigned: interface.self_assigned,
-                    role: interface.role,
                     unreviewed: interface.unreviewed,
                     uplink: interface.uplink,
-                    port: interface.port,
-                    medium: interface.medium,
                     note: interface.note,
                     machine: entry.name.clone(),
                 });
@@ -278,11 +151,8 @@ impl From<DeviceList> for FileList {
                     group: device.group,
                     ip: device.ip,
                     self_assigned: device.self_assigned,
-                    role: device.role,
                     unreviewed: device.unreviewed,
                     uplink: device.uplink,
-                    port: device.port,
-                    medium: device.medium,
                     note: device.note,
                     ..FileDevice::default()
                 });
@@ -306,11 +176,8 @@ impl From<DeviceList> for FileList {
                 group: own_group,
                 ip: device.ip,
                 self_assigned: device.self_assigned,
-                role: device.role,
                 unreviewed: device.unreviewed,
                 uplink: device.uplink,
-                port: device.port,
-                medium: device.medium,
                 note: device.note,
             });
         }

@@ -12,7 +12,7 @@
 {% when Token::Open %}<ul>
 {% when Token::Close %}</ul>
 {% when Token::EndNode %}</li>
-{% when Token::Node(row) %}<li><span class="tree-node">{% include "device_status.html" %}<a href="/devices/{{ row.name }}">{{ row.name }}</a>{% if !row.role.is_empty() %} <span class="badge vlan">{{ row.role }}</span>{% endif %}{% if !row.link.is_empty() %} <span class="meta">{{ row.link }}</span>{% endif %}{% if !row.status.away.is_empty() %} <span class="note">{{ row.status.away }}</span>{% endif %}</span>
+{% when Token::Node(row) %}<li><span class="tree-node">{% include "device_status.html" %}<a href="/devices/{{ row.name }}">{{ row.name }}</a>{% if !row.link.is_empty() %} <span class="meta">{{ row.link }}</span>{% endif %}{% if !row.status.away.is_empty() %} <span class="note">{{ row.status.away }}</span>{% endif %}</span>
 {% endmatch %}
 {% endfor %}
 </div>

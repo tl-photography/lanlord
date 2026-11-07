@@ -10,19 +10,9 @@
 {% endif %}
 {% let view = "vlan" %}{% include "view_switch.html" %}
 <div class="columns">
-  {% if !network.is_empty() %}
-  <section class="group network">
-    <h2><span class="title">Network</span> <span class="count">{{ network.len() }} {% if network.len() == 1 %}device{% else %}devices{% endif %}</span></h2>
-    <ul class="cards">
-      {% for card in network %}
-      {% include "device_card.html" %}
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
   {% for group in groups %}
   <section class="group" data-group="{{ group.name }}">
-    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge vlan">VLAN {{ group.vlan }}</span> <span class="count">{{ group.count }} {% if group.count == 1 %}device{% else %}devices{% endif %}{% if group.in_network > 0 %}, {{ group.in_network }} in Network{% endif %}</span></h2>
+    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge vlan">VLAN {{ group.vlan }}</span> <span class="count">{{ group.count }} {% if group.count == 1 %}device{% else %}devices{% endif %}</span></h2>
     {% if group.cards.is_empty() %}
     <p class="empty">No devices.</p>
     {% else %}
@@ -35,5 +25,5 @@
   </section>
   {% endfor %}
 </div>
-<p class="legend"><span class="badge vlan">VLAN, group or role</span> <span class="badge">Plugin</span> <span class="badge interface">Interface</span> <span class="badge new">New</span></p>
+<p class="legend"><span class="badge vlan">VLAN</span> <span class="badge">Plugin</span> <span class="badge interface">Interface</span> <span class="badge new">New</span></p>
 {% endblock %}

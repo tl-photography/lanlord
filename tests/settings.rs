@@ -137,38 +137,7 @@ async fn interface_badges_sit_side_by_side_without_addresses() {
 }
 
 #[tokio::test]
-async fn a_device_with_a_role_moves_to_the_network_column_and_keeps_its_group() {
-    let data = data();
-    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
-    let (_, page) = send(&app, get("/")).await;
-    assert!(!page.contains("group network"), "{page}");
-
-    let form = "name=tv&mac=00%3A00%3A00%3A00%3A00%3A09&group=lan&ip=192.0.2.9&role=access-point";
-    assert_eq!(
-        send(&app, post("/devices/tv", form)).await.0,
-        StatusCode::SEE_OTHER
-    );
-    let saved = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
-    assert!(saved.contains("role = \"access-point\""), "{saved}");
-
-    let (_, page) = send(&app, get("/")).await;
-    let (network, groups) = page.split_once(r#"data-group="lan""#).unwrap();
-    assert!(network.contains("group network"), "{page}");
-    assert!(network.contains("<strong>tv</strong>"), "{page}");
-    assert!(network.contains(">Access point</span>"), "{page}");
-    assert!(network.contains(r#"title="In group LAN""#), "{page}");
-    assert!(network.contains(r#"aria-label="Move tv""#), "{page}");
-    assert!(!groups.contains("<strong>tv</strong>"), "{page}");
-    assert!(groups.contains("2 devices, 1 in Network<"), "{page}");
-
-    let (_, page) = send(&app, get("/devices/tv")).await;
-    assert!(page.contains(r#"value="access-point" selected"#), "{page}");
-    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
-    assert!(log.contains("role Client → Access point"), "{log}");
-}
-
-#[tokio::test]
-async fn a_linked_plugin_alone_does_not_make_a_network_device() {
+async fn a_linked_plugin_shows_on_the_device() {
     let data = data();
     std::fs::write(
         data.path().join("lanlord.toml"),
@@ -177,7 +146,6 @@ async fn a_linked_plugin_alone_does_not_make_a_network_device() {
     .unwrap();
     let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
     let (_, page) = send(&app, get("/")).await;
-    assert!(!page.contains("group network"), "{page}");
     assert!(page.contains("Plugin router talks to this device"), "{page}");
 }
 
@@ -298,18 +266,17 @@ async fn the_connections_follow_a_rename_and_a_delete() {
     assert!(page.contains("Nothing is connected yet"), "{page}");
     assert!(page.contains("Not placed yet"), "{page}");
 
-    let gateway = "name=tv&mac=00%3A00%3A00%3A00%3A00%3A09&group=lan&role=router";
+    let gateway = "name=tv&mac=00%3A00%3A00%3A00%3A00%3A09&group=lan";
     assert_eq!(
         send(&app, post("/devices/tv", gateway)).await.0,
         StatusCode::SEE_OTHER
     );
-    let lamp = "name=lamp&mac=00%3A00%3A00%3A00%3A00%3A0a&group=lan&uplink=tv&port=lan1&medium=powerline";
+    let lamp = "name=lamp&mac=00%3A00%3A00%3A00%3A00%3A0a&group=lan&uplink=tv";
     assert_eq!(
         send(&app, post("/devices/lamp", lamp)).await.0,
         StatusCode::SEE_OTHER
     );
     let (_, page) = send(&app, get("/connections")).await;
-    assert!(page.contains("Powerline, lan1"), "{page}");
     assert!(!page.contains("Not placed yet"), "{page}");
     assert!(page.contains(r#"aria-current="page">By connection"#), "{page}");
 
@@ -320,7 +287,7 @@ async fn the_connections_follow_a_rename_and_a_delete() {
         "not its own uplink: {page}"
     );
 
-    let renamed = "name=gate&mac=00%3A00%3A00%3A00%3A00%3A09&group=lan&role=router";
+    let renamed = "name=gate&mac=00%3A00%3A00%3A00%3A00%3A09&group=lan";
     assert_eq!(
         send(&app, post("/devices/tv", renamed)).await.0,
         StatusCode::SEE_OTHER
