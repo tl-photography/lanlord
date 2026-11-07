@@ -93,6 +93,13 @@ impl Live {
         }
     }
 
+    /// The Wi-Fi a device is on, empty if it is not.
+    pub(crate) fn access_point(&self, mac: &str) -> &str {
+        self.sightings
+            .get(mac)
+            .map_or("", |sighting| sighting.access_point.as_str())
+    }
+
     /// The status of a device at `time`.
     pub(crate) fn status(&self, device: &Device, time: u64) -> Status {
         let Some(sighting) = self.sightings.get(&device.mac) else {

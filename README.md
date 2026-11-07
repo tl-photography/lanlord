@@ -151,6 +151,12 @@ the next start. A device counts as seen if it is on the Wi-Fi or in the neighbou
 (`/proc/net/arp`, see the ACL). Without that right a DHCP lease counts too, so a device that left stays green for the
 rest of its lease, and one with a static address and a cable is not seen at all.
 
+### Connections
+
+The Devices page also shows the network as a tree from the router down. Choose "Connected to", the port and cable or
+powerline on a device's page. Wi-Fi clients need none of that: a scan puts them under their access point, as long as
+its plugin is linked to a device. Devices that have no place yet are listed below the tree.
+
 ### Subnets
 
 Every group can have a subnet on the Groups page. A device with a fixed address outside it gets a warning on its card

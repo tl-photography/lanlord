@@ -127,6 +127,8 @@ pub fn device(before: Option<&Device>, after: &Device) -> Option<String> {
     compare("IP", &ip_text(before), &ip_text(after));
     compare("note", &before.note, &after.note);
     compare("machine", &before.machine, &after.machine);
+    compare("uplink", &before.uplink, &after.uplink);
+    compare("port", &before.port, &after.port);
     if before.role != after.role {
         changes.push(format!("role {} → {}", before.role.label(), after.role.label()));
     }

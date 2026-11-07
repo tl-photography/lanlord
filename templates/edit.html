@@ -36,6 +36,23 @@
     </select>
   </label>
   <small>Only with an IP address. Both give the device its <code>.lan</code> name.</small>
+  <label>Connected to
+    <select name="uplink">
+      <option value="">Not set</option>
+      {% for name in uplinks %}
+      <option value="{{ name }}"{% if *name == form.uplink %} selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <label>Port <input name="port" value="{{ form.port }}" maxlength="30" autocapitalize="off" spellcheck="false" placeholder="optional, e.g. lan1"></label>
+  <label>Connected by
+    <select name="medium">
+      {% for medium in media %}
+      <option value="{{ medium.value() }}"{% if *medium == form.medium %} selected{% endif %}>{% if medium.label().is_empty() %}Cable{% else %}{{ medium.label() }}{% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <small>A scan places Wi-Fi clients by itself; this is for cables and powerline.</small>
   <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
   <label>Belongs to <input name="machine" value="{{ form.machine }}" list="machines" maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="optional, e.g. a laptop with Wi-Fi and cable"></label>
   <datalist id="machines">{% for machine in machines %}<option value="{{ machine }}">{% endfor %}</datalist>

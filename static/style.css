@@ -163,6 +163,15 @@ code { font-size: 0.9em; }
 .dot.away { border: 2px solid var(--muted); }
 .actual { color: var(--text); font-weight: 600; }
 .note.warning { color: var(--error); }
+.view-switch { display: flex; gap: 0.25rem; margin: 0.25rem 0 1rem; }
+.view-switch a { padding: 0.3rem 0.8rem; border: 1px solid var(--border); border-radius: 0.5rem; color: var(--text); text-decoration: none; }
+.view-switch a[aria-current="page"] { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.tree ul { list-style: none; margin: 0; padding: 0; }
+.tree ul ul { margin-left: 0.6rem; padding-left: 1rem; border-left: 1px solid var(--field-border); }
+.tree li { padding: 0.15rem 0; }
+.tree-node { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; padding: 0.3rem 0.6rem; border: 1px solid var(--border); border-radius: 0.5rem; background: var(--surface); }
+.tree-node .dot { margin-right: 0; }
+.loose { display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; list-style: none; margin: 0; padding: 0; }
 .badges { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .badges:not(:empty) { margin: 0.15rem 0; }
 .meta, .note { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }

@@ -73,6 +73,46 @@ impl Role {
     }
 }
 
+/// How a device hangs on its uplink.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Medium {
+    /// A network cable.
+    #[default]
+    Cable,
+    /// Over the power lines.
+    Powerline,
+}
+
+impl Medium {
+    /// All media, in the order of the form.
+    pub const ALL: [Self; 2] = [Self::Cable, Self::Powerline];
+
+    /// The name in the form and in `devices.toml`.
+    #[must_use]
+    pub const fn value(self) -> &'static str {
+        match self {
+            Self::Cable => "cable",
+            Self::Powerline => "powerline",
+        }
+    }
+
+    /// What the connections page says; a cable is the normal case and goes without saying.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Cable => "",
+            Self::Powerline => "Powerline",
+        }
+    }
+
+    /// Whether this is the default.
+    #[must_use]
+    pub fn is_cable(&self) -> bool {
+        *self == Self::Cable
+    }
+}
+
 /// One connection of the network: a device with one MAC address, or one interface of a machine. Leases, DNS names
 /// and clients work per connection.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -91,6 +131,12 @@ pub struct Device {
     pub role: Role,
     /// Found by a scan and not looked at yet.
     pub unreviewed: bool,
+    /// The device this one hangs on; Wi-Fi clients are placed by the scan instead.
+    pub uplink: String,
+    /// The port on the uplink.
+    pub port: String,
+    /// How it hangs on the uplink.
+    pub medium: Medium,
     /// Free text.
     pub note: String,
     /// The machine this connection is an interface of, for example `ThinkPad` for its dock, Wi-Fi and cable; empty
@@ -134,6 +180,12 @@ struct FileDevice {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     unreviewed: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    uplink: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    port: String,
+    #[serde(default, skip_serializing_if = "Medium::is_cable")]
+    medium: Medium,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     note: String,
     #[serde(default, rename = "interface", skip_serializing_if = "Vec::is_empty")]
     interfaces: Vec<FileInterface>,
@@ -156,6 +208,12 @@ struct FileInterface {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     unreviewed: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
+    uplink: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    port: String,
+    #[serde(default, skip_serializing_if = "Medium::is_cable")]
+    medium: Medium,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     note: String,
 }
 
@@ -177,6 +235,9 @@ impl TryFrom<FileList> for DeviceList {
                     self_assigned: entry.self_assigned,
                     role: entry.role,
                     unreviewed: entry.unreviewed,
+                    uplink: entry.uplink,
+                    port: entry.port,
+                    medium: entry.medium,
                     note: entry.note,
                     machine: entry.machine,
                 });
@@ -194,6 +255,9 @@ impl TryFrom<FileList> for DeviceList {
                     self_assigned: interface.self_assigned,
                     role: interface.role,
                     unreviewed: interface.unreviewed,
+                    uplink: interface.uplink,
+                    port: interface.port,
+                    medium: interface.medium,
                     note: interface.note,
                     machine: entry.name.clone(),
                 });
@@ -216,6 +280,9 @@ impl From<DeviceList> for FileList {
                     self_assigned: device.self_assigned,
                     role: device.role,
                     unreviewed: device.unreviewed,
+                    uplink: device.uplink,
+                    port: device.port,
+                    medium: device.medium,
                     note: device.note,
                     ..FileDevice::default()
                 });
@@ -241,6 +308,9 @@ impl From<DeviceList> for FileList {
                 self_assigned: device.self_assigned,
                 role: device.role,
                 unreviewed: device.unreviewed,
+                uplink: device.uplink,
+                port: device.port,
+                medium: device.medium,
                 note: device.note,
             });
         }

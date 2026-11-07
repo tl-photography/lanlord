@@ -18,6 +18,9 @@ fn device(name: &str, mac: &str) -> Device {
         self_assigned: false,
         role: crate::devices::Role::Client,
         unreviewed: false,
+        uplink: String::new(),
+        port: String::new(),
+        medium: crate::devices::Medium::Cable,
         machine: String::new(),
     }
 }

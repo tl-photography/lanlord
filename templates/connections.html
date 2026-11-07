@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Connections{% endblock %}
+{% block content %}
+<h1 class="sr-only">Connections</h1>
+{% let view = "connections" %}{% include "view_switch.html" %}
+{% if tokens.is_empty() %}
+<p class="notice">Give a device the role Router, then choose what each device is connected to on its page. A scan places the Wi-Fi clients.</p>
+{% endif %}
+<div class="tree">
+{% for token in tokens %}
+{% match token %}
+{% when Token::Open %}<ul>
+{% when Token::Close %}</ul>
+{% when Token::EndNode %}</li>
+{% when Token::Node(row) %}<li><span class="tree-node">{% include "device_status.html" %}<a href="/devices/{{ row.name }}">{{ row.name }}</a>{% if !row.role.is_empty() %} <span class="badge vlan">{{ row.role }}</span>{% endif %}{% if !row.link.is_empty() %} <span class="meta">{{ row.link }}</span>{% endif %}{% if !row.status.away.is_empty() %} <span class="note">{{ row.status.away }}</span>{% endif %}</span>
+{% endmatch %}
+{% endfor %}
+</div>
+{% if !loose.is_empty() %}
+<h2>Not placed yet</h2>
+<ul class="loose">
+  {% for row in loose %}
+  <li>{% include "device_status.html" %}<a href="/devices/{{ row.name }}">{{ row.name }}</a></li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

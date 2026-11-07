@@ -360,6 +360,9 @@ fn devices() -> DeviceList {
         self_assigned: false,
         role: crate::devices::Role::Client,
         unreviewed: false,
+        uplink: String::new(),
+        port: String::new(),
+        medium: crate::devices::Medium::Cable,
         note: String::new(),
         machine: String::new(),
     };

@@ -21,6 +21,9 @@ fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Device {
         self_assigned: false,
         role: crate::devices::Role::Client,
         unreviewed: false,
+        uplink: String::new(),
+        port: String::new(),
+        medium: crate::devices::Medium::Cable,
         note: String::new(),
         machine: String::new(),
     }

@@ -4,6 +4,7 @@ mod apply;
 pub mod auth;
 pub mod compare;
 pub mod config;
+mod connections;
 pub mod devices;
 mod edit;
 mod groups;
@@ -231,6 +232,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/groups/{name}/subnet", axum::routing::post(groups::set_subnet))
+        .route("/connections", get(connections::show))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))
         .route(
             "/settings/background",

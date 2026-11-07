@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
-use crate::devices::{Device, Error, Role, is_valid_name, normalize_mac};
+use crate::devices::{Device, Error, Medium, Role, is_valid_name, normalize_mac};
 use crate::history;
 use crate::plugins;
 use crate::{AppState, server_error};
@@ -30,6 +30,12 @@ pub struct DeviceForm {
     self_assigned: bool,
     #[serde(default)]
     role: Role,
+    #[serde(default)]
+    uplink: String,
+    #[serde(default)]
+    port: String,
+    #[serde(default)]
+    medium: Medium,
     /// Not in the form: saving a device means it has been looked at.
     #[serde(skip)]
     unreviewed: bool,
@@ -53,6 +59,9 @@ impl DeviceForm {
             self_assigned: device.self_assigned,
             role: device.role,
             unreviewed: device.unreviewed,
+            uplink: device.uplink.clone(),
+            port: device.port.clone(),
+            medium: device.medium,
             note: device.note.clone(),
             machine: device.machine.clone(),
             then: String::new(),
@@ -81,6 +90,9 @@ impl DeviceForm {
             self_assigned: self.self_assigned,
             role: self.role,
             unreviewed: self.unreviewed,
+            uplink: self.uplink.trim().to_owned(),
+            port: self.port.trim().to_owned(),
+            medium: self.medium,
             note: note.to_owned(),
             machine: self.machine.trim().to_owned(),
         })
@@ -122,6 +134,9 @@ struct EditPage {
     /// The address is outside the subnet of the group.
     warning: String,
     roles: [Role; 6],
+    media: [Medium; 2],
+    /// The other devices, as possible uplinks.
+    uplinks: Vec<String>,
 }
 
 fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: String) -> Response {
@@ -135,6 +150,12 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
     } else {
         StatusCode::UNPROCESSABLE_ENTITY
     };
+    let mut uplinks: Vec<String> = state
+        .devices()
+        .map(|list| list.devices.into_iter().map(|device| device.name).collect())
+        .unwrap_or_default();
+    uplinks.retain(|name| Some(name.as_str()) != original);
+    uplinks.sort_by_key(|name| name.to_ascii_lowercase());
     let warning = state
         .groups()
         .groups
@@ -147,6 +168,8 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
         nav: "devices",
         warning,
         roles: Role::ALL,
+        media: Medium::ALL,
+        uplinks,
         title,
         action,
         form,
@@ -309,6 +332,10 @@ pub async fn delete(State(state): State<AppState>, Path(name): Path<String>) -> 
         return (StatusCode::NOT_FOUND, "No such device").into_response();
     };
     let removed = list.devices.remove(position);
+    for other in list.devices.iter_mut().filter(|other| other.uplink == name) {
+        other.uplink.clear();
+        other.port.clear();
+    }
     let machine_left = !removed.machine.is_empty()
         && list
             .devices
@@ -471,6 +498,11 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
             None => return (StatusCode::NOT_FOUND, "No such device").into_response(),
         },
         None => list.devices.push(device.clone()),
+    }
+    if let Some(old) = before.as_ref().filter(|old| old.name != device.name) {
+        for other in list.devices.iter_mut().filter(|other| other.uplink == old.name) {
+            other.uplink.clone_from(&device.name);
+        }
     }
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => {
