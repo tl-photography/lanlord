@@ -168,3 +168,16 @@ fn a_port_of_an_unknown_or_the_own_device_places_nothing() {
     assert_eq!(place(&list.devices[0], &list, &wired_on("other")), None);
     assert_eq!(place(&list.devices[0], &list, &wired_on("hub")), None);
 }
+
+#[test]
+fn a_device_others_hang_on_starts_a_tree_without_a_role() {
+    let list = DeviceList {
+        devices: vec![
+            device("gw", Role::Client, ""),
+            with_mac(device("hub", Role::Client, "")),
+        ],
+    };
+    let (tokens, loose) = build(&list, &wired_on("gw"), 100);
+    assert_eq!(names(&tokens), ["(", "gw", "(", "hub", ".", ")", ".", ")"]);
+    assert_eq!(loose, Vec::<usize>::new());
+}

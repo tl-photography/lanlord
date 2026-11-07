@@ -164,7 +164,7 @@ rest of its lease, and one with a static address and a cable is not seen at all.
 
 ### Connections
 
-The Devices page also shows the network as a tree from the router down. Choose "Connected to", the port and cable or
+The Devices page also shows the network as a tree, from the router or any device others hang on. Choose "Connected to", the port and cable or
 powerline on a device's page. Wi-Fi clients need none of that: a scan puts them under their access point, as long as
 its plugin is linked to a device. Cabled devices without "Connected to" are placed from the bridge table of a linked
 OpenWrt device (see the ACL) or a switch (see SNMP), if nothing else was learned on their port. What you set yourself

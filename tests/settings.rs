@@ -295,7 +295,7 @@ async fn the_connections_follow_a_rename_and_a_delete() {
     let data = data();
     let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
     let (_, page) = send(&app, get("/connections")).await;
-    assert!(page.contains("Give a device the role Router"), "{page}");
+    assert!(page.contains("Nothing is connected yet"), "{page}");
     assert!(page.contains("Not placed yet"), "{page}");
 
     let gateway = "name=tv&mac=00%3A00%3A00%3A00%3A00%3A09&group=lan&role=router";

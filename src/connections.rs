@@ -113,7 +113,8 @@ impl Tree<'_> {
     }
 }
 
-/// The tree from the routers down, and the indexes of the connections outside it. A loop stays outside.
+/// The tree from the routers and from unplaced devices others hang on, and the indexes of the connections outside it.
+/// A loop stays outside.
 fn build(list: &DeviceList, live: &Live, time: u64) -> (Vec<Token>, Vec<usize>) {
     let mut tree = Tree {
         list,
@@ -127,15 +128,23 @@ fn build(list: &DeviceList, live: &Live, time: u64) -> (Vec<Token>, Vec<usize>) 
         visited: HashSet::new(),
         tokens: Vec::new(),
     };
-    let roots: Vec<usize> = list
+    let has_children = |device: &Device| {
+        tree.places
+            .iter()
+            .flatten()
+            .any(|(parent, _)| *parent == device.name)
+    };
+    let mut roots: Vec<usize> = list
         .devices
         .iter()
         .enumerate()
         .filter(|(index, device)| {
-            device.role == crate::devices::Role::Router && tree.places[*index].is_none()
+            tree.places[*index].is_none()
+                && (device.role == crate::devices::Role::Router || has_children(device))
         })
         .map(|(index, _)| index)
         .collect();
+    roots.sort_by_key(|index| list.devices[*index].role);
     if !roots.is_empty() {
         tree.tokens.push(Token::Open);
         for root in roots {
