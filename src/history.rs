@@ -174,6 +174,21 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
             texts.push(format!("Group {} deleted", old.name));
         }
     }
+    if before.dns_service != after.dns_service {
+        texts.push(format!(
+            "DNS service {} → {}",
+            if before.dns_service.is_empty() {
+                "router"
+            } else {
+                &before.dns_service
+            },
+            if after.dns_service.is_empty() {
+                "router"
+            } else {
+                &after.dns_service
+            }
+        ));
+    }
     if before.default_group != after.default_group {
         texts.push(format!(
             "Default group {} → {}",

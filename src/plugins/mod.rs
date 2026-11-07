@@ -44,6 +44,10 @@ pub trait Plugin: Send + Sync {
     fn plan(&self, _plan: Plan) -> BoxFuture<'_, Result<Option<Preview>, String>> {
         Box::pin(async { Ok(None) })
     }
+    /// The services the plugin offers to the network, like `dns`, at the address of its linked device.
+    fn offers(&self) -> &'static [&'static str] {
+        &[]
+    }
     /// Whether the plugin sends notifications.
     fn notifies(&self) -> bool {
         false

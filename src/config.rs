@@ -70,6 +70,9 @@ pub struct Config {
     /// Group for devices that are not in the list; empty while there are no groups.
     #[serde(default)]
     pub default_group: String,
+    /// The plugin whose DNS service all networks use; empty for the router.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub dns_service: String,
     /// All groups.
     #[serde(default, rename = "group")]
     pub groups: Vec<Group>,

@@ -112,3 +112,48 @@ async fn unused_groups_can_be_deleted_down_to_none() {
     assert!(!file.contains("[[group]]"), "{file}");
     assert!(file.contains("default_group = \"\""), "{file}");
 }
+
+#[tokio::test]
+async fn a_linked_dns_plugin_can_serve_all_networks() {
+    let data = setup().await;
+    std::fs::write(
+        data.path().join("devices.toml"),
+        "[[device]]\nname = \"dnsbox\"\nmac = \"00:00:00:00:00:35\"\ngroup = \"lan\"\nip = \"192.0.2.53\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        data.path().join("lanlord.toml"),
+        format!(
+            "[[plugin]]\ntype = \"pihole\"\nname = \"filter\"\nenabled = true\nurl = \"https://pi.hole\"\n\
+             device = \"dnsbox\"\npassword_file = \"pihole.password\"\ncertificate = \"{}\"\n",
+            "00".repeat(32)
+        ),
+    )
+    .unwrap();
+    let request = Request::get("/groups").body(Body::empty()).unwrap();
+    let response = app(&data).oneshot(request).await.unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let page = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        page.contains(r#"<option value="filter">filter (192.0.2.53)</option>"#),
+        "{page}"
+    );
+
+    assert_eq!(
+        post(&data, "/groups/dns", "service=filter").await.0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(
+        groups_file(&data).contains("dns_service = \"filter\""),
+        "{}",
+        groups_file(&data)
+    );
+    let (status, page) = post(&data, "/groups/dns", "service=other").await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(page.contains("other offers no DNS service"), "{page}");
+    assert_eq!(
+        post(&data, "/groups/dns", "service=").await.0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("dns_service"));
+}

@@ -143,6 +143,11 @@ you make in lanlord are no such thing, they wait for Apply.
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
 
+### DNS
+
+On the Groups page: the DNS server of all networks, the router or a plugin that offers DNS, like Pi-hole. A plugin
+offers it at the fixed address of the device it is linked to.
+
 ### Subnets
 
 Every group can have a subnet on the Groups page. A device with a fixed address outside it gets a warning on its card

@@ -583,6 +583,10 @@ impl Plugin for PiHole {
         &self.name
     }
 
+    fn offers(&self) -> &'static [&'static str] {
+        &["dns"]
+    }
+
     fn kind(&self) -> &'static str {
         "pihole"
     }

@@ -77,9 +77,11 @@ fn group_changes_are_listed() {
     let before = Config {
         default_group: "lan".to_owned(),
         groups: vec![lan.clone()],
+        ..Config::default()
     };
     let after = Config {
         default_group: "guest".to_owned(),
+        dns_service: "PiHole".to_owned(),
         groups: vec![
             Group {
                 label: "LAN".to_owned(),
@@ -98,10 +100,11 @@ fn group_changes_are_listed() {
         [
             "Group lan changed: VLAN 1 → 1, label none → LAN",
             "Group guest added: VLAN 30",
+            "DNS service router → PiHole",
             "Default group lan → guest",
         ]
     );
-    assert_eq!(groups(&after, &Config::default()).len(), 3);
+    assert_eq!(groups(&after, &Config::default()).len(), 4);
 }
 
 #[test]

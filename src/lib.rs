@@ -198,10 +198,45 @@ impl AppState {
 
     /// The plan for the targets: devices and groups.
     pub(crate) fn plan(&self) -> Result<plan::Plan, Error> {
+        let devices = self.devices()?;
+        let config = self.groups();
         Ok(plan::Plan {
-            devices: self.devices()?,
-            groups: self.groups().groups,
+            services: self.services(&devices),
+            devices,
+            groups: config.groups,
+            dns_service: config.dns_service,
         })
+    }
+
+    /// The services of the enabled plugins, at the fixed address of the device each is linked to.
+    pub(crate) fn services(&self, devices: &DeviceList) -> Vec<plan::Service> {
+        let settings = plugins::read_settings(&self.inner.plugins_path).unwrap_or_default();
+        let Ok(active) = self.inner.plugins.read() else {
+            return Vec::new();
+        };
+        let mut services = Vec::new();
+        for (device, names) in plugins::linked_plugins(&settings) {
+            let address = devices
+                .interfaces
+                .iter()
+                .filter(|interface| interface.name == device || interface.device == device)
+                .find_map(|interface| interface.ip);
+            let Some(address) = address else { continue };
+            for plugin in active
+                .iter()
+                .filter(|plugin| names.iter().any(|name| name == plugin.name()))
+            {
+                for kind in plugin.offers() {
+                    services.push(plan::Service {
+                        kind,
+                        address,
+                        source: plugin.name().to_owned(),
+                    });
+                }
+            }
+        }
+        services.sort_by(|left, right| left.source.cmp(&right.source));
+        services
     }
 
     fn devices(&self) -> Result<DeviceList, Error> {
@@ -234,6 +269,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
+        .route("/groups/dns", axum::routing::post(groups::set_dns))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/groups/{name}/subnet", axum::routing::post(groups::set_subnet))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))
