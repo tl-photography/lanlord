@@ -1,5 +1,4 @@
-//! The network as a tree: who hangs on whom. Wi-Fi clients are placed by the last scan, the rest by the device list,
-//! or by the port a scan found them on if the list does not say.
+//! The network as a tree: who hangs on whom. Wi-Fi clients are placed by the last scan, the rest by the device list.
 
 use std::collections::HashSet;
 
@@ -35,7 +34,7 @@ struct Loose {
     status: live::Status,
 }
 
-/// Where a device hangs and through which port: its Wi-Fi, else "Connected to", else the port a scan found it on.
+/// Where a device hangs and how: its Wi-Fi, else "Connected to".
 fn place(device: &Device, list: &DeviceList, live: &Live) -> Option<(String, String)> {
     let exists = |name: &str| list.devices.iter().any(|other| other.name == name);
     if let Some((name, ssid)) = live.access_point(&device.mac).split_once(": ")
@@ -43,16 +42,8 @@ fn place(device: &Device, list: &DeviceList, live: &Live) -> Option<(String, Str
     {
         return Some((name.to_owned(), format!("Wi-Fi: {ssid}")));
     }
-    let wired = live.wired(&device.mac);
-    if !device.uplink.is_empty() {
-        let port = wired
-            .filter(|(switch, _)| *switch == device.uplink)
-            .map_or("", |(_, port)| port);
-        return (device.uplink != device.name && exists(&device.uplink))
-            .then(|| (device.uplink.clone(), port.to_owned()));
-    }
-    let (switch, port) = wired?;
-    (switch != device.name && exists(switch)).then(|| (switch.to_owned(), port.to_owned()))
+    (!device.uplink.is_empty() && device.uplink != device.name && exists(&device.uplink))
+        .then(|| (device.uplink.clone(), String::new()))
 }
 
 struct Tree<'a> {

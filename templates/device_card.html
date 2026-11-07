@@ -4,7 +4,7 @@
     <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
     <div class="text">
       <strong>{{ card.title }}</strong>
-<span class="badges">{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this machine">{{ plugin }}</span>{% endfor %}</span>
+<span class="badges">{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}</span>
       {% if !card.also_in.is_empty() %}<span class="note">Also in {{ card.also_in }}</span>{% endif %}
       <ul class="connections{% if !overview.show_mac && !overview.show_ip %} compact{% endif %}">
         {% for row in card.rows %}

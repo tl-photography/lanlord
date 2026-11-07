@@ -126,7 +126,7 @@ pub fn device(before: Option<&Device>, after: &Device) -> Option<String> {
     compare("MAC", &before.mac, &after.mac);
     compare("IP", &ip_text(before), &ip_text(after));
     compare("note", &before.note, &after.note);
-    compare("machine", &before.machine, &after.machine);
+    compare("part of", &before.machine, &after.machine);
     compare("uplink", &before.uplink, &after.uplink);
     if before.unreviewed && !after.unreviewed {
         changes.push("reviewed".to_owned());

@@ -1,7 +1,7 @@
 //! Unit tests of `live`.
 
 use super::*;
-use crate::compare::{PortEntry, WifiClient};
+use crate::compare::WifiClient;
 
 const MAC: &str = "aa:bb:cc:00:00:01";
 
@@ -136,44 +136,4 @@ fn times_are_short() {
     assert_eq!(ago(3_599), "59 min");
     assert_eq!(ago(3_600), "1 h");
     assert_eq!(ago(200_000), "2 days");
-}
-
-fn on_port(mac: &str, port: &str) -> PortEntry {
-    PortEntry {
-        mac: mac.to_owned(),
-        switch: "gw".to_owned(),
-        port: port.to_owned(),
-    }
-}
-
-fn ports(entries: Vec<PortEntry>) -> Observation {
-    Observation {
-        ports: entries,
-        ..Observation::default()
-    }
-}
-
-#[test]
-fn a_device_alone_on_a_port_is_wired_there() {
-    let mut live = Live::default();
-    live.record(100, [ports(vec![on_port(MAC, "lan1")])].iter(), true);
-    assert_eq!(live.wired(MAC), Some(("gw", "lan1")));
-    assert_eq!(live.wired("aa:bb:cc:00:00:02"), None);
-}
-
-#[test]
-fn a_port_with_a_quiet_second_device_stays_shared() {
-    let mut live = Live::default();
-    let both = vec![on_port(MAC, "lan4"), on_port("aa:bb:cc:00:00:02", "lan4")];
-    live.record(100, [ports(both)].iter(), true);
-    live.record(200, [ports(vec![on_port(MAC, "lan4")])].iter(), true);
-    assert_eq!(live.wired(MAC), None);
-}
-
-#[test]
-fn a_moved_device_is_on_its_latest_port() {
-    let mut live = Live::default();
-    live.record(100, [ports(vec![on_port(MAC, "lan1")])].iter(), true);
-    live.record(200, [ports(vec![on_port(MAC, "lan2")])].iter(), true);
-    assert_eq!(live.wired(MAC), Some(("gw", "lan2")));
 }

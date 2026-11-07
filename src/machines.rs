@@ -56,7 +56,7 @@ fn page(state: &AppState, name: &str, status: StatusCode, error: String) -> Resp
         .filter(|device| device.machine == name)
         .collect();
     if members.is_empty() {
-        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
     }
     let mut interfaces: Vec<InterfaceRow> = members
         .iter()
@@ -116,7 +116,7 @@ pub async fn rename(
             &state,
             &name,
             StatusCode::UNPROCESSABLE_ENTITY,
-            format!("Invalid machine name: {new_name}"),
+            format!("Invalid name: {new_name}"),
         );
     }
     let Ok(_guard) = state.inner.write_lock.lock() else {
@@ -127,7 +127,7 @@ pub async fn rename(
         Err(error) => return server_error(&error),
     };
     if list.devices.iter().all(|device| device.machine != name) {
-        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
     }
     for device in list.devices.iter_mut().filter(|device| device.machine == name) {
         new_name.clone_into(&mut device.machine);
@@ -136,7 +136,7 @@ pub async fn rename(
         Ok(()) => {
             history::record(
                 &state.inner.history_path,
-                &[format!("Machine {name} renamed to {new_name}")],
+                &[format!("Device {name} renamed to {new_name}")],
             );
             follow_links(&state, Some(&name), new_name);
             Redirect::to(&format!("/machines/{new_name}")).into_response()
@@ -166,7 +166,7 @@ pub async fn add_interface(
         Err(error) => return server_error(&error),
     };
     if list.devices.iter().all(|device| device.machine != name) {
-        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
     }
     let Some(device) = list.devices.iter_mut().find(|device| device.name == form.device) else {
         return (StatusCode::NOT_FOUND, "No such device").into_response();
@@ -176,7 +176,7 @@ pub async fn add_interface(
         Ok(()) => {
             history::record(
                 &state.inner.history_path,
-                &[format!("Device {} added to machine {name}", form.device)],
+                &[format!("Interface {} added to {name}", form.device)],
             );
             Redirect::to(&format!("/machines/{name}")).into_response()
         }
@@ -209,7 +209,7 @@ pub async fn remove_interface(
         Ok(()) => {
             history::record(
                 &state.inner.history_path,
-                &[format!("Device {device} removed from machine {name}")],
+                &[format!("Interface {device} removed from {name}")],
             );
             let next = if machine_left {
                 format!("/machines/{name}")

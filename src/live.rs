@@ -1,7 +1,7 @@
 //! What the scans saw on the network. Kept in memory, never written to `devices.toml`: the list is the plan, this is
 //! what is there now.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::HashMap;
 use std::net::Ipv4Addr;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -22,9 +22,6 @@ pub(crate) struct Live {
     /// The last scan that every plugin answered.
     last_scan: u64,
     sightings: HashMap<String, Sighting>,
-    /// Who was learned on which port and when, by switch and port. Kept over scans: a quiet device drops out of the
-    /// table of a switch within minutes, and a port must not look like it had one device only because of that.
-    ports: BTreeMap<(String, String), HashMap<String, u64>>,
 }
 
 /// What a card shows about a device.
@@ -83,23 +80,7 @@ impl Live {
                 sighting.seen_at = time;
                 sighting.access_point.clone_from(&client.access_point);
             }
-            for entry in &observation.ports {
-                self.ports
-                    .entry((entry.switch.clone(), entry.port.clone()))
-                    .or_default()
-                    .insert(entry.mac.to_ascii_lowercase(), time);
-            }
         }
-    }
-
-    /// The switch and port a device is on, if nothing else was ever learned on that port. The latest wins if it moved.
-    pub(crate) fn wired(&self, mac: &str) -> Option<(&str, &str)> {
-        self.ports
-            .iter()
-            .filter(|(_, macs)| macs.len() == 1)
-            .filter_map(|((switch, port), macs)| Some((*macs.get(mac)?, switch.as_str(), port.as_str())))
-            .max_by_key(|(time, ..)| *time)
-            .map(|(_, switch, port)| (switch, port))
     }
 
     fn sighted(&mut self, seen: &Seen, time: u64, online: bool) {

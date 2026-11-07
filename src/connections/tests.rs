@@ -94,62 +94,12 @@ fn the_wifi_of_the_last_scan_beats_the_list() {
     );
 }
 
-fn wired_on(switch: &str) -> Live {
-    let mut live = Live::default();
-    let ports = Observation {
-        ports: vec![crate::compare::PortEntry {
-            mac: "aa:bb:cc:00:00:01".to_owned(),
-            switch: switch.to_owned(),
-            port: "lan1".to_owned(),
-        }],
-        ..Observation::default()
-    };
-    live.record(100, [ports].iter(), true);
-    live
-}
-
-fn with_mac(mut entry: Device) -> Device {
-    entry.mac = "aa:bb:cc:00:00:01".to_owned();
-    entry
-}
-
-#[test]
-fn a_detected_port_places_a_device() {
-    let list = DeviceList {
-        devices: vec![device("gw", ""), with_mac(device("hub", ""))],
-    };
-    let place = place(&list.devices[1], &list, &wired_on("gw"));
-    assert_eq!(place, Some(("gw".to_owned(), "lan1".to_owned())));
-}
-
-#[test]
-fn a_set_connection_beats_a_detected_port() {
-    let list = DeviceList {
-        devices: vec![
-            device("gw", ""),
-            device("sw", "gw"),
-            with_mac(device("hub", "sw")),
-        ],
-    };
-    let place = place(&list.devices[2], &list, &wired_on("gw"));
-    assert_eq!(place, Some(("sw".to_owned(), String::new())));
-}
-
-#[test]
-fn a_port_of_an_unknown_or_the_own_device_places_nothing() {
-    let list = DeviceList {
-        devices: vec![with_mac(device("hub", ""))],
-    };
-    assert_eq!(place(&list.devices[0], &list, &wired_on("other")), None);
-    assert_eq!(place(&list.devices[0], &list, &wired_on("hub")), None);
-}
-
 #[test]
 fn a_device_others_hang_on_starts_a_tree() {
     let list = DeviceList {
-        devices: vec![device("gw", ""), with_mac(device("hub", ""))],
+        devices: vec![device("gw", ""), device("hub", "gw")],
     };
-    let (tokens, loose) = build(&list, &wired_on("gw"), 100);
+    let (tokens, loose) = build(&list, &Live::default(), 0);
     assert_eq!(names(&tokens), ["(", "gw", "(", "hub", ".", ")", ".", ")"]);
     assert_eq!(loose, Vec::<usize>::new());
 }

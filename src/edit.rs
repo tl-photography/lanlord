@@ -116,7 +116,6 @@ struct EditPage {
     error: String,
     has_targets: bool,
     /// Machine names in use, offered in the form.
-    machines: Vec<String>,
     /// The name of the device being edited; empty for a new one.
     original: String,
     /// The address is outside the subnet of the group.
@@ -160,29 +159,12 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
         groups,
         error,
         has_targets: state.has_targets(),
-        machines: machine_names(state),
         original: original.unwrap_or_default().to_owned(),
     };
     match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
         Err(error) => server_error(&error),
     }
-}
-
-fn machine_names(state: &AppState) -> Vec<String> {
-    let mut names: Vec<String> = state
-        .devices()
-        .map(|list| {
-            list.devices
-                .into_iter()
-                .map(|device| device.machine)
-                .filter(|machine| !machine.is_empty())
-                .collect()
-        })
-        .unwrap_or_default();
-    names.sort_by_key(|name| name.to_ascii_lowercase());
-    names.dedup();
-    names
 }
 
 /// Form for a new device, in the default group.
@@ -383,7 +365,7 @@ pub async fn move_machine(
         }
     }
     if list.devices.iter().all(|device| device.machine != machine) {
-        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
     }
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => {

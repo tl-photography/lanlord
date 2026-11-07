@@ -306,7 +306,7 @@ impl DeviceList {
             }
             if !device.machine.is_empty() && !is_valid_name(&device.machine) {
                 return Err(Error::Invalid(format!(
-                    "{name}: invalid machine name {}",
+                    "{name}: invalid device name {}",
                     device.machine
                 )));
             }

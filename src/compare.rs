@@ -41,18 +41,6 @@ pub struct WifiClient {
     pub signal: Option<i64>,
 }
 
-/// A MAC address on a port of a switch or bridge. Also holds what is behind that port, so several on one port say
-/// nothing about who is connected directly.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PortEntry {
-    /// The MAC address.
-    pub mac: String,
-    /// The device with the port, or the plugin if it is not linked to one.
-    pub switch: String,
-    /// The port, like `lan1`.
-    pub port: String,
-}
-
 /// What a plugin reports.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Observation {
@@ -65,8 +53,6 @@ pub struct Observation {
     /// Devices the plugin talked to lately, whatever their address comes from; `None` if it cannot tell. Not for
     /// finding unknown devices: this also holds neighbours outside the network, like the provider's gateway.
     pub neighbours: Option<Vec<Seen>>,
-    /// The MAC addresses learned on the plugin's cabled ports.
-    pub ports: Vec<PortEntry>,
     /// Remarks of the plugin, for example data it could not read.
     pub notes: Vec<String>,
 }

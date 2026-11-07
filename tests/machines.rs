@@ -101,24 +101,17 @@ async fn connections_of_a_machine_share_one_card_and_move_together() {
 }
 
 #[tokio::test]
-async fn the_form_offers_machines_and_checks_the_name() {
+async fn saving_an_interface_keeps_its_device() {
     let data = data();
     let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
-    let (_, page) = send(&app, get("/devices/tv")).await;
-    assert!(page.contains(r#"<option value="ThinkPad">"#), "{page}");
-
-    let ok = "name=tv&mac=00:00:00:00:00:09&group=lan&ip=&note=&machine=LivingRoom";
-    assert_eq!(send(&app, post("/devices/tv", ok)).await.0, StatusCode::SEE_OTHER);
-    let (_, history) = send(&app, get("/history")).await;
-    assert!(
-        history.contains("Device tv changed: machine none → LivingRoom"),
-        "{history}"
-    );
+    let (_, page) = send(&app, get("/devices/ThinkPadWifi")).await;
+    assert!(page.contains(r#"name="machine" value="ThinkPad""#), "{page}");
+    assert!(!page.contains("Belongs to"), "{page}");
 
     let bad = "name=tv&mac=00:00:00:00:00:09&group=lan&ip=&note=&machine=Living%20Room";
     let (status, page) = send(&app, post("/devices/tv", bad)).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(page.contains("invalid machine name"));
+    assert!(page.contains("invalid device name"));
 }
 
 #[tokio::test]
@@ -154,7 +147,7 @@ async fn the_machine_page_shows_and_changes_its_interfaces() {
     );
     let (status, page) = send(&app, post("/machines/Laptop", "new_name=a%20b")).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(page.contains("Invalid machine name"));
+    assert!(page.contains("Invalid name"));
 
     let response = app
         .clone()
@@ -170,10 +163,7 @@ async fn the_machine_page_shows_and_changes_its_interfaces() {
     );
 
     let (_, history) = send(&app, get("/history")).await;
-    assert!(
-        history.contains("Machine ThinkPad renamed to Laptop"),
-        "{history}"
-    );
+    assert!(history.contains("Device ThinkPad renamed to Laptop"), "{history}");
     assert!(history.contains("Device ThinkPadUsb deleted"));
 }
 
@@ -220,7 +210,7 @@ async fn an_existing_device_is_picked_as_an_interface() {
     let (_, page) = send(&app, get("/machines/ThinkPad")).await;
     assert!(page.contains("href=\"/devices/tv\""), "{page}");
     let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
-    assert!(log.contains("Device tv added to machine ThinkPad"), "{log}");
+    assert!(log.contains("Interface tv added to ThinkPad"), "{log}");
 
     let (status, _) = send(&app, post("/machines/ThinkPad/interfaces", "device=gone")).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -273,7 +263,7 @@ async fn an_interface_is_removed_from_its_machine_and_stays_a_device() {
 
     let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
     assert!(
-        log.contains("Device ThinkPadWifi removed from machine ThinkPad"),
+        log.contains("Interface ThinkPadWifi removed from ThinkPad"),
         "{log}"
     );
 }

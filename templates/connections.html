@@ -4,7 +4,7 @@
 <h1 class="sr-only">Connections</h1>
 {% let view = "connections" %}{% include "view_switch.html" %}
 {% if tokens.is_empty() %}
-<p class="notice">Nothing is connected yet. A scan places Wi-Fi clients and devices it finds on a port. For the rest, choose &quot;Connected to&quot; on the device&#39;s page.</p>
+<p class="notice">Nothing is connected yet. A scan places Wi-Fi clients. For the others, choose &quot;Connected to&quot; on the device&#39;s page.</p>
 {% endif %}
 <div class="tree">
 {% for token in tokens %}
