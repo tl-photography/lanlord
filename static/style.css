@@ -157,6 +157,7 @@ code { font-size: 0.9em; }
 .dot.seen { background: var(--interface); }
 .dot.away { border: 2px solid var(--muted); }
 .actual { color: var(--text); font-weight: 600; }
+.note.warning { color: var(--error); }
 .badges { display: flex; flex-wrap: wrap; gap: 0.25rem; }
 .badges:not(:empty) { margin: 0.15rem 0; }
 .meta, .note { color: var(--muted); font-size: 0.85rem; overflow-wrap: anywhere; }

@@ -230,6 +230,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
+        .route("/groups/{name}/subnet", axum::routing::post(groups::set_subnet))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))
         .route(
             "/settings/background",
@@ -284,6 +285,8 @@ struct DeviceRow {
     note: String,
     /// What the scans saw.
     status: live::Status,
+    /// The fixed address is outside the subnet of the group.
+    warning: String,
 }
 
 #[derive(Clone)]
@@ -351,7 +354,12 @@ pub(crate) fn server_error(error: &impl std::fmt::Display) -> Response {
     (StatusCode::INTERNAL_SERVER_ERROR, "Internal error, see the log").into_response()
 }
 
-fn device_row(device: &devices::Device, links: &HashMap<String, Vec<String>>, seen: &Seen<'_>) -> DeviceRow {
+fn device_row(
+    device: &devices::Device,
+    group: &config::Group,
+    links: &HashMap<String, Vec<String>>,
+    seen: &Seen<'_>,
+) -> DeviceRow {
     DeviceRow {
         plugins: links.get(&device.name).cloned().unwrap_or_default(),
         name: device.name.clone(),
@@ -359,6 +367,10 @@ fn device_row(device: &devices::Device, links: &HashMap<String, Vec<String>>, se
         ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
         note: device.note.clone(),
         status: seen.live.status(device, seen.time),
+        warning: device
+            .ip
+            .and_then(|ip| group.address_warning(ip))
+            .unwrap_or_default(),
     }
 }
 
@@ -396,7 +408,7 @@ fn group_cards(
                 machine: false,
                 move_action: format!("/devices/{}/move", device.name),
                 group: group.name.clone(),
-                rows: vec![device_row(device, links, seen)],
+                rows: vec![device_row(device, group, links, seen)],
                 plugins: Vec::new(),
                 vlan_label: String::new(),
                 also_in: String::new(),
@@ -413,7 +425,7 @@ fn group_cards(
         let mut rows: Vec<DeviceRow> = members
             .iter()
             .filter(|other| other.machine == device.machine)
-            .map(|other| device_row(other, links, seen))
+            .map(|other| device_row(other, group, links, seen))
             .collect();
         rows.sort_by_key(|row| row.name.to_ascii_lowercase());
         let elsewhere: Vec<String> = config

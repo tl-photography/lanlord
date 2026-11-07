@@ -78,3 +78,13 @@ fn invalid_groups_are_rejected() {
         assert!(parse(&change).is_err(), "{reason}");
     }
 }
+
+#[test]
+fn subnets_are_read() {
+    let network = parse_subnet("192.0.2.0/24").unwrap();
+    assert_eq!(network.prefix, 24);
+    assert!(network.contains("192.0.2.77".parse().unwrap()));
+    assert!(parse_subnet("192.0.2.0").is_none());
+    assert!(parse_subnet("192.0.2.0/33").is_none());
+    assert!(parse_subnet("nonsense/24").is_none());
+}

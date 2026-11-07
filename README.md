@@ -148,13 +148,18 @@ address in use if it is not the planned one, for example for a device waiting fo
 the next start. A device counts as seen while it has a DHCP lease or is on the Wi-Fi, so it can stay green for the rest
 of its lease after it left.
 
+### Subnets
+
+Every group can have a subnet on the Groups page. A device with a fixed address outside it gets a warning on its card
+and page; moving it to another group stays possible, so it is not refused.
+
 ### Network column
 
 A device that a plugin is linked to, like the router, an access point or the host of Pi-hole, appears in the Network
 column ahead of the groups. It keeps its group, which decides its VLAN, and shows it as a badge.
 
 A device that sets its address itself, like the router, has "Address is set on the device itself" switched on: the
-address is shown and used for the plugin link, but it gets no static lease.
+address is shown and used for the plugin link, but it gets no static lease, and with it no `.lan` name from lanlord.
 
 ### Settings
 

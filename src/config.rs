@@ -2,11 +2,13 @@
 
 use std::collections::HashSet;
 use std::fs;
+use std::net::Ipv4Addr;
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use crate::devices::{Error, is_valid_name, write_private};
+use crate::leases::Network;
 
 /// A group of devices, mapped to a VLAN.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -16,12 +18,40 @@ pub struct Group {
     pub name: String,
     /// VLAN id, 1 to 4094.
     pub vlan: u16,
+    /// The network of the VLAN, like `192.0.2.0/24`; empty if it is not set.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub subnet: String,
     /// Text shown in the interface.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
 }
 
+/// Reads `192.0.2.0/24`.
+#[must_use]
+pub fn parse_subnet(text: &str) -> Option<Network> {
+    let (address, prefix) = text.split_once('/')?;
+    let prefix: u8 = prefix.parse().ok()?;
+    (prefix <= 32).then_some(Network {
+        address: address.parse().ok()?,
+        prefix,
+    })
+}
+
 impl Group {
+    /// The network, if one is set.
+    #[must_use]
+    pub fn network(&self) -> Option<Network> {
+        parse_subnet(&self.subnet)
+    }
+
+    /// A warning if a fixed address is outside the network of this group.
+    #[must_use]
+    pub fn address_warning(&self, ip: Ipv4Addr) -> Option<String> {
+        self.network()
+            .filter(|network| !network.contains(ip))
+            .map(|_| format!("{ip} is outside {} ({})", self.title(), self.subnet))
+    }
+
     /// The label, or the name if there is no label.
     #[must_use]
     pub fn title(&self) -> &str {
@@ -93,6 +123,12 @@ impl Config {
             if !is_valid_name(&group.name) {
                 return Err(Error::Invalid(format!("invalid group name: {}", group.name)));
             }
+            if !group.subnet.is_empty() && group.network().is_none() {
+                return Err(Error::Invalid(format!(
+                    "{}: the subnet must look like 192.0.2.0/24",
+                    group.name
+                )));
+            }
             if !(1..=4094).contains(&group.vlan) {
                 return Err(Error::Invalid(format!("{}: VLAN must be 1 to 4094", group.name)));
             }
@@ -104,6 +140,21 @@ impl Config {
                     "{}: duplicate VLAN {}",
                     group.name, group.vlan
                 )));
+            }
+        }
+        let networks: Vec<(&Group, Network)> = self
+            .groups
+            .iter()
+            .filter_map(|group| group.network().map(|network| (group, network)))
+            .collect();
+        for (index, (group, network)) in networks.iter().enumerate() {
+            for (other, other_network) in &networks[index + 1..] {
+                if network.contains(other_network.address) || other_network.contains(network.address) {
+                    return Err(Error::Invalid(format!(
+                        "the subnets of {} and {} overlap",
+                        group.name, other.name
+                    )));
+                }
             }
         }
         if !self.groups.is_empty() && !names.contains(&self.default_group) {

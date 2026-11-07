@@ -147,6 +147,14 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
     for group in &after.groups {
         match before.groups.iter().find(|old| old.name == group.name) {
             None => texts.push(format!("Group {} added: VLAN {}", group.name, group.vlan)),
+            Some(old) if old.subnet != group.subnet && old.vlan == group.vlan && old.label == group.label => {
+                texts.push(format!(
+                    "Group {} changed: subnet {} → {}",
+                    group.name,
+                    optional(&old.subnet),
+                    optional(&group.subnet)
+                ));
+            }
             Some(old) if old != group => texts.push(format!(
                 "Group {} changed: VLAN {} → {}, label {} → {}",
                 group.name,

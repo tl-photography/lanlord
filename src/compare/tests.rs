@@ -8,11 +8,13 @@ fn groups() -> Vec<Group> {
         Group {
             name: "lan".to_owned(),
             vlan: 1,
+            subnet: String::new(),
             label: String::new(),
         },
         Group {
             name: "iot".to_owned(),
             vlan: 20,
+            subnet: String::new(),
             label: String::new(),
         },
     ]

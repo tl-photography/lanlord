@@ -110,6 +110,8 @@ struct EditPage {
     machines: Vec<String>,
     /// The name of the device being edited; empty for a new one.
     original: String,
+    /// The address is outside the subnet of the group.
+    warning: String,
 }
 
 fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: String) -> Response {
@@ -123,8 +125,17 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
     } else {
         StatusCode::UNPROCESSABLE_ENTITY
     };
+    let warning = state
+        .groups()
+        .groups
+        .iter()
+        .find(|group| group.name == form.group)
+        .zip(form.ip.trim().parse().ok())
+        .and_then(|(group, ip)| group.address_warning(ip))
+        .unwrap_or_default();
     let page = EditPage {
         nav: "devices",
+        warning,
         title,
         action,
         form,

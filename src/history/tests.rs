@@ -70,6 +70,7 @@ fn group_changes_are_listed() {
     let lan = Group {
         name: "lan".to_owned(),
         vlan: 1,
+        subnet: String::new(),
         label: String::new(),
     };
     let before = Config {
@@ -86,6 +87,7 @@ fn group_changes_are_listed() {
             Group {
                 name: "guest".to_owned(),
                 vlan: 30,
+                subnet: String::new(),
                 label: String::new(),
             },
         ],
