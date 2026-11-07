@@ -198,15 +198,28 @@ pub struct Settings {
 }
 
 /// Settings of the background scan.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ScanSettings {
     /// Minutes between scans; 0 switches the background scan off.
-    #[serde(default)]
+    #[serde(default = "default_interval")]
     pub interval_minutes: u32,
     /// Whether changes made outside lanlord are undone automatically.
     #[serde(default)]
     pub restore: bool,
+}
+
+const fn default_interval() -> u32 {
+    10
+}
+
+impl Default for ScanSettings {
+    fn default() -> Self {
+        Self {
+            interval_minutes: default_interval(),
+            restore: false,
+        }
+    }
 }
 
 /// What the device overview shows.

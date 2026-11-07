@@ -162,20 +162,14 @@ async fn scan_reports_unknown_devices_that_can_be_added() {
     assert_eq!(response.status(), StatusCode::OK);
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let page = String::from_utf8(body.to_vec()).unwrap();
-    assert!(page.contains("1 discrepancy"), "{page}");
-    assert!(page.contains("Unknown device new-device (00:11:22:33:44:55, 192.0.2.45)"));
     assert!(
-        page.contains(r#"action="/devices/discovered""#),
-        "unknown devices can be added to a filled list"
+        page.contains("New device new-device (00:11:22:33:44:55) added to"),
+        "{page}"
     );
-
-    let response = post(
-        &data,
-        "/devices/discovered",
-        "name=new-device&mac=00:11:22:33:44:55",
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    assert!(
+        page.contains("No discrepancies"),
+        "the new device is in the list now: {page}"
+    );
     let devices = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
     assert!(devices.contains("name = \"new-device\""), "{devices}");
 }

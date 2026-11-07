@@ -153,11 +153,13 @@ async fn a_linked_plugin_shows_on_the_device() {
 async fn a_device_found_by_a_scan_is_new_until_someone_looks_at_it() {
     let data = data();
     let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
-    let found = "name=stranger&mac=00%3A00%3A00%3A00%3A00%3A0b";
-    assert_eq!(
-        send(&app, post("/devices/discovered", found)).await.0,
-        StatusCode::SEE_OTHER
-    );
+    let path = data.path().join("devices.toml");
+    let list = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        format!("{list}\n[[device]]\nname = \"stranger\"\nmac = \"00:00:00:00:00:0b\"\ngroup = \"lan\"\nunreviewed = true\n"),
+    )
+    .unwrap();
     let (_, page) = send(&app, get("/")).await;
     assert!(page.contains(r#"class="badge new""#), "{page}");
     assert_eq!(

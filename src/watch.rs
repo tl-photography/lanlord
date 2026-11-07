@@ -1,17 +1,17 @@
-//! The background scan: looks at the plugins every few minutes and tells the notification plugins about new unknown
-//! devices and about changes made outside lanlord (drift). With "restore" on, drift is undone through the normal
+//! The background scan: looks at the plugins every few minutes, adds new devices and removes old guests, and tells the
+//! notification plugins about that and about changes made outside lanlord (drift). With "restore" on, drift is undone through the normal
 //! apply. Changes made in lanlord itself are never applied here: they wait for the Apply button.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::fmt::Write as _;
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
-use crate::compare::{self, Finding};
-use crate::devices::{DeviceList, write_private};
+use crate::compare;
+use crate::devices::DeviceList;
 use crate::notify::Notification;
 use crate::plugins::{self, Plugin};
-use crate::{AppState, apply, history, plugin_ui};
+use crate::{AppState, apply, guests, history, plugin_ui};
 
 /// How often the task looks whether a scan is due.
 const TICK: Duration = Duration::from_secs(60);
@@ -19,8 +19,6 @@ const TICK: Duration = Duration::from_secs(60);
 /// What the background scan remembers between runs.
 #[derive(Default)]
 pub(crate) struct WatchState {
-    /// Unknown MAC addresses already notified; kept in `notified-devices` in the data directory.
-    notified: Option<HashSet<String>>,
     /// Per target: the fingerprint of the device list it last matched.
     in_sync: HashMap<String, String>,
     /// Per target: the digest of the drift already notified.
@@ -54,61 +52,6 @@ fn fingerprint(devices: &DeviceList) -> String {
         let _ = write!(hex, "{byte:02x}");
         hex
     })
-}
-
-fn notified_path(state: &AppState) -> std::path::PathBuf {
-    state.inner.history_path.with_file_name("notified-devices")
-}
-
-/// New unknown devices of this scan, as texts; remembers them.
-async fn new_unknown(state: &AppState, active: &[Arc<dyn Plugin>], devices: &DeviceList) -> Vec<String> {
-    let groups = state.groups().groups;
-    let mut found = Vec::new();
-    let results = plugin_ui::observe_all(active).await;
-    for (plugin, result) in active.iter().zip(results) {
-        let Ok(Ok(observation)) = result else { continue };
-        for finding in compare::compare(devices, &groups, &observation) {
-            if let Finding::Unknown { mac, ip, hostname } = finding {
-                let address = ip.map_or_else(|| "no address".to_owned(), |ip| ip.to_string());
-                let name = if hostname.is_empty() {
-                    "without a name"
-                } else {
-                    &hostname
-                };
-                found.push((
-                    mac.clone(),
-                    format!(
-                        "Unknown device {name} ({mac}, {address}), seen by {}",
-                        plugin.name()
-                    ),
-                ));
-            }
-        }
-    }
-    let path = notified_path(state);
-    let Ok(mut watch) = state.inner.watch.lock() else {
-        return Vec::new();
-    };
-    let notified = watch.notified.get_or_insert_with(|| {
-        std::fs::read_to_string(&path)
-            .unwrap_or_default()
-            .lines()
-            .map(str::to_owned)
-            .collect()
-    });
-    let texts: Vec<String> = found
-        .into_iter()
-        .filter(|(mac, _)| notified.insert(mac.clone()))
-        .map(|(_, text)| text)
-        .collect();
-    if !texts.is_empty() {
-        let mut macs: Vec<&str> = notified.iter().map(String::as_str).collect();
-        macs.sort_unstable();
-        if let Err(error) = write_private(&path, &(macs.join("\n") + "\n")) {
-            tracing::error!("cannot write {}: {error}", path.display());
-        }
-    }
-    texts
 }
 
 /// What the watch state says about the plan of one target: drift to report, with its digest.
@@ -174,7 +117,7 @@ async fn drift(
     texts
 }
 
-async fn send(state: &AppState, active: &[Arc<dyn Plugin>], title: &str, texts: &[String]) {
+pub(crate) async fn send(state: &AppState, active: &[Arc<dyn Plugin>], title: &str, texts: &[String]) {
     if texts.is_empty() {
         return;
     }
@@ -192,7 +135,6 @@ async fn send(state: &AppState, active: &[Arc<dyn Plugin>], title: &str, texts: 
 
 /// One background scan.
 pub async fn run_once(state: &AppState) {
-    let Ok(devices) = state.devices() else { return };
     let Ok(active) = state.inner.plugins.read().map(|plugins| plugins.clone()) else {
         return;
     };
@@ -200,18 +142,26 @@ pub async fn run_once(state: &AppState) {
         .unwrap_or_default()
         .scan
         .restore;
-    let unknown = new_unknown(state, &active, &devices).await;
-    send(state, &active, "lanlord: unknown device", &unknown).await;
+    let results = plugin_ui::observe_all(&active).await;
+    let complete = results.iter().all(|result| matches!(result, Ok(Ok(_))));
+    let observations: Vec<&compare::Observation> = results
+        .iter()
+        .filter_map(|result| match result {
+            Ok(Ok(observation)) => Some(observation),
+            _ => None,
+        })
+        .collect();
+    let seconds = guests::now();
+    let found = guests::take_in(state, &observations, complete, seconds);
+    send(state, &active, "lanlord: devices", &found).await;
+    let Ok(devices) = state.devices() else { return };
     let changed = drift(state, &active, &devices, restore).await;
     send(state, &active, "lanlord: change outside lanlord", &changed).await;
-    let seconds = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |since| since.as_secs());
     if let Ok(mut watch) = state.inner.watch.lock() {
         watch.last = format!(
-            "{} UTC: {} new unknown, {} outside changes",
+            "{} UTC: {} devices added or removed, {} outside changes",
             history::format_time(seconds),
-            unknown.len(),
+            found.len(),
             changed.len()
         );
     }

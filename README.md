@@ -4,7 +4,7 @@
 
 A device list for small OpenWrt networks.
 Every device gets a name and a group, and every group is a VLAN.
-lanlord compares the list with what the router and the access points report and shows unknown devices and
+lanlord compares the list with what the router and the access points report, adds new devices and shows
 differences.
 
 ## How it works
@@ -17,8 +17,10 @@ differences.
   `[[device]]`.
 - Devices, groups and plugin settings are TOML files in the data directory: `devices.toml`, `groups.toml` and
   `lanlord.toml`.
-- Plugins report what they see. A scan lists unknown devices, which can be added to the list, and differences:
-  missing static leases, other addresses, names or VLANs.
+- Plugins report what they see. A scan adds every unknown device to the default group, marked as new, and lists
+  differences: missing static leases, other addresses, names or VLANs. A device in the default group that no scan saw
+  for 30 days is removed. The last-seen dates are kept in `last-seen` in the data directory; a scan where a plugin
+  failed removes nobody.
 - The Apply page shows what a router would change, as uci commands like LuCI. Nothing changes before the Apply
   button. lanlord applies with rollback and confirms only after reading the changes back; otherwise the router
   undoes them after 30 seconds. The top bar shows how many changes are open; "Save and review changes" in the device
@@ -133,8 +135,8 @@ servers are checked against the usual certificate authorities, built into lanlor
 
 ### Background scan
 
-Set on the Settings page: every how many minutes lanlord scans on its own (0 is off, the default). The notification
-plugins then hear about new unknown devices, each once, and about changes made outside lanlord, for example a
+Set on the Settings page: every how many minutes lanlord scans on its own (10 by default, 0 is off). The notification
+plugins then hear about devices added or removed, and about changes made outside lanlord, for example a
 lease edited in LuCI: open changes on a target while the device list did not change since it last matched. Changes
 you make in lanlord are no such thing, they wait for Apply.
 

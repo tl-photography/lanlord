@@ -7,6 +7,7 @@ pub mod config;
 pub mod devices;
 mod edit;
 mod groups;
+mod guests;
 pub mod history;
 mod history_ui;
 pub mod leases;
@@ -204,7 +205,6 @@ pub fn app(state: AppState) -> Router {
     let mut router = Router::new()
         .route("/", get(index))
         .route("/devices", axum::routing::post(edit::create))
-        .route("/devices/discovered", axum::routing::post(edit::add_discovered))
         .route("/devices/new", get(edit::new_form))
         .route("/devices/{name}", get(edit::edit_form).post(edit::update))
         .route("/devices/{name}/move", axum::routing::post(edit::move_device))
