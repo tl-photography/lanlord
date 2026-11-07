@@ -10,6 +10,7 @@ fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Device {
         group: "lan".to_owned(),
         ip: ip.map(Ipv4Addr::from),
         note: String::new(),
+        self_assigned: false,
         machine: String::new(),
     }
 }
@@ -191,4 +192,16 @@ fn a_renamed_device_gets_a_warning() {
         plan.notes,
         ["Old is now New: its DNS name changes, update what still uses the old name"]
     );
+}
+
+#[test]
+fn a_device_that_sets_its_address_itself_gets_no_lease() {
+    let mut router = device("router", "aa:bb:cc:dd:ee:01", Some([192, 0, 2, 1]));
+    router.self_assigned = true;
+    let list = DeviceList {
+        devices: vec![router],
+    };
+    let networks = [LAN];
+    let plan = plan(&list, &[], &networks);
+    assert!(plan.changes.is_empty(), "{:?}", plan.changes);
 }

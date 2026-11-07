@@ -127,6 +127,16 @@ pub fn device(before: Option<&Device>, after: &Device) -> Option<String> {
     compare("IP", &ip_text(before), &ip_text(after));
     compare("note", &before.note, &after.note);
     compare("machine", &before.machine, &after.machine);
+    if before.self_assigned != after.self_assigned {
+        changes.push(format!(
+            "address {}",
+            if after.self_assigned {
+                "set on the device"
+            } else {
+                "from a static lease"
+            }
+        ));
+    }
     (!changes.is_empty()).then(|| format!("Device {} changed: {}", before.name, changes.join(", ")))
 }
 

@@ -67,6 +67,7 @@
     <div class="plugin-heading">
       <h2>{{ plugin.name }}</h2>
       <span class="badge">{{ plugin.title }}</span>
+      {% if !plugin.device.is_empty() %}<span class="badge linked" title="Linked to device {{ plugin.device }}">{{ plugin.device }}</span>{% endif %}
       <form class="plugin-toggle" method="post" action="/plugins/{{ plugin.name }}/enabled">
         <label><input type="checkbox" name="enabled" value="true"{% if plugin.enabled %} checked{% endif %}> Enabled</label>
         <noscript><button type="submit">Save</button></noscript>

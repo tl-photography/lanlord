@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+{% if !error.is_empty() %}
+<p class="error" role="alert">{{ error }}</p>
+{% endif %}
+<form method="post" action="/settings" class="panel">
+  <h2>Device overview</h2>
+  <p>What the cards on the Devices page show.</p>
+  <label class="switch"><input type="checkbox" name="show_mac" value="true"{% if overview.show_mac %} checked{% endif %}> Show MAC addresses</label>
+  <label class="switch"><input type="checkbox" name="show_ip" value="true"{% if overview.show_ip %} checked{% endif %}> Show IP addresses</label>
+  <button type="submit">Save</button>
+</form>
+{% endblock %}

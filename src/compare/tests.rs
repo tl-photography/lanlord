@@ -27,6 +27,7 @@ fn list() -> DeviceList {
                 group: "lan".to_owned(),
                 ip: Some(Ipv4Addr::new(192, 0, 2, 2)),
                 note: String::new(),
+                self_assigned: false,
                 machine: String::new(),
             },
             Device {
@@ -35,6 +36,7 @@ fn list() -> DeviceList {
                 group: "iot".to_owned(),
                 ip: None,
                 note: String::new(),
+                self_assigned: false,
                 machine: String::new(),
             },
         ],
@@ -141,4 +143,20 @@ fn differences_per_device_and_foreign_entries_are_found() {
             },
         ]
     );
+}
+
+#[test]
+fn a_device_that_sets_its_address_itself_has_no_lease_to_miss() {
+    let list = DeviceList {
+        devices: vec![Device {
+            name: "router".to_owned(),
+            mac: "aa:bb:cc:dd:ee:01".to_owned(),
+            group: "lan".to_owned(),
+            ip: Some([192, 0, 2, 1].into()),
+            self_assigned: true,
+            note: String::new(),
+            machine: String::new(),
+        }],
+    };
+    assert_eq!(compare(&list, &groups(), &Observation::default()), Vec::new());
 }

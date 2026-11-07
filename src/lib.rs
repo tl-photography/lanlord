@@ -16,6 +16,7 @@ pub mod origin;
 mod plugin_ui;
 pub mod plugins;
 pub mod preview;
+mod settings_ui;
 pub mod watch;
 
 use std::collections::HashMap;
@@ -221,6 +222,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
+        .route("/settings", get(settings_ui::show).post(settings_ui::save))
         .route("/plugins", get(plugin_ui::list).post(plugin_ui::create))
         .route("/plugins/scan", axum::routing::post(plugin_ui::scan))
         .route("/plugins/background", axum::routing::post(plugin_ui::background))
@@ -290,6 +292,8 @@ struct CardView {
     rows: Vec<DeviceRow>,
     /// Plugins linked to the machine itself.
     plugins: Vec<String>,
+    /// The group, shown on the Network column only.
+    vlan_label: String,
     /// Other groups with connections of the same machine.
     also_in: String,
     move_groups: Vec<MoveGroup>,
@@ -307,8 +311,18 @@ struct GroupView {
 #[template(path = "index.html")]
 struct IndexPage {
     nav: &'static str,
+    /// Cards of devices that a plugin talks to.
+    network: Vec<CardView>,
     groups: Vec<GroupView>,
     has_targets: bool,
+    overview: plugins::OverviewSettings,
+}
+
+impl CardView {
+    /// Whether a plugin talks to this device or machine.
+    fn is_linked(&self) -> bool {
+        !self.plugins.is_empty() || self.rows.iter().any(|row| !row.plugins.is_empty())
+    }
 }
 
 impl IndexPage {
@@ -361,6 +375,7 @@ fn group_cards(
                 group: group.name.clone(),
                 rows: vec![device_row(device, links)],
                 plugins: Vec::new(),
+                vlan_label: String::new(),
                 also_in: String::new(),
                 move_groups: move_groups.to_vec(),
             });
@@ -399,6 +414,7 @@ fn group_cards(
             group: group.name.clone(),
             rows,
             plugins: links.get(&device.machine).cloned().unwrap_or_default(),
+            vlan_label: String::new(),
             also_in: elsewhere.join(", "),
             move_groups: move_groups.to_vec(),
         });
@@ -413,9 +429,8 @@ async fn index(State(state): State<AppState>) -> Response {
         Err(error) => return server_error(&error),
     };
     let config = state.groups();
-    let links = plugins::read_settings(&state.inner.plugins_path)
-        .map(|settings| plugins::linked_plugins(&settings))
-        .unwrap_or_default();
+    let settings = plugins::read_settings(&state.inner.plugins_path).unwrap_or_default();
+    let links = plugins::linked_plugins(&settings);
     let move_groups: Vec<MoveGroup> = config
         .groups
         .iter()
@@ -424,26 +439,35 @@ async fn index(State(state): State<AppState>) -> Response {
             label: group.title().to_owned(),
         })
         .collect();
+    let mut network: Vec<CardView> = Vec::new();
     let groups = config
         .groups
         .iter()
-        .map(|group| GroupView {
-            name: group.name.clone(),
-            label: group.title().to_owned(),
-            vlan: group.vlan,
-            count: list
-                .devices
-                .iter()
-                .filter(|device| device.group == group.name)
-                .count(),
-            cards: group_cards(group, &list, &config, &links, &move_groups),
+        .map(|group| {
+            let (linked, cards): (Vec<_>, Vec<_>) = group_cards(group, &list, &config, &links, &move_groups)
+                .into_iter()
+                .partition(CardView::is_linked);
+            network.extend(linked.into_iter().map(|mut card| {
+                group.title().clone_into(&mut card.vlan_label);
+                card
+            }));
+            GroupView {
+                name: group.name.clone(),
+                label: group.title().to_owned(),
+                vlan: group.vlan,
+                count: cards.iter().map(|card| card.rows.len()).sum(),
+                cards,
+            }
         })
         .collect();
+    network.sort_by_key(|card| card.title.to_ascii_lowercase());
     let has_targets = state.has_targets();
     let page = IndexPage {
         nav: "devices",
+        network,
         groups,
         has_targets,
+        overview: settings.overview,
     };
     match page.render() {
         Ok(html) => Html(html).into_response(),

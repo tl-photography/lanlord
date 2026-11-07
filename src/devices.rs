@@ -20,8 +20,10 @@ pub struct Device {
     pub mac: String,
     /// Group of the device, decides the VLAN.
     pub group: String,
-    /// Fixed address, if the device gets a static lease.
+    /// Fixed address; it gets a static lease unless `self_assigned`.
     pub ip: Option<Ipv4Addr>,
+    /// The address is set on the device itself, so it gets no static lease.
+    pub self_assigned: bool,
     /// Free text.
     pub note: String,
     /// The machine this connection is an interface of, for example `ThinkPad` for its dock, Wi-Fi and cable; empty
@@ -58,6 +60,8 @@ struct FileDevice {
     group: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ip: Option<Ipv4Addr>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    self_assigned: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     note: String,
     #[serde(default, rename = "interface", skip_serializing_if = "Vec::is_empty")]
@@ -74,6 +78,8 @@ struct FileInterface {
     group: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     ip: Option<Ipv4Addr>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    self_assigned: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     note: String,
 }
@@ -93,6 +99,7 @@ impl TryFrom<FileList> for DeviceList {
                     mac: entry.mac,
                     group: entry.group,
                     ip: entry.ip,
+                    self_assigned: entry.self_assigned,
                     note: entry.note,
                     machine: entry.machine,
                 });
@@ -107,6 +114,7 @@ impl TryFrom<FileList> for DeviceList {
                     mac: interface.mac,
                     group: interface.group.unwrap_or_else(|| entry.group.clone()),
                     ip: interface.ip,
+                    self_assigned: interface.self_assigned,
                     note: interface.note,
                     machine: entry.name.clone(),
                 });
@@ -126,6 +134,7 @@ impl From<DeviceList> for FileList {
                     mac: device.mac,
                     group: device.group,
                     ip: device.ip,
+                    self_assigned: device.self_assigned,
                     note: device.note,
                     ..FileDevice::default()
                 });
@@ -148,6 +157,7 @@ impl From<DeviceList> for FileList {
                 mac: device.mac,
                 group: own_group,
                 ip: device.ip,
+                self_assigned: device.self_assigned,
                 note: device.note,
             });
         }

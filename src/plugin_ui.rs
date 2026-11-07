@@ -47,6 +47,7 @@ struct PluginRow {
     notifies: bool,
     problem: String,
     title: &'static str,
+    device: String,
     enabled: bool,
     search: String,
     fields: Vec<FieldView>,
@@ -181,16 +182,18 @@ fn page_with_message(
         .map(|(table, problem)| {
             let name = table_text(table, "name");
             let kind = table_text(table, "type");
+            let device = table_text(table, "device");
             let plugin_type = plugins::plugin_type(&kind);
             let fields = plugin_type.map_or_else(Vec::new, |plugin_type| {
                 field_views(plugin_type.fields, &device_names, |key| table_text(table, key))
             });
             PluginRow {
                 notifies: notifiers.contains(&name),
-                search: format!("{name} {kind}").to_ascii_lowercase(),
+                search: format!("{name} {kind} {device}").to_ascii_lowercase(),
                 problem: problem.unwrap_or_default(),
                 name,
                 title: plugin_type.map_or("Unknown type", |plugin_type| plugin_type.title),
+                device,
                 enabled: table
                     .get("enabled")
                     .and_then(toml::Value::as_bool)

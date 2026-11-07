@@ -31,7 +31,7 @@ document.addEventListener("dragend", () => {
   }
 });
 
-for (const group of document.querySelectorAll(".group")) {
+for (const group of document.querySelectorAll(".group[data-group]")) {
   group.addEventListener("dragover", (event) => {
     if (!event.dataTransfer.types.includes("text/plain")) return;
     event.preventDefault();
