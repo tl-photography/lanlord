@@ -14,6 +14,12 @@ them. Pi-hole has no rollback; lanlord reports what is missing.</p>
 {% if targets.is_empty() %}
 <p class="notice">No plugin applies changes. Add an OpenWrt router on the <a href="/plugins">Plugins</a> page.</p>
 {% endif %}
+{% if open_targets() > 1 %}
+<form method="post" action="/apply-all">
+  {% for target in targets %}{% if !target.changes.is_empty() %}<input type="hidden" name="digest-{{ target.name }}" value="{{ target.digest }}">{% endif %}{% endfor %}
+  <button type="submit">Apply all ({{ open_changes() }} changes on {{ open_targets() }} targets)</button>
+</form>
+{% endif %}
 {% for target in targets %}
 <section class="plugin-result">
   <h2>{{ target.name }} <small>{{ target.title }}</small></h2>

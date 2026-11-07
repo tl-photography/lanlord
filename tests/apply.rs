@@ -220,3 +220,52 @@ async fn the_scan_shows_which_device_is_on_which_wifi() {
     assert!(page.contains("On Wi-Fi"), "{page}");
     assert!(page.contains("OMV: router: Home (5 GHz), -43 dBm"), "{page}");
 }
+
+/// Adds a second router to the plugins of the data directory.
+async fn add_router(data: &TempDir) {
+    let path = data.path().join("lanlord.toml");
+    let settings = format!(
+        "{}\n[[plugin]]\ntype = \"openwrt\"\nname = \"second\"\nurl = \"{}\"\nuser = \"lanlord\"\n\
+         password_file = \"router.password\"\ncertificate = \"{FINGERPRINT}\"\n",
+        std::fs::read_to_string(&path).unwrap(),
+        fake_router().await
+    );
+    std::fs::write(&path, settings).unwrap();
+}
+
+fn digest_of(page: &str, name: &str) -> String {
+    let marker = format!(r#"name="digest-{name}" value=""#);
+    let start = page.find(&marker).unwrap() + marker.len();
+    page[start..start + 32].to_owned()
+}
+
+#[tokio::test]
+async fn apply_all_handles_every_target_and_keeps_going_after_a_failure() {
+    let data = data_with_router().await;
+    add_router(&data).await;
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+
+    let (_, page) = send(&app, get("/apply")).await;
+    assert!(page.contains("Apply all (2 changes on 2 targets)"), "{page}");
+
+    let form = format!("digest-router=0000&digest-second={}", digest_of(&page, "second"));
+    let (status, page) = send(&app, post("/apply-all", &form)).await;
+    assert_eq!(
+        status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "the first target failed"
+    );
+    assert!(
+        page.contains("router: the device or the list changed since the preview"),
+        "{page}"
+    );
+    assert!(
+        page.contains("second: 1 change applied"),
+        "the second one still ran: {page}"
+    );
+    assert!(!page.contains("Apply all"), "only one target is left: {page}");
+
+    let (_, history) = send(&app, get("/history")).await;
+    assert!(history.contains("Apply to router failed"));
+    assert!(history.contains("Applied to second: OMV: static lease 192.0.2.2"));
+}

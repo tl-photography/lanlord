@@ -218,6 +218,7 @@ pub fn app(state: AppState) -> Router {
         .route("/history", get(history_ui::list))
         .route("/apply", get(apply::list))
         .route("/apply/count", get(apply::count))
+        .route("/apply-all", axum::routing::post(apply::apply_all))
         .route("/apply/{name}", axum::routing::post(apply::apply))
         .route("/style.css", get(style))
         .route("/logo.svg", get(logo))
