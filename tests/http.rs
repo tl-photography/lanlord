@@ -58,8 +58,8 @@ async fn healthz_answers_ok() {
 async fn index_lists_the_devices_by_group() {
     let (status, body) = get("/").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains(r#"<span class="title" title="IoT">IoT</span> <span class="badge">VLAN 20</span> <span class="count">2 devices</span>"#));
-    assert!(body.contains(r#"<span class="title" title="LAN">LAN</span> <span class="badge">VLAN 1</span> <span class="count">0 devices</span>"#));
+    assert!(body.contains(r#"<span class="title" title="IoT">IoT</span> <span class="badge vlan">VLAN 20</span> <span class="count">2 devices</span>"#));
+    assert!(body.contains(r#"<span class="title" title="LAN">LAN</span> <span class="badge vlan">VLAN 1</span> <span class="count">0 devices</span>"#));
     let alpha = body.find("alpha").unwrap();
     let zeta = body.find("zeta").unwrap();
     assert!(alpha < zeta, "devices are sorted by name");

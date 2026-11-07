@@ -18,10 +18,13 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
-use crate::compare::{Entry, Observation, Seen, WifiClient};
+use crate::compare::{Assigned, Observation, Present};
 use crate::devices::{DeviceList, Error, normalize_mac};
-use crate::leases::{self, Change, HostSection, Network, Plan};
+use crate::leases::{self, Change, HostSection, NameSection, Network, Plan};
 use crate::preview::Preview;
+
+/// Static leases, DNS names and served networks of a device.
+type LeaseState = (Vec<HostSection>, Vec<NameSection>, Vec<Network>);
 
 /// Longest time for one request to the device.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
@@ -52,7 +55,7 @@ pub(super) const TYPE: PluginType = PluginType {
         Field {
             key: "device",
             label: "Device (optional, its fixed address is used when the address is empty)",
-            kind: FieldKind::Device,
+            kind: FieldKind::Interface,
             placeholder: "",
             optional: true,
         },
@@ -88,15 +91,14 @@ struct Settings {
     user: String,
     password_file: String,
     certificate: String,
-    #[serde(default)]
-    device: String,
+    /// Only used to fill an empty address and for the device page.
+    #[serde(default, rename = "device")]
+    _device: String,
 }
 
 /// One `OpenWrt` device.
 pub struct OpenWrt {
     name: String,
-    /// The linked device's name, or the plugin's; names the access point of Wi-Fi clients.
-    label: String,
     endpoint: Url,
     user: String,
     password_file: PathBuf,
@@ -110,7 +112,7 @@ impl OpenWrt {
             user,
             password_file,
             certificate,
-            device,
+            ..
         } = settings(&name, table)?;
         let invalid = |message: &str| Error::Invalid(format!("{name}: {message}"));
         let mut endpoint = secure_url(&name, &url)?;
@@ -120,7 +122,6 @@ impl OpenWrt {
             parse_fingerprint(&certificate).ok_or_else(|| invalid("invalid certificate fingerprint"))?;
         let client = client(fingerprint).map_err(|error| invalid(&error))?;
         Ok(Self {
-            label: if device.is_empty() { name.clone() } else { device },
             name,
             endpoint,
             user,
@@ -168,7 +169,7 @@ impl OpenWrt {
     }
 
     /// The devices connected to each Wi-Fi interface of the device.
-    async fn wifi_clients(&self, session: &str) -> Result<Vec<WifiClient>, String> {
+    async fn wifi_clients(&self, session: &str) -> Result<Vec<String>, String> {
         let devices = self.call(session, "iwinfo", "devices", &json!({})).await?;
         let mut clients = Vec::new();
         for device in devices
@@ -179,32 +180,39 @@ impl OpenWrt {
             .filter_map(Value::as_str)
         {
             let arguments = json!({ "device": device });
-            let info = self.call(session, "iwinfo", "info", &arguments).await?;
             let associated = self.call(session, "iwinfo", "assoclist", &arguments).await?;
-            clients.extend(wifi(&access_point(&self.label, device, &info), &associated));
+            clients.extend(wifi(&associated));
         }
         Ok(clients)
     }
 
     /// The static leases and the networks the device serves with DHCP. A device without a DHCP pool, like an access
     /// point, is not asked for its interfaces: its ACL does not need to allow that.
-    async fn lease_state(&self, session: &str) -> Result<(Vec<HostSection>, Vec<Network>), String> {
+    async fn lease_state(&self, session: &str) -> Result<LeaseState, String> {
         let dhcp = self
             .call(session, "uci", "get", &json!({ "config": leases::CONFIG }))
             .await?;
         let served = served_interfaces(&dhcp);
         if served.is_empty() {
-            return Ok((host_sections(&dhcp), Vec::new()));
+            return Ok((host_sections(&dhcp), name_sections(&dhcp), Vec::new()));
         }
         let dump = self
             .call(session, "network.interface", "dump", &json!({}))
             .await?;
-        Ok((host_sections(&dhcp), served_networks(&served, &dump)))
+        Ok((
+            host_sections(&dhcp),
+            name_sections(&dhcp),
+            served_networks(&served, &dump),
+        ))
     }
 
     async fn plan_in(&self, session: &str, devices: &DeviceList) -> Result<Option<Plan>, String> {
-        let (hosts, networks) = self.lease_state(session).await?;
-        Ok((!networks.is_empty()).then(|| leases::plan(devices, &hosts, &networks)))
+        let (hosts, names, networks) = self.lease_state(session).await?;
+        Ok((!networks.is_empty()).then(|| {
+            let mut plan = leases::plan(devices, &hosts, &networks);
+            leases::plan_names(devices, &names, &networks, &mut plan);
+            plan
+        }))
     }
 
     async fn preview(&self, devices: DeviceList) -> Result<Option<Preview>, String> {
@@ -276,7 +284,7 @@ impl OpenWrt {
                 ..
             } => (
                 "add",
-                json!({ "config": leases::CONFIG, "type": "host", "name": section, "values": values(options) }),
+                json!({ "config": leases::CONFIG, "type": leases::section_type(section), "name": section, "values": values(options) }),
             ),
             Change::Set {
                 section,
@@ -464,7 +472,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_owned();
-            Some(Seen { mac, ip, hostname })
+            Some(Present { mac, ip, hostname })
         })
         .collect();
 
@@ -481,7 +489,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
         })
         .collect();
 
-    let mut entries: Vec<Entry> = Vec::new();
+    let mut entries: Vec<Assigned> = Vec::new();
     for host in sections(hosts) {
         let name = host.get("name").and_then(Value::as_str).unwrap_or_default();
         let ip = host
@@ -490,7 +498,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
             .and_then(|ip| ip.parse::<Ipv4Addr>().ok());
         for mac in macs(host.get("mac")) {
             if entries.iter().all(|entry| entry.mac != mac) {
-                entries.push(Entry {
+                entries.push(Assigned {
                     vlan: vlans.get(&mac).copied(),
                     mac,
                     name: name.to_owned(),
@@ -501,7 +509,7 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
     }
     for (mac, vlan) in &vlans {
         if entries.iter().all(|entry| &entry.mac != mac) {
-            entries.push(Entry {
+            entries.push(Assigned {
                 mac: mac.clone(),
                 name: String::new(),
                 ip: None,
@@ -511,8 +519,8 @@ fn observation(leases: &Value, hosts: &Value, stations: &Value) -> Observation {
     }
     entries.sort_by(|left, right| left.mac.cmp(&right.mac));
     Observation {
-        seen,
-        entries: Some(entries),
+        present: seen,
+        assigned: Some(entries),
         ..Observation::default()
     }
 }
@@ -535,6 +543,19 @@ fn host_sections(dhcp: &Value) -> Vec<HostSection> {
             macs: macs(section.get("mac")),
             ip: text(section, "ip"),
             dns: text(section, "dns"),
+        })
+        .collect()
+}
+
+/// The DNS names lanlord owns.
+fn name_sections(dhcp: &Value) -> Vec<NameSection> {
+    sections(dhcp)
+        .filter(|section| text(section, ".type") == "domain")
+        .filter(|section| text(section, ".name").starts_with(leases::NAME_PREFIX))
+        .map(|section| NameSection {
+            id: text(section, ".name"),
+            name: text(section, "name"),
+            ip: text(section, "ip"),
         })
         .collect()
 }
@@ -572,47 +593,28 @@ fn served_networks(served: &[String], dump: &Value) -> Vec<Network> {
         .collect()
 }
 
-/// Where a client is connected: the plugin name, the network name and the band.
-fn access_point(plugin: &str, device: &str, info: &Value) -> String {
-    let ssid = info.get("ssid").and_then(Value::as_str).unwrap_or(device);
-    let band = match info.get("frequency").and_then(Value::as_u64) {
-        Some(frequency) if frequency < 3000 => " (2.4 GHz)",
-        Some(frequency) if frequency < 5925 => " (5 GHz)",
-        Some(_) => " (6 GHz)",
-        None => "",
-    };
-    format!("{plugin}: {ssid}{band}")
-}
-
-/// The clients of one Wi-Fi interface.
-fn wifi(access_point: &str, associated: &Value) -> Vec<WifiClient> {
+/// The MAC addresses of the clients of one Wi-Fi interface.
+fn wifi(associated: &Value) -> Vec<String> {
     associated
         .get("results")
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|client| {
-            Some(WifiClient {
-                mac: normalize_mac(client.get("mac")?.as_str()?)?,
-                access_point: access_point.to_owned(),
-                signal: client.get("signal").and_then(Value::as_i64),
-            })
-        })
+        .filter_map(|client| normalize_mac(client.get("mac")?.as_str()?))
         .collect()
 }
 
-/// Adds the Wi-Fi clients; one without a DHCP lease, for example with a fixed address on the device, is seen too.
-fn add_wifi(observation: &mut Observation, clients: Vec<WifiClient>) {
-    for client in &clients {
-        if observation.seen.iter().all(|seen| seen.mac != client.mac) {
-            observation.seen.push(Seen {
-                mac: client.mac.clone(),
+/// Adds the Wi-Fi clients; one without a DHCP lease, for example with a fixed address on the device, is present too.
+fn add_wifi(observation: &mut Observation, clients: Vec<String>) {
+    for mac in clients {
+        if observation.present.iter().all(|present| present.mac != mac) {
+            observation.present.push(Present {
+                mac,
                 ip: None,
                 hostname: String::new(),
             });
         }
     }
-    observation.wifi = clients;
 }
 
 /// Parses a SHA-256 fingerprint: 64 hex digits, with or without colons.

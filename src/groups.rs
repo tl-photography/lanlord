@@ -18,7 +18,15 @@ pub struct GroupForm {
     name: String,
     vlan: String,
     #[serde(default)]
+    subnet: String,
+    #[serde(default)]
     label: String,
+}
+
+/// Field of the form that sets a subnet.
+#[derive(Debug, Deserialize)]
+pub struct SubnetForm {
+    subnet: String,
 }
 
 /// Field of the form for the default group.
@@ -30,6 +38,7 @@ pub struct DefaultForm {
 struct GroupRow {
     name: String,
     vlan: u16,
+    subnet: String,
     title: String,
     devices: usize,
     is_default: bool,
@@ -47,7 +56,7 @@ struct GroupsPage {
 fn page(state: &AppState, form: GroupForm, error: String) -> Response {
     let config = state.groups();
     let devices = match state.devices() {
-        Ok(list) => list.devices,
+        Ok(list) => list.interfaces,
         Err(error) => return server_error(&error),
     };
     let groups = config
@@ -56,6 +65,7 @@ fn page(state: &AppState, form: GroupForm, error: String) -> Response {
         .map(|group| GroupRow {
             name: group.name.clone(),
             vlan: group.vlan,
+            subnet: group.subnet.clone(),
             title: group.title().to_owned(),
             devices: devices.iter().filter(|device| device.group == group.name).count(),
             is_default: group.name == config.default_group,
@@ -87,13 +97,13 @@ pub async fn list(State(state): State<AppState>) -> Response {
 fn change(
     state: &AppState,
     form: GroupForm,
-    change: impl FnOnce(&mut Config, &[crate::devices::Device]) -> Result<(), String>,
+    change: impl FnOnce(&mut Config, &[crate::devices::Interface]) -> Result<(), String>,
 ) -> Response {
     let Ok(guard) = state.inner.write_lock.lock() else {
         return server_error(&"write lock poisoned");
     };
     let devices = match state.devices() {
-        Ok(list) => list.devices,
+        Ok(list) => list.interfaces,
         Err(error) => return server_error(&error),
     };
     let before = state.groups();
@@ -130,6 +140,7 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<GroupForm>) 
     let group = Group {
         name: form.name.trim().to_owned(),
         vlan,
+        subnet: form.subnet.trim().to_owned(),
         label: form.label.trim().to_owned(),
     };
     change(&state, form, |config, _| {
@@ -137,6 +148,23 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<GroupForm>) 
             config.default_group.clone_from(&group.name);
         }
         config.groups.push(group);
+        Ok(())
+    })
+}
+
+/// Sets or clears the subnet of a group.
+pub async fn set_subnet(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Form(form): Form<SubnetForm>,
+) -> Response {
+    change(&state, GroupForm::default(), |config, _| {
+        let group = config
+            .groups
+            .iter_mut()
+            .find(|group| group.name == name)
+            .ok_or_else(|| format!("No such group: {name}"))?;
+        form.subnet.trim().clone_into(&mut group.subnet);
         Ok(())
     })
 }

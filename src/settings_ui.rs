@@ -1,4 +1,6 @@
-//! The settings page: choices that only change how lanlord looks.
+//! The settings page: what the overview shows and the background scan.
+
+use std::collections::HashMap;
 
 use askama::Template;
 use axum::Form;
@@ -8,7 +10,7 @@ use axum::response::{Html, IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
 use crate::devices::Error;
-use crate::plugins::{self, OverviewSettings};
+use crate::plugins::{self, OverviewSettings, ScanSettings, Settings};
 use crate::{AppState, history, server_error};
 
 #[derive(Template)]
@@ -16,13 +18,27 @@ use crate::{AppState, history, server_error};
 struct SettingsPage {
     nav: &'static str,
     overview: OverviewSettings,
+    scan: ScanSettings,
+    /// One line about the last background scan.
+    last_scan: String,
     error: String,
 }
 
-fn page(overview: OverviewSettings, status: StatusCode, error: String) -> Response {
+fn page(state: &AppState, status: StatusCode, error: String) -> Response {
+    let (settings, error) = match plugins::read_settings(&state.inner.plugins_path) {
+        Ok(settings) => (settings, error),
+        Err(problem) => (Settings::default(), problem.to_string()),
+    };
     let page = SettingsPage {
         nav: "settings",
-        overview,
+        overview: settings.overview,
+        scan: settings.scan,
+        last_scan: state
+            .inner
+            .watch
+            .lock()
+            .map(|watch| watch.last.clone())
+            .unwrap_or_default(),
         error,
     };
     match page.render() {
@@ -33,13 +49,38 @@ fn page(overview: OverviewSettings, status: StatusCode, error: String) -> Respon
 
 /// Shows the settings.
 pub async fn show(State(state): State<AppState>) -> Response {
-    match plugins::read_settings(&state.inner.plugins_path) {
-        Ok(settings) => page(settings.overview, StatusCode::OK, String::new()),
-        Err(error) => page(OverviewSettings::default(), StatusCode::OK, error.to_string()),
+    page(&state, StatusCode::OK, String::new())
+}
+
+/// Saves a change of the settings; `lines` says what goes into the history.
+fn change(
+    state: &AppState,
+    update: impl FnOnce(&mut Settings),
+    lines: impl FnOnce(&Settings, &Settings) -> Vec<String>,
+) -> Response {
+    let Ok(guard) = state.inner.write_lock.lock() else {
+        return server_error(&"settings lock poisoned");
+    };
+    let mut settings = match plugins::read_settings(&state.inner.plugins_path) {
+        Ok(settings) => settings,
+        Err(error) => return server_error(&error),
+    };
+    let before = settings.clone();
+    update(&mut settings);
+    match plugins::save_settings(&state.inner.plugins_path, &settings) {
+        Ok(()) => {
+            history::record(&state.inner.history_path, &lines(&before, &settings));
+            Redirect::to("/settings").into_response()
+        }
+        Err(Error::Invalid(message)) => {
+            drop(guard);
+            page(state, StatusCode::UNPROCESSABLE_ENTITY, message)
+        }
+        Err(error) => server_error(&error),
     }
 }
 
-/// The switches of the form; an unticked one is not sent.
+/// The switches of the overview form; an unticked one is not sent.
 #[derive(Debug, Deserialize)]
 pub struct SettingsForm {
     #[serde(default)]
@@ -52,36 +93,54 @@ fn shown(show: bool) -> &'static str {
     if show { "shown" } else { "hidden" }
 }
 
-/// Saves the settings.
+/// Saves what the overview shows.
 pub async fn save(State(state): State<AppState>, Form(form): Form<SettingsForm>) -> Response {
-    let Ok(_guard) = state.inner.write_lock.lock() else {
-        return server_error(&"settings lock poisoned");
-    };
-    let mut settings = match plugins::read_settings(&state.inner.plugins_path) {
-        Ok(settings) => settings,
-        Err(error) => return server_error(&error),
-    };
     let overview = OverviewSettings {
         show_mac: form.show_mac,
         show_ip: form.show_ip,
     };
-    if settings.overview == overview {
-        return Redirect::to("/settings").into_response();
-    }
-    settings.overview = overview;
-    match plugins::save_settings(&state.inner.plugins_path, &settings) {
-        Ok(()) => {
-            history::record(
-                &state.inner.history_path,
-                &[format!(
-                    "Overview changed: MAC {}, IP {}",
-                    shown(overview.show_mac),
-                    shown(overview.show_ip)
-                )],
-            );
-            Redirect::to("/settings").into_response()
-        }
-        Err(Error::Invalid(message)) => page(overview, StatusCode::UNPROCESSABLE_ENTITY, message),
-        Err(error) => server_error(&error),
-    }
+    change(
+        &state,
+        |settings| settings.overview = overview,
+        |before, _| {
+            if before.overview == overview {
+                return Vec::new();
+            }
+            vec![format!(
+                "Overview changed: MAC {}, IP {}",
+                shown(overview.show_mac),
+                shown(overview.show_ip)
+            )]
+        },
+    )
+}
+
+/// Sets the interval and the restore option of the background scan.
+pub async fn background(
+    State(state): State<AppState>,
+    Form(form): Form<HashMap<String, String>>,
+) -> Response {
+    let Ok(interval_minutes) = form
+        .get("interval")
+        .map_or("0", String::as_str)
+        .trim()
+        .parse::<u32>()
+    else {
+        return page(
+            &state,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "The interval must be a number of minutes".to_owned(),
+        );
+    };
+    let restore = form.get("restore").is_some_and(|value| value == "true");
+    change(
+        &state,
+        |settings| {
+            settings.scan = ScanSettings {
+                interval_minutes,
+                restore,
+            };
+        },
+        history::plugins,
+    )
 }

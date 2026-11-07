@@ -1,17 +1,18 @@
 //! Unit tests of `leases`.
 
 use super::*;
-use crate::devices::Device;
+use crate::devices::Interface;
 
-fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Device {
-    Device {
+fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Interface {
+    Interface {
         name: name.to_owned(),
         mac: mac.to_owned(),
         group: "lan".to_owned(),
         ip: ip.map(Ipv4Addr::from),
         note: String::new(),
         self_assigned: false,
-        machine: String::new(),
+        unreviewed: false,
+        device: String::new(),
     }
 }
 
@@ -30,8 +31,8 @@ const LAN: Network = Network {
     prefix: 24,
 };
 
-fn list(devices: Vec<Device>) -> DeviceList {
-    DeviceList { devices }
+fn list(devices: Vec<Interface>) -> DeviceList {
+    DeviceList { interfaces: devices }
 }
 
 #[test]
@@ -199,9 +200,55 @@ fn a_device_that_sets_its_address_itself_gets_no_lease() {
     let mut router = device("router", "aa:bb:cc:dd:ee:01", Some([192, 0, 2, 1]));
     router.self_assigned = true;
     let list = DeviceList {
-        devices: vec![router],
+        interfaces: vec![router],
     };
     let networks = [LAN];
     let plan = plan(&list, &[], &networks);
+    assert!(plan.changes.is_empty(), "{:?}", plan.changes);
+}
+
+#[test]
+fn a_device_that_sets_its_address_itself_gets_a_name_instead() {
+    let mut router = device("router", "aa:bb:cc:dd:ee:01", Some([192, 0, 2, 1]));
+    router.self_assigned = true;
+    let devices = list(vec![router]);
+    let mut plan = Plan::default();
+    plan_names(&devices, &[], &[LAN], &mut plan);
+    assert_eq!(plan.changes.len(), 1);
+    assert!(matches!(&plan.changes[0], Change::Add { section, .. } if section == "lanlordname_router"));
+
+    let name = NameSection {
+        id: "lanlordname_router".to_owned(),
+        name: "router".to_owned(),
+        ip: "192.0.2.1".to_owned(),
+    };
+    let mut plan = Plan::default();
+    plan_names(&devices, std::slice::from_ref(&name), &[LAN], &mut plan);
+    assert!(plan.changes.is_empty(), "{:?}", plan.changes);
+
+    let moved = NameSection {
+        ip: "192.0.2.2".to_owned(),
+        ..name.clone()
+    };
+    let mut plan = Plan::default();
+    plan_names(&devices, &[moved], &[LAN], &mut plan);
+    assert!(matches!(&plan.changes[0], Change::Set { .. }));
+
+    let mut plan = Plan::default();
+    plan_names(&list(Vec::new()), &[name], &[LAN], &mut plan);
+    assert!(matches!(&plan.changes[0], Change::Delete { section, .. } if section == "lanlordname_router"));
+}
+
+#[test]
+fn a_name_outside_the_served_networks_waits_and_stays() {
+    let mut router = device("router", "aa:bb:cc:dd:ee:01", Some([198, 51, 100, 1]));
+    router.self_assigned = true;
+    let name = NameSection {
+        id: "lanlordname_router".to_owned(),
+        name: "router".to_owned(),
+        ip: "198.51.100.1".to_owned(),
+    };
+    let mut plan = Plan::default();
+    plan_names(&list(vec![router]), &[name], &[LAN], &mut plan);
     assert!(plan.changes.is_empty(), "{:?}", plan.changes);
 }

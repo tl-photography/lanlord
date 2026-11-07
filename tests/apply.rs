@@ -57,7 +57,6 @@ async fn fake_router() -> String {
                 ("uci", "confirm") => json!([0]),
                 ("luci-rpc", "getDHCPLeases") => json!([0, { "dhcp_leases": [] }]),
                 ("iwinfo", "devices") => json!([0, { "devices": ["phy0-ap0"] }]),
-                ("iwinfo", "info") => json!([0, { "ssid": "Home", "frequency": 5180 }]),
                 ("iwinfo", "assoclist") => {
                     json!([0, { "results": [{ "mac": "00:00:00:00:00:01", "signal": -43 }] }])
                 }
@@ -209,16 +208,6 @@ async fn without_targets_the_form_has_no_review_button() {
     let (_, page) = send(&app, get("/devices/new")).await;
     assert!(!page.contains("Save and review changes"));
     assert_eq!(send(&app, get("/apply/count")).await.1, r#"{"changes":0}"#);
-}
-
-#[tokio::test]
-async fn the_scan_shows_which_device_is_on_which_wifi() {
-    let data = data_with_router().await;
-    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
-    let (status, page) = send(&app, post("/plugins/scan", "")).await;
-    assert_eq!(status, StatusCode::OK);
-    assert!(page.contains("On Wi-Fi"), "{page}");
-    assert!(page.contains("OMV: router: Home (5 GHz), -43 dBm"), "{page}");
 }
 
 /// Adds a second router to the plugins of the data directory.

@@ -62,10 +62,10 @@ fn leases_hosts_and_stations_become_one_entry_per_mac() {
             "cfg12": { ".type": "wifi-station", "mac": "aa:bb:cc:00:00:07", "vid": "9999" }
         } });
     let observation = observation(&leases, &hosts, &stations);
-    assert_eq!(observation.seen.len(), 2);
-    assert_eq!(observation.seen[0].hostname, "phone");
-    assert_eq!(observation.seen[1].hostname, "");
-    let entries = observation.entries.unwrap();
+    assert_eq!(observation.present.len(), 2);
+    assert_eq!(observation.present[0].hostname, "phone");
+    assert_eq!(observation.present[1].hostname, "");
+    let entries = observation.assigned.unwrap();
     let entry = |mac: &str| entries.iter().find(|entry| entry.mac == mac).unwrap();
     assert_eq!(entries.len(), 4, "the station with VLAN 9999 is ignored");
     assert_eq!(entry("aa:bb:cc:00:00:03").name, "tv");
@@ -155,7 +155,6 @@ async fn fake_router_with_wifi(stations: Value, wifi: Value) -> String {
                     } }]),
                 ("uci", "get") => stations,
                 ("iwinfo", "devices") => wifi,
-                ("iwinfo", "info") => json!([0, { "ssid": "Home", "frequency": 5180 }]),
                 ("iwinfo", "assoclist") => json!([0, { "results": [
                         { "mac": "AA:BB:CC:00:00:01", "signal": -43 },
                         { "mac": "aa:bb:cc:00:00:09", "signal": -71 }
@@ -185,8 +184,8 @@ async fn reads_a_router_through_ubus() {
     assert_eq!(router.name(), "router");
     assert_eq!(router.kind(), "openwrt");
     let observation = router.observe().await.unwrap();
-    assert_eq!(observation.seen[0].hostname, "phone");
-    let entries = observation.entries.unwrap();
+    assert_eq!(observation.present[0].hostname, "phone");
+    let entries = observation.assigned.unwrap();
     assert_eq!(entries[0].name, "tv");
     assert_eq!(entries[0].vlan, None, "no wireless configuration on this device");
 }
@@ -196,7 +195,7 @@ async fn reads_station_vlans_of_an_access_point() {
     let data = tempfile::tempdir().unwrap();
     let stations = json!([0, { "values": { "cfg9": { "mac": "aa:bb:cc:00:00:02", "vid": "20" } } }]);
     let access_point = plugin(&fake_router(stations).await, data.path(), "secret", 0o600);
-    let entries = access_point.observe().await.unwrap().entries.unwrap();
+    let entries = access_point.observe().await.unwrap().assigned.unwrap();
     assert_eq!(entries[0].vlan, Some(20));
 }
 
@@ -352,17 +351,18 @@ fn router_with_omv() -> FakeUci {
 }
 
 fn devices() -> DeviceList {
-    let device = |name: &str, mac: &str, ip: [u8; 4]| crate::devices::Device {
+    let device = |name: &str, mac: &str, ip: [u8; 4]| crate::devices::Interface {
         name: name.to_owned(),
         mac: mac.to_owned(),
         group: "lan".to_owned(),
         ip: Some(Ipv4Addr::from(ip)),
         self_assigned: false,
+        unreviewed: false,
         note: String::new(),
-        machine: String::new(),
+        device: String::new(),
     };
     DeviceList {
-        devices: vec![
+        interfaces: vec![
             device("OMV", "aa:bb:cc:00:00:01", [192, 0, 2, 2]),
             device("plug", "aa:bb:cc:00:00:02", [203, 0, 113, 20]),
         ],
@@ -445,25 +445,25 @@ async fn an_access_point_without_dhcp_has_nothing_to_apply() {
 }
 
 #[tokio::test]
-async fn wifi_clients_are_reported_with_their_access_point() {
+async fn wifi_clients_are_present_without_a_lease() {
     let data = tempfile::tempdir().unwrap();
     let url = fake_router_with_wifi(json!([4]), json!([0, { "devices": ["phy0-ap0"] }])).await;
     let observation = plugin(&url, data.path(), "secret", 0o600)
         .observe()
         .await
         .unwrap();
-    assert_eq!(observation.wifi.len(), 2);
-    assert_eq!(observation.wifi[0].access_point, "router: Home (5 GHz)");
-    assert_eq!(observation.wifi[0].mac, "aa:bb:cc:00:00:01");
-    assert_eq!(observation.wifi[1].signal, Some(-71));
     assert!(
         observation
-            .seen
+            .present
             .iter()
-            .any(|seen| seen.mac == "aa:bb:cc:00:00:09" && seen.ip.is_none()),
-        "a Wi-Fi client without a lease is seen"
+            .any(|present| present.mac == "aa:bb:cc:00:00:09" && present.ip.is_none()),
+        "a Wi-Fi client without a lease is present"
     );
-    assert_eq!(observation.seen.len(), 2, "the leased phone is not added twice");
+    assert_eq!(
+        observation.present.len(),
+        2,
+        "the leased phone is not added twice"
+    );
     assert_eq!(observation.notes, Vec::<String>::new());
 }
 
@@ -475,7 +475,6 @@ async fn missing_rights_for_wifi_become_a_note() {
         .observe()
         .await
         .unwrap();
-    assert_eq!(observation.wifi, []);
     assert!(
         observation.notes[0].starts_with("Wi-Fi clients not read:"),
         "{:?}",
@@ -485,31 +484,13 @@ async fn missing_rights_for_wifi_become_a_note() {
 }
 
 #[test]
-fn bands_follow_the_frequency() {
-    assert_eq!(
-        access_point("ap", "phy1-ap0", &json!({ "ssid": "Home", "frequency": 2412 })),
-        "ap: Home (2.4 GHz)"
-    );
-    assert_eq!(
-        access_point("ap", "phy2-ap0", &json!({ "ssid": "Home", "frequency": 5955 })),
-        "ap: Home (6 GHz)"
-    );
-    assert_eq!(access_point("ap", "phy0-ap0", &json!({})), "ap: phy0-ap0");
-}
-
-#[tokio::test]
-async fn wifi_clients_name_the_linked_device() {
-    let data = tempfile::tempdir().unwrap();
-    let url = fake_router_with_wifi(json!([4]), json!([0, { "devices": ["phy0-ap0"] }])).await;
-    let path = data.path().join("router.password");
-    std::fs::write(&path, "secret").unwrap();
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
-    let mut table = settings_table(&url);
-    table.insert(
-        "device".to_owned(),
-        toml::Value::String("LivingRoomAP".to_owned()),
-    );
-    let access_point = OpenWrt::new("router".to_owned(), table, data.path()).unwrap();
-    let observation = access_point.observe().await.unwrap();
-    assert_eq!(observation.wifi[0].access_point, "LivingRoomAP: Home (5 GHz)");
+fn dns_names_are_domain_sections() {
+    assert_eq!(leases::section_type(&leases::name_id("RouterMain")), "domain");
+    assert_eq!(leases::section_type(&leases::section_id("RouterMain")), "host");
+    let change = Change::Add {
+        section: leases::name_id("RouterMain"),
+        values: Vec::new(),
+        why: String::new(),
+    };
+    assert_eq!(change.commands(), ["uci set dhcp.lanlordname_routermain=domain"]);
 }

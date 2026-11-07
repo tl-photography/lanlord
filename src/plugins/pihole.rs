@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 
 use super::openwrt::{MAX_RESPONSE_BYTES, client, parse_fingerprint, read_password, secure_url};
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
-use crate::compare::{Observation, Seen};
+use crate::compare::{Observation, Present};
 use crate::devices::{DeviceList, Error, normalize_mac};
 use crate::preview::{Preview, Step};
 
@@ -44,7 +44,7 @@ pub(super) const TYPE: PluginType = PluginType {
         Field {
             key: "device",
             label: "Device (optional, its fixed address is used when the address is empty)",
-            kind: FieldKind::Device,
+            kind: FieldKind::Interface,
             placeholder: "",
             optional: true,
         },
@@ -199,7 +199,7 @@ fn group_names(ids: &[u64], groups: &HashMap<String, u64>) -> BTreeSet<String> {
 fn plan(devices: &DeviceList, state: &PiHoleState) -> Plan {
     let mut plan = Plan::default();
     let with_address: Vec<_> = devices
-        .devices
+        .interfaces
         .iter()
         .filter(|device| device.ip.is_some())
         .collect();
@@ -561,7 +561,7 @@ fn observation(devices: &Value) -> Observation {
                 .and_then(|ips| ips.first())
                 .cloned()
                 .unwrap_or_default();
-            Some(Seen {
+            Some(Present {
                 mac,
                 ip: first
                     .get("ip")
@@ -572,7 +572,7 @@ fn observation(devices: &Value) -> Observation {
         })
         .collect();
     Observation {
-        seen,
+        present: seen,
         ..Observation::default()
     }
 }

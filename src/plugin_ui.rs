@@ -15,8 +15,11 @@ use crate::compare::{self, Finding, Observation};
 use crate::devices::Error;
 use crate::history;
 use crate::notify::Notification;
-use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, ScanSettings, Settings};
+use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, Settings};
 use crate::{AppState, server_error};
+
+/// The answer of one plugin to a scan.
+pub(crate) type ObserveResult = Result<Result<Observation, String>, tokio::time::error::Elapsed>;
 
 /// Longest time one plugin may take for a scan.
 const SCAN_TIMEOUT: Duration = Duration::from_secs(20);
@@ -67,14 +70,7 @@ struct ScanRow {
     error: String,
     findings: Vec<String>,
     discoveries: Vec<Discovery>,
-    wifi: Vec<WifiRow>,
     notes: Vec<String>,
-}
-
-struct WifiRow {
-    device: String,
-    access_point: String,
-    signal: String,
 }
 
 struct Discovery {
@@ -93,16 +89,13 @@ struct PluginsPage {
     can_import: bool,
     message: String,
     error: String,
-    scan: ScanSettings,
-    /// One line about the last background scan.
-    last_scan: String,
 }
 
 fn input(field: &Field) -> &'static str {
     match field.kind {
         FieldKind::Url => "url",
         FieldKind::Switch => "checkbox",
-        FieldKind::Device => "select",
+        FieldKind::Interface => "select",
         _ => "text",
     }
 }
@@ -121,7 +114,7 @@ fn field_views(
             input: input(field),
             placeholder: field.placeholder,
             optional: field.optional,
-            options: if field.kind == FieldKind::Device {
+            options: if field.kind == FieldKind::Interface {
                 devices.to_vec()
             } else {
                 Vec::new()
@@ -152,7 +145,7 @@ fn page_with_message(
 ) -> Response {
     let mut device_names: Vec<String> = state
         .devices()
-        .map(|list| list.devices.into_iter().map(|device| device.name).collect())
+        .map(|list| list.interfaces.into_iter().map(|device| device.name).collect())
         .unwrap_or_default();
     device_names.sort_by_key(|name| name.to_ascii_lowercase());
     let notifiers: Vec<String> = state.inner.plugins.read().map_or_else(
@@ -225,13 +218,6 @@ fn page_with_message(
         can_import: !state.groups().default_group.is_empty(),
         message,
         error: if error.is_empty() { file_problem } else { error },
-        scan: settings.scan,
-        last_scan: state
-            .inner
-            .watch
-            .lock()
-            .map(|watch| watch.last.clone())
-            .unwrap_or_default(),
     };
     match page.render() {
         Ok(html) => (status, Html(html)).into_response(),
@@ -402,9 +388,7 @@ pub async fn test_notification(State(state): State<AppState>, Path(name): Path<S
 }
 
 /// Asks every plugin at the same time, each with a time limit; the results are in the order of the plugins.
-pub(crate) async fn observe_all(
-    active: &[Arc<dyn Plugin>],
-) -> Vec<Result<Result<Observation, String>, tokio::time::error::Elapsed>> {
+pub(crate) async fn observe_all(active: &[Arc<dyn Plugin>]) -> Vec<ObserveResult> {
     let mut tasks = tokio::task::JoinSet::new();
     for (index, plugin) in active.iter().cloned().enumerate() {
         tasks.spawn(async move { (index, tokio::time::timeout(SCAN_TIMEOUT, plugin.observe()).await) });
@@ -419,34 +403,6 @@ pub(crate) async fn observe_all(
     results.into_iter().map(|(_, result)| result).collect()
 }
 
-/// Sets the interval and the restore option of the background scan.
-pub async fn background(
-    State(state): State<AppState>,
-    Form(form): Form<HashMap<String, String>>,
-) -> Response {
-    let Ok(interval_minutes) = form
-        .get("interval")
-        .map_or("0", String::as_str)
-        .trim()
-        .parse::<u32>()
-    else {
-        return page(
-            &state,
-            Vec::new(),
-            false,
-            "The interval must be a number of minutes".to_owned(),
-        );
-    };
-    let restore = form.get("restore").is_some_and(|value| value == "true");
-    change(&state, |settings| {
-        settings.scan = ScanSettings {
-            interval_minutes,
-            restore,
-        };
-        Ok(())
-    })
-}
-
 /// Scans every enabled plugin at the same time, each with a time limit, without changing anything.
 pub async fn scan(State(state): State<AppState>) -> Response {
     let devices = match state.devices() {
@@ -458,8 +414,8 @@ pub async fn scan(State(state): State<AppState>) -> Response {
         Ok(plugins) => plugins.clone(),
         Err(_) => return server_error(&"plugin lock poisoned"),
     };
-    let scan_results = observe_all(&active)
-        .await
+    let results = observe_all(&active).await;
+    let scan_results = results
         .into_iter()
         .enumerate()
         .map(|(index, result)| {
@@ -488,27 +444,9 @@ pub async fn scan(State(state): State<AppState>) -> Response {
                     _ => None,
                 })
                 .collect();
-            let mut wifi: Vec<WifiRow> = observation
-                .wifi
-                .iter()
-                .map(|client| WifiRow {
-                    device: devices
-                        .devices
-                        .iter()
-                        .find(|device| device.mac == client.mac)
-                        .map_or_else(|| client.mac.clone(), |device| device.name.clone()),
-                    access_point: client.access_point.clone(),
-                    signal: client
-                        .signal
-                        .map(|signal| format!("{signal} dBm"))
-                        .unwrap_or_default(),
-                })
-                .collect();
-            wifi.sort_by_key(|row| row.device.to_ascii_lowercase());
             ScanRow {
                 name: plugin.name().to_owned(),
                 title,
-                wifi,
                 notes: observation.notes.clone(),
                 status: match findings.len() {
                     0 => "No discrepancies".to_owned(),
@@ -532,7 +470,6 @@ fn failed(name: &str, title: &'static str, error: String) -> ScanRow {
         error,
         findings: Vec::new(),
         discoveries: Vec::new(),
-        wifi: Vec::new(),
         notes: Vec::new(),
     }
 }
@@ -552,6 +489,9 @@ fn finding_text(finding: &Finding) -> String {
             format!("Unknown device {name} ({mac}, {})", address(*ip))
         }
         Finding::Missing { device } => format!("{device} has no entry"),
+        Finding::UnexpectedLease { device } => format!(
+            "{device} should set its address itself but has a DHCP lease. Change where its address comes from"
+        ),
         Finding::WrongName { device, actual } => format!("{device} is named {actual}"),
         Finding::WrongIp {
             device,

@@ -12,6 +12,11 @@ function updateDraggable() {
 updateDraggable();
 desktopPointer.addEventListener("change", updateDraggable);
 
+document.addEventListener("submit", (event) => {
+  const question = event.target.dataset?.confirm;
+  if (question && !window.confirm(question)) event.preventDefault();
+});
+
 document.addEventListener("dragstart", (event) => {
   if (!(event.target instanceof Element)) return;
   const item = event.target.closest(".device-item");

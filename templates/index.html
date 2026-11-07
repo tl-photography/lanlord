@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Devices{% endblock %}
 {% block content %}
+<h1 class="sr-only">Devices</h1>
 {% if has_groups() && !has_targets %}
 <p class="notice">Changes are only saved in lanlord. No router or Pi-hole is connected yet, nothing is applied to the network.</p>
 {% endif %}
@@ -8,19 +9,9 @@
 <p class="notice">No groups yet. <a href="/groups">Set up the groups</a> first, every device belongs to one.</p>
 {% endif %}
 <div class="columns">
-  {% if !network.is_empty() %}
-  <section class="group network">
-    <h2><span class="title">Network</span> <span class="count">{{ network.len() }} {% if network.len() == 1 %}device{% else %}devices{% endif %}</span></h2>
-    <ul class="cards">
-      {% for card in network %}
-      {% include "device_card.html" %}
-      {% endfor %}
-    </ul>
-  </section>
-  {% endif %}
   {% for group in groups %}
   <section class="group" data-group="{{ group.name }}">
-    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge">VLAN {{ group.vlan }}</span> <span class="count">{{ group.count }} {% if group.count == 1 %}device{% else %}devices{% endif %}</span></h2>
+    <h2><span class="title" title="{{ group.label }}">{{ group.label }}</span> <span class="badge vlan">VLAN {{ group.vlan }}</span> <span class="count">{{ group.count }} {% if group.count == 1 %}device{% else %}devices{% endif %}</span></h2>
     {% if group.cards.is_empty() %}
     <p class="empty">No devices.</p>
     {% else %}
@@ -33,4 +24,5 @@
   </section>
   {% endfor %}
 </div>
+<p class="legend"><span class="badge vlan">VLAN</span> <span class="badge">Plugin</span> <span class="badge interface">Interface</span> <span class="badge new">New</span></p>
 {% endblock %}

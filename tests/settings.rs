@@ -50,7 +50,7 @@ async fn addresses_are_shown_until_switched_off() {
 
     let (_, page) = send(&app, get("/")).await;
     assert!(
-        page.contains("192.0.2.9 · <code>00:00:00:00:00:09</code>"),
+        page.contains("<span>192.0.2.9</span><code>00:00:00:00:00:09</code>"),
         "{page}"
     );
     let (_, page) = send(&app, get("/settings")).await;
@@ -61,7 +61,6 @@ async fn addresses_are_shown_until_switched_off() {
     let (_, page) = send(&app, get("/")).await;
     assert!(page.contains("192.0.2.9"), "{page}");
     assert!(!page.contains("<code>"), "{page}");
-    assert!(!page.contains(" · "), "{page}");
 
     let (status, _) = send(&app, post("/settings", "show_mac=true")).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
@@ -138,25 +137,50 @@ async fn interface_badges_sit_side_by_side_without_addresses() {
 }
 
 #[tokio::test]
-async fn a_linked_device_moves_to_the_network_column_and_keeps_its_group() {
+async fn a_linked_plugin_shows_on_the_device() {
     let data = data();
-    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
-    let (_, page) = send(&app, get("/")).await;
-    assert!(!page.contains("group network"), "{page}");
-
     std::fs::write(
         data.path().join("lanlord.toml"),
         "[[plugin]]\nname = \"router\"\ntype = \"openwrt\"\nenabled = false\ndevice = \"tv\"\nuser = \"lanlord\"\npassword_file = \"router.password\"\ncertificate_sha256 = \"00\"\n",
     )
     .unwrap();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
     let (_, page) = send(&app, get("/")).await;
-    let (network, groups) = page.split_once(r#"data-group="lan""#).unwrap();
-    assert!(network.contains("group network"), "{page}");
-    assert!(network.contains("<strong>tv</strong>"), "{page}");
-    assert!(network.contains(r#"<span class="badge vlan""#), "{page}");
-    assert!(network.contains(r#"aria-label="Move tv""#), "{page}");
-    assert!(!groups.contains("<strong>tv</strong>"), "{page}");
-    assert!(groups.contains("1 device<"), "{page}");
+    assert!(page.contains("Plugin router talks to this device"), "{page}");
+}
+
+#[tokio::test]
+async fn a_device_found_by_a_scan_is_new_until_someone_looks_at_it() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let found = "name=stranger&mac=00%3A00%3A00%3A00%3A00%3A0b";
+    assert_eq!(
+        send(&app, post("/devices/discovered", found)).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let (_, page) = send(&app, get("/")).await;
+    assert!(page.contains(r#"class="badge new""#), "{page}");
+    assert_eq!(
+        page.matches("Found by a scan, not reviewed yet").count(),
+        1,
+        "{page}"
+    );
+    let (_, page) = send(&app, get("/devices/stranger")).await;
+    assert!(page.contains("A scan found this device"), "{page}");
+
+    let form = "name=stranger&mac=00%3A00%3A00%3A00%3A00%3A0b&group=lan";
+    assert_eq!(
+        send(&app, post("/devices/stranger", form)).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let (_, page) = send(&app, get("/")).await;
+    assert_eq!(
+        page.matches("Found by a scan, not reviewed yet").count(),
+        0,
+        "{page}"
+    );
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("reviewed"), "{log}");
 }
 
 #[tokio::test]
@@ -171,7 +195,65 @@ async fn the_switch_for_a_self_assigned_address_is_saved() {
     let saved = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
     assert!(saved.contains("self_assigned = true"), "{saved}");
     let (_, page) = send(&app, get("/devices/tv")).await;
-    assert!(page.contains(r#"value="true" checked"#), "{page}");
+    assert!(page.contains(r#"value="true" selected"#), "{page}");
     let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
     assert!(log.contains("address set on the device"), "{log}");
+}
+
+#[tokio::test]
+async fn a_bad_scan_interval_stays_on_the_settings_page() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let (status, page) = send(&app, post("/settings/background", "interval=soon")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        page.contains("The interval must be a number of minutes"),
+        "{page}"
+    );
+}
+
+#[tokio::test]
+async fn an_address_outside_the_subnet_gets_a_warning() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let (_, page) = send(&app, get("/")).await;
+    assert!(!page.contains("note warning"), "{page}");
+
+    let inside = send(&app, post("/groups/lan/subnet", "subnet=192.0.2.0%2F24")).await;
+    assert_eq!(inside.0, StatusCode::SEE_OTHER);
+    let (_, page) = send(&app, get("/")).await;
+    assert!(!page.contains("note warning"), "{page}");
+
+    let outside = send(&app, post("/groups/lan/subnet", "subnet=198.51.100.0%2F24")).await;
+    assert_eq!(outside.0, StatusCode::SEE_OTHER);
+    let (_, page) = send(&app, get("/")).await;
+    assert!(
+        page.contains("192.0.2.9 is outside LAN (198.51.100.0/24)"),
+        "{page}"
+    );
+    let (_, page) = send(&app, get("/devices/tv")).await;
+    assert!(page.contains("is outside LAN"), "{page}");
+    let (_, page) = send(&app, get("/devices/lamp")).await;
+    assert!(!page.contains("is outside LAN"), "no fixed address: {page}");
+
+    let (status, page) = send(&app, post("/groups/lan/subnet", "subnet=nonsense")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(page.contains("the subnet must look like"), "{page}");
+    let (status, page) = send(&app, post("/groups/none/subnet", "subnet=")).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(page.contains("No such group"), "{page}");
+
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("subnet none → 192.0.2.0/24"), "{log}");
+}
+
+#[tokio::test]
+async fn subnets_of_two_groups_cannot_overlap() {
+    let data = data();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let form = "name=iot&vlan=20&subnet=192.0.2.128%2F25";
+    send(&app, post("/groups/lan/subnet", "subnet=192.0.2.0%2F24")).await;
+    let (status, page) = send(&app, post("/groups", form)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(page.contains("overlap"), "{page}");
 }

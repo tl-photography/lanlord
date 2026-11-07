@@ -100,7 +100,11 @@ async fn move_menu_changes_only_the_device_group() {
     let response = post(&data, "/devices/alpha/move", "group=guest").await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     let list: lanlord::devices::DeviceList = toml::from_str(&devices(&data)).unwrap();
-    let moved = list.devices.iter().find(|device| device.name == "alpha").unwrap();
+    let moved = list
+        .interfaces
+        .iter()
+        .find(|device| device.name == "alpha")
+        .unwrap();
     assert_eq!(moved.group, "guest");
     assert_eq!(moved.mac, "00:00:00:00:00:01");
     assert_eq!(moved.note, "say \"hi\"");
@@ -202,11 +206,11 @@ async fn discovered_device_seeds_an_empty_list_without_a_dynamic_ip() {
     .await;
     assert_eq!(response.status(), StatusCode::SEE_OTHER);
     let list: lanlord::devices::DeviceList = toml::from_str(&devices(&data)).unwrap();
-    assert_eq!(list.devices.len(), 1);
-    assert_eq!(list.devices[0].name, "new-phone");
-    assert_eq!(list.devices[0].mac, "aa:bb:cc:00:11:22");
-    assert_eq!(list.devices[0].group, "guest");
-    assert_eq!(list.devices[0].ip, None);
+    assert_eq!(list.interfaces.len(), 1);
+    assert_eq!(list.interfaces[0].name, "new-phone");
+    assert_eq!(list.interfaces[0].mac, "aa:bb:cc:00:11:22");
+    assert_eq!(list.interfaces[0].group, "guest");
+    assert_eq!(list.interfaces[0].ip, None);
 }
 
 #[tokio::test]

@@ -219,13 +219,21 @@ pub fn app(state: AppState) -> Router {
             "/machines/{name}/interfaces",
             axum::routing::post(machines::add_interface),
         )
+        .route(
+            "/machines/{name}/interfaces/{device}/remove",
+            axum::routing::post(machines::remove_interface),
+        )
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
+        .route("/groups/{name}/subnet", axum::routing::post(groups::set_subnet))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))
+        .route(
+            "/settings/background",
+            axum::routing::post(settings_ui::background),
+        )
         .route("/plugins", get(plugin_ui::list).post(plugin_ui::create))
         .route("/plugins/scan", axum::routing::post(plugin_ui::scan))
-        .route("/plugins/background", axum::routing::post(plugin_ui::background))
         .route("/plugins/{name}/enabled", axum::routing::post(plugin_ui::toggle))
         .route("/plugins/{name}/delete", axum::routing::post(plugin_ui::delete))
         .route(
@@ -271,6 +279,10 @@ struct DeviceRow {
     mac: String,
     ip: String,
     note: String,
+    /// The fixed address is outside the subnet of the group.
+    warning: String,
+    /// Found by a scan and not looked at yet.
+    unreviewed: bool,
 }
 
 #[derive(Clone)]
@@ -292,8 +304,6 @@ struct CardView {
     rows: Vec<DeviceRow>,
     /// Plugins linked to the machine itself.
     plugins: Vec<String>,
-    /// The group, shown on the Network column only.
-    vlan_label: String,
     /// Other groups with connections of the same machine.
     also_in: String,
     move_groups: Vec<MoveGroup>,
@@ -311,18 +321,9 @@ struct GroupView {
 #[template(path = "index.html")]
 struct IndexPage {
     nav: &'static str,
-    /// Cards of devices that a plugin talks to.
-    network: Vec<CardView>,
     groups: Vec<GroupView>,
     has_targets: bool,
     overview: plugins::OverviewSettings,
-}
-
-impl CardView {
-    /// Whether a plugin talks to this device or machine.
-    fn is_linked(&self) -> bool {
-        !self.plugins.is_empty() || self.rows.iter().any(|row| !row.plugins.is_empty())
-    }
 }
 
 impl IndexPage {
@@ -336,13 +337,22 @@ pub(crate) fn server_error(error: &impl std::fmt::Display) -> Response {
     (StatusCode::INTERNAL_SERVER_ERROR, "Internal error, see the log").into_response()
 }
 
-fn device_row(device: &devices::Device, links: &HashMap<String, Vec<String>>) -> DeviceRow {
+fn device_row(
+    device: &devices::Interface,
+    group: &config::Group,
+    links: &HashMap<String, Vec<String>>,
+) -> DeviceRow {
     DeviceRow {
         plugins: links.get(&device.name).cloned().unwrap_or_default(),
         name: device.name.clone(),
         mac: device.mac.clone(),
         ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
         note: device.note.clone(),
+        unreviewed: device.unreviewed,
+        warning: device
+            .ip
+            .and_then(|ip| group.address_warning(ip))
+            .unwrap_or_default(),
     }
 }
 
@@ -358,14 +368,14 @@ fn group_cards(
     links: &HashMap<String, Vec<String>>,
     move_groups: &[MoveGroup],
 ) -> Vec<CardView> {
-    let members: Vec<&devices::Device> = list
-        .devices
+    let members: Vec<&devices::Interface> = list
+        .interfaces
         .iter()
         .filter(|device| device.group == group.name)
         .collect();
     let mut cards: Vec<CardView> = Vec::new();
     for device in &members {
-        if device.machine.is_empty() {
+        if device.device.is_empty() {
             cards.push(CardView {
                 key: device.name.clone(),
                 title: device.name.clone(),
@@ -373,9 +383,8 @@ fn group_cards(
                 machine: false,
                 move_action: format!("/devices/{}/move", device.name),
                 group: group.name.clone(),
-                rows: vec![device_row(device, links)],
+                rows: vec![device_row(device, group, links)],
                 plugins: Vec::new(),
-                vlan_label: String::new(),
                 also_in: String::new(),
                 move_groups: move_groups.to_vec(),
             });
@@ -383,14 +392,14 @@ fn group_cards(
         }
         if cards
             .iter()
-            .any(|card| card.machine && card.title == device.machine)
+            .any(|card| card.machine && card.title == device.device)
         {
             continue;
         }
         let mut rows: Vec<DeviceRow> = members
             .iter()
-            .filter(|other| other.machine == device.machine)
-            .map(|other| device_row(other, links))
+            .filter(|other| other.device == device.device)
+            .map(|other| device_row(other, group, links))
             .collect();
         rows.sort_by_key(|row| row.name.to_ascii_lowercase());
         let elsewhere: Vec<String> = config
@@ -399,22 +408,21 @@ fn group_cards(
             .filter(|other| {
                 other.name != group.name
                     && list
-                        .devices
+                        .interfaces
                         .iter()
-                        .any(|entry| entry.machine == device.machine && entry.group == other.name)
+                        .any(|entry| entry.device == device.device && entry.group == other.name)
             })
             .map(|other| other.title().to_owned())
             .collect();
         cards.push(CardView {
-            key: format!("machine:{}", device.machine),
-            title: device.machine.clone(),
-            initial: initial(&device.machine),
+            key: format!("machine:{}", device.device),
+            title: device.device.clone(),
+            initial: initial(&device.device),
             machine: true,
-            move_action: format!("/machines/{}/move", device.machine),
+            move_action: format!("/machines/{}/move", device.device),
             group: group.name.clone(),
             rows,
-            plugins: links.get(&device.machine).cloned().unwrap_or_default(),
-            vlan_label: String::new(),
+            plugins: links.get(&device.device).cloned().unwrap_or_default(),
             also_in: elsewhere.join(", "),
             move_groups: move_groups.to_vec(),
         });
@@ -439,18 +447,11 @@ async fn index(State(state): State<AppState>) -> Response {
             label: group.title().to_owned(),
         })
         .collect();
-    let mut network: Vec<CardView> = Vec::new();
     let groups = config
         .groups
         .iter()
         .map(|group| {
-            let (linked, cards): (Vec<_>, Vec<_>) = group_cards(group, &list, &config, &links, &move_groups)
-                .into_iter()
-                .partition(CardView::is_linked);
-            network.extend(linked.into_iter().map(|mut card| {
-                group.title().clone_into(&mut card.vlan_label);
-                card
-            }));
+            let cards = group_cards(group, &list, &config, &links, &move_groups);
             GroupView {
                 name: group.name.clone(),
                 label: group.title().to_owned(),
@@ -460,11 +461,9 @@ async fn index(State(state): State<AppState>) -> Response {
             }
         })
         .collect();
-    network.sort_by_key(|card| card.title.to_ascii_lowercase());
     let has_targets = state.has_targets();
     let page = IndexPage {
         nav: "devices",
-        network,
         groups,
         has_targets,
         overview: settings.overview,

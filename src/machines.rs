@@ -51,12 +51,12 @@ fn page(state: &AppState, name: &str, status: StatusCode, error: String) -> Resp
             .map_or_else(|| group.to_owned(), |entry| entry.title().to_owned())
     };
     let members: Vec<_> = list
-        .devices
+        .interfaces
         .iter()
-        .filter(|device| device.machine == name)
+        .filter(|device| device.device == name)
         .collect();
     if members.is_empty() {
-        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
     }
     let mut interfaces: Vec<InterfaceRow> = members
         .iter()
@@ -69,12 +69,12 @@ fn page(state: &AppState, name: &str, status: StatusCode, error: String) -> Resp
         .collect();
     interfaces.sort_by_key(|row| row.name.to_ascii_lowercase());
     let mut available: Vec<AvailableDevice> = list
-        .devices
+        .interfaces
         .iter()
-        .filter(|device| device.machine != name)
+        .filter(|device| device.device != name)
         .map(|device| AvailableDevice {
             name: device.name.clone(),
-            machine: device.machine.clone(),
+            machine: device.device.clone(),
         })
         .collect();
     available.sort_by_key(|device| device.name.to_ascii_lowercase());
@@ -116,7 +116,7 @@ pub async fn rename(
             &state,
             &name,
             StatusCode::UNPROCESSABLE_ENTITY,
-            format!("Invalid machine name: {new_name}"),
+            format!("Invalid name: {new_name}"),
         );
     }
     let Ok(_guard) = state.inner.write_lock.lock() else {
@@ -126,17 +126,17 @@ pub async fn rename(
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
-    if list.devices.iter().all(|device| device.machine != name) {
-        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+    if list.interfaces.iter().all(|device| device.device != name) {
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
     }
-    for device in list.devices.iter_mut().filter(|device| device.machine == name) {
-        new_name.clone_into(&mut device.machine);
+    for device in list.interfaces.iter_mut().filter(|device| device.device == name) {
+        new_name.clone_into(&mut device.device);
     }
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => {
             history::record(
                 &state.inner.history_path,
-                &[format!("Machine {name} renamed to {new_name}")],
+                &[format!("Device {name} renamed to {new_name}")],
             );
             follow_links(&state, Some(&name), new_name);
             Redirect::to(&format!("/machines/{new_name}")).into_response()
@@ -165,20 +165,62 @@ pub async fn add_interface(
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
-    if list.devices.iter().all(|device| device.machine != name) {
-        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+    if list.interfaces.iter().all(|device| device.device != name) {
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
     }
-    let Some(device) = list.devices.iter_mut().find(|device| device.name == form.device) else {
+    let Some(device) = list
+        .interfaces
+        .iter_mut()
+        .find(|device| device.name == form.device)
+    else {
         return (StatusCode::NOT_FOUND, "No such device").into_response();
     };
-    name.clone_into(&mut device.machine);
+    name.clone_into(&mut device.device);
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => {
             history::record(
                 &state.inner.history_path,
-                &[format!("Device {} added to machine {name}", form.device)],
+                &[format!("Interface {} added to {name}", form.device)],
             );
             Redirect::to(&format!("/machines/{name}")).into_response()
+        }
+        Err(error) => server_error(&error),
+    }
+}
+
+/// Takes an interface out of its machine; it stays in the list as a device of its own.
+pub async fn remove_interface(
+    State(state): State<AppState>,
+    Path((name, device)): Path<(String, String)>,
+) -> Response {
+    let Ok(_guard) = state.inner.write_lock.lock() else {
+        return server_error(&"device list lock poisoned");
+    };
+    let mut list = match state.devices() {
+        Ok(list) => list,
+        Err(error) => return server_error(&error),
+    };
+    let Some(entry) = list
+        .interfaces
+        .iter_mut()
+        .find(|entry| entry.name == device && entry.device == name)
+    else {
+        return (StatusCode::NOT_FOUND, "No such interface").into_response();
+    };
+    entry.device.clear();
+    let machine_left = list.interfaces.iter().any(|entry| entry.device == name);
+    match list.save(&state.inner.devices_path, &state.groups().group_names()) {
+        Ok(()) => {
+            history::record(
+                &state.inner.history_path,
+                &[format!("Interface {device} removed from {name}")],
+            );
+            let next = if machine_left {
+                format!("/machines/{name}")
+            } else {
+                format!("/devices/{device}")
+            };
+            Redirect::to(&next).into_response()
         }
         Err(error) => server_error(&error),
     }

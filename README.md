@@ -11,10 +11,10 @@ differences.
 
 - Groups map to VLANs, for example `lan`, `iot` and `guest`. They are set up in the interface; the first one is the
   default group for unknown devices.
-- A machine with several interfaces, like a laptop with Wi-Fi, dock and cable, is one device with one entry per
-  interface: each has its own MAC address, lease, DNS name and group. The devices page shows one card for it, and
-  moving the card moves all interfaces. The page of the machine adds, removes and renames them. In `devices.toml` the
-  interfaces are `[[device.interface]]` tables of the machine; a device with one connection stays a plain `[[device]]`.
+- A device can have several interfaces, like a laptop with Wi-Fi, dock and cable. Each has its own MAC address, lease,
+  DNS name and group, the device is one card, and moving the card moves all of them. The device's page adds, removes
+  and renames them. In `devices.toml` they are `[[device.interface]]` tables; a device with one interface stays a plain
+  `[[device]]`.
 - Devices, groups and plugin settings are TOML files in the data directory: `devices.toml`, `groups.toml` and
   `lanlord.toml`.
 - Plugins report what they see. A scan lists unknown devices, which can be added to the list, and differences:
@@ -63,7 +63,7 @@ user may read and change, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
         "luci-rpc": ["getDHCPLeases"],
         "network.interface": ["dump"],
         "uci": ["get"],
-        "iwinfo": ["devices", "info", "assoclist"]
+        "iwinfo": ["devices", "assoclist"]
       },
       "uci": ["dhcp", "wireless"]
     },
@@ -133,7 +133,7 @@ servers are checked against the usual certificate authorities, built into lanlor
 
 ### Background scan
 
-Set on the Plugins page: every how many minutes lanlord scans on its own (0 is off, the default). The notification
+Set on the Settings page: every how many minutes lanlord scans on its own (0 is off, the default). The notification
 plugins then hear about new unknown devices, each once, and about changes made outside lanlord, for example a
 lease edited in LuCI: open changes on a target while the device list did not change since it last matched. Changes
 you make in lanlord are no such thing, they wait for Apply.
@@ -141,13 +141,10 @@ you make in lanlord are no such thing, they wait for Apply.
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
 
-### Network column
+### Subnets
 
-A device that a plugin is linked to, like the router, an access point or the host of Pi-hole, appears in the Network
-column ahead of the groups. It keeps its group, which decides its VLAN, and shows it as a badge.
-
-A device that sets its address itself, like the router, has "Address is set on the device itself" switched on: the
-address is shown and used for the plugin link, but it gets no static lease.
+Every group can have a subnet on the Groups page. A device with a fixed address outside it gets a warning on its card
+and page; moving it to another group stays possible, so it is not refused.
 
 ### Settings
 

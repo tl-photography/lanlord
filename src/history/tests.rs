@@ -36,15 +36,16 @@ fn a_log_that_cannot_be_written_does_not_panic() {
     record(Path::new("/nonexistent/history.log"), &["lost".to_owned()]);
 }
 
-fn sample() -> Device {
-    Device {
+fn sample() -> Interface {
+    Interface {
         name: "tv".to_owned(),
         mac: "00:00:00:00:00:01".to_owned(),
         group: "lan".to_owned(),
         ip: None,
         note: String::new(),
         self_assigned: false,
-        machine: String::new(),
+        unreviewed: false,
+        device: String::new(),
     }
 }
 
@@ -70,6 +71,7 @@ fn group_changes_are_listed() {
     let lan = Group {
         name: "lan".to_owned(),
         vlan: 1,
+        subnet: String::new(),
         label: String::new(),
     };
     let before = Config {
@@ -86,6 +88,7 @@ fn group_changes_are_listed() {
             Group {
                 name: "guest".to_owned(),
                 vlan: 30,
+                subnet: String::new(),
                 label: String::new(),
             },
         ],

@@ -9,7 +9,7 @@ use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::config::Config;
-use crate::devices::Device;
+use crate::devices::Interface;
 use crate::plugins::Settings;
 
 /// One entry of the log.
@@ -99,13 +99,13 @@ fn optional(text: &str) -> &str {
     if text.is_empty() { "none" } else { text }
 }
 
-fn ip_text(device: &Device) -> String {
+fn ip_text(device: &Interface) -> String {
     device.ip.map_or_else(|| "none".to_owned(), |ip| ip.to_string())
 }
 
 /// Describes a new or changed device.
 #[must_use]
-pub fn device(before: Option<&Device>, after: &Device) -> Option<String> {
+pub fn device(before: Option<&Interface>, after: &Interface) -> Option<String> {
     let Some(before) = before else {
         return Some(format!(
             "Device {} added: group {}, MAC {}, IP {}",
@@ -126,7 +126,10 @@ pub fn device(before: Option<&Device>, after: &Device) -> Option<String> {
     compare("MAC", &before.mac, &after.mac);
     compare("IP", &ip_text(before), &ip_text(after));
     compare("note", &before.note, &after.note);
-    compare("machine", &before.machine, &after.machine);
+    compare("part of", &before.device, &after.device);
+    if before.unreviewed && !after.unreviewed {
+        changes.push("reviewed".to_owned());
+    }
     if before.self_assigned != after.self_assigned {
         changes.push(format!(
             "address {}",
@@ -147,6 +150,14 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
     for group in &after.groups {
         match before.groups.iter().find(|old| old.name == group.name) {
             None => texts.push(format!("Group {} added: VLAN {}", group.name, group.vlan)),
+            Some(old) if old.subnet != group.subnet && old.vlan == group.vlan && old.label == group.label => {
+                texts.push(format!(
+                    "Group {} changed: subnet {} → {}",
+                    group.name,
+                    optional(&old.subnet),
+                    optional(&group.subnet)
+                ));
+            }
             Some(old) if old != group => texts.push(format!(
                 "Group {} changed: VLAN {} → {}, label {} → {}",
                 group.name,

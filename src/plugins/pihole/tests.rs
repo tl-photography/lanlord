@@ -7,20 +7,21 @@ use std::os::unix::fs::PermissionsExt;
 use std::sync::Mutex;
 
 use super::*;
-use crate::devices::Device;
+use crate::devices::Interface;
 
 const FINGERPRINT: &str =
     "00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF";
 
-fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Device {
-    Device {
+fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Interface {
+    Interface {
         name: name.to_owned(),
         mac: format!("00:00:00:00:00:{:02x}", name.len()),
         group: group.to_owned(),
         ip: ip.map(Ipv4Addr::from),
         self_assigned: false,
+        unreviewed: false,
         note: String::new(),
-        machine: String::new(),
+        device: String::new(),
     }
 }
 
@@ -52,7 +53,7 @@ fn details(plan: &Plan) -> Vec<String> {
 #[test]
 fn groups_and_clients_are_added_for_devices_with_an_address() {
     let devices = DeviceList {
-        devices: vec![
+        interfaces: vec![
             device("tv", "iot", Some([192, 0, 2, 20])),
             device("plug", "iot", Some([192, 0, 2, 21])),
             device("phone", "guest", None),
@@ -73,7 +74,7 @@ fn groups_and_clients_are_added_for_devices_with_an_address() {
 #[test]
 fn own_clients_follow_the_device_and_others_are_left_alone() {
     let devices = DeviceList {
-        devices: vec![
+        interfaces: vec![
             device("tv", "lan", Some([192, 0, 2, 20])),
             device("nas", "lan", Some([192, 0, 2, 2])),
             device("same", "lan", Some([192, 0, 2, 3])),
@@ -129,11 +130,11 @@ fn the_network_table_reports_devices_with_a_real_mac() {
             { "hwaddr": "aa:bb:cc:00:00:02", "ips": [] }
         ] });
     let observation = observation(&devices);
-    assert_eq!(observation.entries, None);
-    assert_eq!(observation.seen.len(), 2);
-    assert_eq!(observation.seen[0].hostname, "phone.lan");
-    assert_eq!(observation.seen[0].ip, Some(Ipv4Addr::new(192, 0, 2, 10)));
-    assert_eq!(observation.seen[1].ip, None);
+    assert_eq!(observation.assigned, None);
+    assert_eq!(observation.present.len(), 2);
+    assert_eq!(observation.present[0].hostname, "phone.lan");
+    assert_eq!(observation.present[0].ip, Some(Ipv4Addr::new(192, 0, 2, 10)));
+    assert_eq!(observation.present[1].ip, None);
 }
 
 /// A Pi-hole like v6: one app password, sessions that must be ended, groups get ids on creation.
@@ -269,7 +270,7 @@ fn plugin_with(url: &str, data: &Path, password: &str, extra: &str) -> PiHole {
 
 fn devices() -> DeviceList {
     DeviceList {
-        devices: vec![device("tv", "iot", Some([192, 0, 2, 20]))],
+        interfaces: vec![device("tv", "iot", Some([192, 0, 2, 20]))],
     }
 }
 
@@ -315,7 +316,7 @@ async fn applies_groups_then_clients_and_always_logs_out() {
         "devices are only reported when switched on"
     );
     let reporting = plugin_with(&url, data.path(), &password, "report_devices = true\n");
-    let seen = reporting.observe().await.unwrap().seen;
+    let seen = reporting.observe().await.unwrap().present;
     assert_eq!(seen[0].hostname, "phone");
     assert_eq!(fake.lock().unwrap().sessions, 0);
 }

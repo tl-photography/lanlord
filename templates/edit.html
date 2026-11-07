@@ -5,6 +5,12 @@
 {% if !error.is_empty() %}
 <p class="error" role="alert">{{ error }}</p>
 {% endif %}
+{% if !warning.is_empty() %}
+<p class="notice">{{ warning }}.</p>
+{% endif %}
+{% if form.unreviewed %}
+<p class="notice">A scan found this device. Saving it or moving it marks it as reviewed.</p>
+{% endif %}
 <form method="post" action="{{ action }}">
   <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false"></label>
   <label>MAC address <input name="mac" value="{{ form.mac }}" required autocapitalize="off" spellcheck="false" placeholder="aa:bb:cc:dd:ee:ff"></label>
@@ -16,10 +22,15 @@
     </select>
   </label>
   <label>IP address <input name="ip" value="{{ form.ip }}" inputmode="decimal" placeholder="optional"></label>
-  <label class="switch"><input type="checkbox" name="self_assigned" value="true"{% if form.self_assigned %} checked{% endif %}> Address is set on the device itself (no static lease)</label>
+  <label>Address comes from
+    <select name="self_assigned">
+      <option value="false"{% if !form.self_assigned %} selected{% endif %}>Static lease from the router</option>
+      <option value="true"{% if form.self_assigned %} selected{% endif %}>Set on the device</option>
+    </select>
+  </label>
+  <small>Only with an IP address. Both give the device its <code>.lan</code> name.</small>
   <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
-  <label>Belongs to <input name="machine" value="{{ form.machine }}" list="machines" maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="optional, e.g. a laptop with Wi-Fi and cable"></label>
-  <datalist id="machines">{% for machine in machines %}<option value="{{ machine }}">{% endfor %}</datalist>
+  <input type="hidden" name="machine" value="{{ form.machine }}">
   <div class="actions">
     <button type="submit">Save</button>
     {% if has_targets %}<button type="submit" name="then" value="review" class="secondary">Save and review changes</button>{% endif %}
@@ -32,7 +43,7 @@
   {% else %}
   <a href="/machines/{{ form.machine }}">All interfaces of {{ form.machine }}</a>
   {% endif %}
-  <form method="post" action="/devices/{{ original }}/delete" class="inline"><button type="submit">Delete {{ original }}</button></form>
+  <form method="post" action="/devices/{{ original }}/delete" class="inline" data-confirm="Delete {{ original }}?"><button type="submit" class="danger">Delete {{ original }}</button></form>
 </div>
 {% endif %}
 {% endblock %}

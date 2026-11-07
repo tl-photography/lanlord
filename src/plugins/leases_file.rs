@@ -8,7 +8,7 @@ use std::sync::Arc;
 use serde::Deserialize;
 
 use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
-use crate::compare::{Observation, Seen};
+use crate::compare::{Observation, Present};
 use crate::devices::{Error, normalize_mac};
 
 /// The type description for `lanlord.toml` and the web interface.
@@ -64,7 +64,7 @@ impl Plugin for LeasesFile {
                 .await
                 .map_err(|error| format!("{}: {error}", self.path.display()))?;
             Ok(Observation {
-                seen: parse(&content),
+                present: parse(&content),
                 ..Observation::default()
             })
         })
@@ -73,7 +73,7 @@ impl Plugin for LeasesFile {
 
 /// Parses dnsmasq lease lines: `<expiry> <mac> <ip> <hostname> <client id>`. Lines that do not fit, IPv6 leases
 /// and unusual MACs are skipped; `*` as host name means none.
-fn parse(content: &str) -> Vec<Seen> {
+fn parse(content: &str) -> Vec<Present> {
     content
         .lines()
         .filter_map(|line| {
@@ -85,7 +85,7 @@ fn parse(content: &str) -> Vec<Seen> {
                 Some("*") | None => String::new(),
                 Some(name) => name.to_owned(),
             };
-            Some(Seen {
+            Some(Present {
                 mac,
                 ip: Some(ip),
                 hostname,

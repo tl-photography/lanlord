@@ -6,9 +6,9 @@ use std::net::Ipv4Addr;
 use crate::config::Group;
 use crate::devices::DeviceList;
 
-/// A device a plugin has seen on the network, for example in the DHCP leases.
+/// A device on the network, for example from the DHCP leases.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Seen {
+pub struct Present {
     /// MAC address, lowercase with colons.
     pub mac: String,
     /// Address it uses, if known.
@@ -17,9 +17,9 @@ pub struct Seen {
     pub hostname: String,
 }
 
-/// An entry a plugin keeps for a device, for example a static lease or a DNS record.
+/// What a system has configured for a device, for example a static lease or a DNS record.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Entry {
+pub struct Assigned {
     /// MAC address, lowercase with colons.
     pub mac: String,
     /// Name in the entry.
@@ -30,26 +30,13 @@ pub struct Entry {
     pub vlan: Option<u16>,
 }
 
-/// A device connected to a Wi-Fi interface.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WifiClient {
-    /// MAC address, lowercase with colons.
-    pub mac: String,
-    /// Where it is connected, for example `router: Home (5 GHz)`.
-    pub access_point: String,
-    /// Signal in dBm, if known.
-    pub signal: Option<i64>,
-}
-
 /// What a plugin reports.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Observation {
-    /// Devices seen on the network.
-    pub seen: Vec<Seen>,
-    /// Entries of a plugin that configures devices; `None` for plugins that only report.
-    pub entries: Option<Vec<Entry>>,
-    /// Devices connected to the plugin's Wi-Fi.
-    pub wifi: Vec<WifiClient>,
+    /// Devices on the network now.
+    pub present: Vec<Present>,
+    /// What a system has configured for devices; `None` for a plugin that only reports.
+    pub assigned: Option<Vec<Assigned>>,
     /// Remarks of the plugin, for example data it could not read.
     pub notes: Vec<String>,
 }
@@ -96,6 +83,11 @@ pub enum Finding {
         /// VLAN in the entry.
         actual: u16,
     },
+    /// The device should set its address itself but has a DHCP lease.
+    UnexpectedLease {
+        /// Name in the list.
+        device: String,
+    },
     /// An entry for a MAC address that is not in the list.
     Foreign {
         /// MAC address.
@@ -109,7 +101,7 @@ pub enum Finding {
 /// differences per device, then foreign entries.
 #[must_use]
 pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -> Vec<Finding> {
-    let known: HashSet<&str> = list.devices.iter().map(|device| device.mac.as_str()).collect();
+    let known: HashSet<&str> = list.interfaces.iter().map(|device| device.mac.as_str()).collect();
     let vlans: HashMap<&str, u16> = groups
         .iter()
         .map(|group| (group.name.as_str(), group.vlan))
@@ -117,7 +109,7 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
     let mut findings = Vec::new();
 
     let mut reported = HashSet::new();
-    for seen in &observation.seen {
+    for seen in &observation.present {
         if !known.contains(seen.mac.as_str()) && reported.insert(seen.mac.as_str()) {
             findings.push(Finding::Unknown {
                 mac: seen.mac.clone(),
@@ -127,11 +119,11 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
         }
     }
 
-    let Some(entries) = &observation.entries else {
+    let Some(entries) = &observation.assigned else {
         return findings;
     };
-    let by_mac: HashMap<&str, &Entry> = entries.iter().map(|entry| (entry.mac.as_str(), entry)).collect();
-    for device in &list.devices {
+    let by_mac: HashMap<&str, &Assigned> = entries.iter().map(|entry| (entry.mac.as_str(), entry)).collect();
+    for device in &list.interfaces {
         let Some(entry) = by_mac.get(device.mac.as_str()) else {
             if !device.self_assigned {
                 findings.push(Finding::Missing {
@@ -147,7 +139,13 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
                 actual: entry.name.clone(),
             });
         }
-        if !device.self_assigned && entry.ip != device.ip {
+        if device.self_assigned {
+            if entry.ip.is_some() {
+                findings.push(Finding::UnexpectedLease {
+                    device: device.name.clone(),
+                });
+            }
+        } else if entry.ip != device.ip {
             findings.push(Finding::WrongIp {
                 device: device.name.clone(),
                 expected: device.ip,
