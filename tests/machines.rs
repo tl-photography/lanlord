@@ -65,9 +65,14 @@ async fn connections_of_a_machine_share_one_card_and_move_together() {
         "one card in LAN, one in IoT"
     );
     assert!(
-        page.contains(r#"<a href="/devices/ThinkPadDock">ThinkPadDock</a>"#),
+        page.contains(r#"<a class="card machine" href="/machines/ThinkPad">"#),
         "{page}"
     );
+    assert!(
+        page.contains(r#"title="Interface of ThinkPad">ThinkPadDock</span>"#),
+        "{page}"
+    );
+    assert!(!page.contains(r#"href="/devices/ThinkPadDock""#), "{page}");
     assert!(page.contains("Also in IoT"));
     assert!(page.contains("Also in LAN"));
     assert!(page.contains(r#"action="/machines/ThinkPad/move""#));

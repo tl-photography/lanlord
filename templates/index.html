@@ -18,19 +18,19 @@
       {% for card in group.cards %}
       <li class="device-item" data-device="{{ card.key }}" draggable="false">
         {% if card.machine %}
-        <div class="card machine">
+        <a class="card machine" href="/machines/{{ card.title }}">
           <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
-          <span class="text">
-            <strong><a href="/machines/{{ card.title }}">{{ card.title }}</a></strong>{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this machine">{{ plugin }}</span>{% endfor %}
+          <div class="text">
+            <strong>{{ card.title }}</strong>{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this machine">{{ plugin }}</span>{% endfor %}
             {% if !card.also_in.is_empty() %}<span class="note">Also in {{ card.also_in }}</span>{% endif %}
-            <ul class="connections">
+            <ul class="connections{% if !overview.show_mac && !overview.show_ip %} compact{% endif %}">
               {% for row in card.rows %}
-              <li><a href="/devices/{{ row.name }}">{{ row.name }}</a>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
+              <li><span class="badge interface" title="Interface of {{ card.title }}">{{ row.name }}</span>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
                 {% include "device_meta.html" %}</li>
               {% endfor %}
             </ul>
-          </span>
-        </div>
+          </div>
+        </a>
         {% else %}
         {% for row in card.rows %}
         <a class="card" href="/devices/{{ row.name }}">

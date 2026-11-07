@@ -117,3 +117,22 @@ async fn a_plugin_shows_its_device_as_a_plain_badge() {
     assert!(page.contains(">tv</span>"), "{page}");
     assert!(!page.contains("<a href=\"/devices/tv\""), "{page}");
 }
+
+#[tokio::test]
+async fn interface_badges_sit_side_by_side_without_addresses() {
+    let data = data();
+    let path = data.path().join("devices.toml");
+    let list = std::fs::read_to_string(&path).unwrap();
+    std::fs::write(
+        &path,
+        list.replace("name = \"lamp\"", "name = \"lamp\"\nmachine = \"desk\""),
+    )
+    .unwrap();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+
+    let (_, page) = send(&app, get("/")).await;
+    assert!(!page.contains("connections compact"), "{page}");
+    send(&app, post("/settings", "")).await;
+    let (_, page) = send(&app, get("/")).await;
+    assert!(page.contains("connections compact"), "{page}");
+}
