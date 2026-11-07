@@ -19,12 +19,19 @@ struct InterfaceRow {
     group: String,
 }
 
+/// A device that can be added as an interface; `machine` is where it is now.
+struct AvailableDevice {
+    name: String,
+    machine: String,
+}
+
 #[derive(Template)]
 #[template(path = "machine.html")]
 struct MachinePage {
     nav: &'static str,
     name: String,
     interfaces: Vec<InterfaceRow>,
+    available: Vec<AvailableDevice>,
     groups: Vec<GroupOption>,
     default_group: String,
     error: String,
@@ -61,10 +68,21 @@ fn page(state: &AppState, name: &str, status: StatusCode, error: String) -> Resp
         })
         .collect();
     interfaces.sort_by_key(|row| row.name.to_ascii_lowercase());
+    let mut available: Vec<AvailableDevice> = list
+        .devices
+        .iter()
+        .filter(|device| device.machine != name)
+        .map(|device| AvailableDevice {
+            name: device.name.clone(),
+            machine: device.machine.clone(),
+        })
+        .collect();
+    available.sort_by_key(|device| device.name.to_ascii_lowercase());
     let page = MachinePage {
         nav: "devices",
         name: name.to_owned(),
         interfaces,
+        available,
         groups: group_options(state),
         default_group: members[0].group.clone(),
         error,
@@ -124,6 +142,44 @@ pub async fn rename(
             Redirect::to(&format!("/machines/{new_name}")).into_response()
         }
         Err(Error::Invalid(message)) => (StatusCode::UNPROCESSABLE_ENTITY, message).into_response(),
+        Err(error) => server_error(&error),
+    }
+}
+
+/// The field of the form that adds an existing device.
+#[derive(Debug, Deserialize)]
+pub struct AddForm {
+    device: String,
+}
+
+/// Adds an existing device as an interface; it keeps its name, lease and group.
+pub async fn add_interface(
+    State(state): State<AppState>,
+    Path(name): Path<String>,
+    Form(form): Form<AddForm>,
+) -> Response {
+    let Ok(_guard) = state.inner.write_lock.lock() else {
+        return server_error(&"device list lock poisoned");
+    };
+    let mut list = match state.devices() {
+        Ok(list) => list,
+        Err(error) => return server_error(&error),
+    };
+    if list.devices.iter().all(|device| device.machine != name) {
+        return (StatusCode::NOT_FOUND, "No such machine").into_response();
+    }
+    let Some(device) = list.devices.iter_mut().find(|device| device.name == form.device) else {
+        return (StatusCode::NOT_FOUND, "No such device").into_response();
+    };
+    name.clone_into(&mut device.machine);
+    match list.save(&state.inner.devices_path, &state.groups().group_names()) {
+        Ok(()) => {
+            history::record(
+                &state.inner.history_path,
+                &[format!("Device {} added to machine {name}", form.device)],
+            );
+            Redirect::to(&format!("/machines/{name}")).into_response()
+        }
         Err(error) => server_error(&error),
     }
 }

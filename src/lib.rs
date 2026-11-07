@@ -214,6 +214,10 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/machines/{name}", get(machines::show).post(machines::rename))
         .route("/machines/{name}/move", axum::routing::post(edit::move_machine))
+        .route(
+            "/machines/{name}/interfaces",
+            axum::routing::post(machines::add_interface),
+        )
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))

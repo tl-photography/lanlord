@@ -21,7 +21,19 @@
   </tbody>
 </table>
 
-<h2>Add an interface</h2>
+{% if !available.is_empty() %}
+<h2>Add an existing device</h2>
+<form method="post" action="/machines/{{ name }}/interfaces" class="row">
+  <select name="device" aria-label="Device">
+    {% for device in available %}
+    <option value="{{ device.name }}">{{ device.name }}{% if !device.machine.is_empty() %} (in {{ device.machine }}){% endif %}</option>
+    {% endfor %}
+  </select>
+  <button type="submit">Add</button>
+</form>
+{% endif %}
+
+<h2>Add a new interface</h2>
 <form method="post" action="/devices">
   <input type="hidden" name="machine" value="{{ name }}">
   <input type="hidden" name="then" value="machine">
