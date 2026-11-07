@@ -9,7 +9,7 @@ use axum::http::StatusCode;
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use serde::Deserialize;
 
-use crate::devices::{Device, Error, is_valid_name, normalize_mac};
+use crate::devices::{Error, Interface, is_valid_name, normalize_mac};
 use crate::history;
 use crate::plugins;
 use crate::{AppState, server_error};
@@ -42,7 +42,7 @@ pub struct DeviceForm {
 }
 
 impl DeviceForm {
-    fn from_device(device: &Device) -> Self {
+    fn from_device(device: &Interface) -> Self {
         Self {
             name: device.name.clone(),
             mac: device.mac.clone(),
@@ -51,13 +51,13 @@ impl DeviceForm {
             self_assigned: device.self_assigned,
             unreviewed: device.unreviewed,
             note: device.note.clone(),
-            machine: device.machine.clone(),
+            machine: device.device.clone(),
             then: String::new(),
         }
     }
 
     /// Checks the fields that the device list cannot check: MAC format, address and note length.
-    fn to_device(&self) -> Result<Device, String> {
+    fn to_device(&self) -> Result<Interface, String> {
         let mac = normalize_mac(&self.mac).ok_or_else(|| format!("Invalid MAC address: {}", self.mac))?;
         let ip = match self.ip.trim() {
             "" => None,
@@ -70,7 +70,7 @@ impl DeviceForm {
         if note.chars().count() > MAX_NOTE {
             return Err(format!("The note is longer than {MAX_NOTE} characters"));
         }
-        Ok(Device {
+        Ok(Interface {
             name: self.name.trim().to_owned(),
             mac,
             group: self.group.clone(),
@@ -78,7 +78,7 @@ impl DeviceForm {
             self_assigned: self.self_assigned,
             unreviewed: self.unreviewed,
             note: note.to_owned(),
-            machine: self.machine.trim().to_owned(),
+            device: self.machine.trim().to_owned(),
         })
     }
 }
@@ -169,7 +169,7 @@ pub async fn edit_form(State(state): State<AppState>, Path(name): Path<String>) 
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
-    match list.devices.iter().find(|device| device.name == name) {
+    match list.interfaces.iter().find(|device| device.name == name) {
         Some(device) => page(
             &state,
             Some(&name),
@@ -261,7 +261,7 @@ pub async fn move_device(
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
-    let Some(device) = list.devices.iter().find(|device| device.name == name) else {
+    let Some(device) = list.interfaces.iter().find(|device| device.name == name) else {
         return (StatusCode::NOT_FOUND, "No such device").into_response();
     };
     let form = DeviceForm {
@@ -281,21 +281,21 @@ pub async fn delete(State(state): State<AppState>, Path(name): Path<String>) -> 
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
-    let Some(position) = list.devices.iter().position(|device| device.name == name) else {
+    let Some(position) = list.interfaces.iter().position(|device| device.name == name) else {
         return (StatusCode::NOT_FOUND, "No such device").into_response();
     };
-    let removed = list.devices.remove(position);
-    let machine_left = !removed.machine.is_empty()
+    let removed = list.interfaces.remove(position);
+    let machine_left = !removed.device.is_empty()
         && list
-            .devices
+            .interfaces
             .iter()
-            .any(|device| device.machine == removed.machine);
+            .any(|device| device.device == removed.device);
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => {
             history::record(&state.inner.history_path, &[format!("Device {name} deleted")]);
             state.forget_pending();
             if machine_left {
-                Redirect::to(&format!("/machines/{}", removed.machine)).into_response()
+                Redirect::to(&format!("/machines/{}", removed.device)).into_response()
             } else {
                 Redirect::to("/").into_response()
             }
@@ -313,13 +313,13 @@ pub async fn make_machine(State(state): State<AppState>, Path(name): Path<String
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
-    let Some(device) = list.devices.iter_mut().find(|device| device.name == name) else {
+    let Some(device) = list.interfaces.iter_mut().find(|device| device.name == name) else {
         return (StatusCode::NOT_FOUND, "No such device").into_response();
     };
-    if device.machine.is_empty() {
-        device.machine.clone_from(&name);
+    if device.device.is_empty() {
+        device.device.clone_from(&name);
     }
-    let machine = device.machine.clone();
+    let machine = device.device.clone();
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => Redirect::to(&format!("/machines/{machine}")).into_response(),
         Err(error) => server_error(&error),
@@ -340,7 +340,11 @@ pub async fn move_machine(
         Err(error) => return server_error(&error),
     };
     let mut changes = Vec::new();
-    for device in list.devices.iter_mut().filter(|device| device.machine == machine) {
+    for device in list
+        .interfaces
+        .iter_mut()
+        .filter(|device| device.device == machine)
+    {
         if device.group != target.group {
             let before = device.clone();
             device.group.clone_from(&target.group);
@@ -348,7 +352,7 @@ pub async fn move_machine(
             changes.extend(history::device(Some(&before), device));
         }
     }
-    if list.devices.iter().all(|device| device.machine != machine) {
+    if list.interfaces.iter().all(|device| device.device != machine) {
         return (StatusCode::NOT_FOUND, "No such device").into_response();
     }
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
@@ -442,11 +446,11 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
     };
     let mut before = None;
     match original {
-        Some(name) => match list.devices.iter_mut().find(|existing| existing.name == name) {
+        Some(name) => match list.interfaces.iter_mut().find(|existing| existing.name == name) {
             Some(existing) => before = Some(std::mem::replace(existing, device.clone())),
             None => return (StatusCode::NOT_FOUND, "No such device").into_response(),
         },
-        None => list.devices.push(device.clone()),
+        None => list.interfaces.push(device.clone()),
     }
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => {

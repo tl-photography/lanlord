@@ -44,7 +44,7 @@ pub(super) const TYPE: PluginType = PluginType {
         Field {
             key: "device",
             label: "Device (optional, its fixed address is used when the address is empty)",
-            kind: FieldKind::Device,
+            kind: FieldKind::Interface,
             placeholder: "",
             optional: true,
         },
@@ -199,7 +199,7 @@ fn group_names(ids: &[u64], groups: &HashMap<String, u64>) -> BTreeSet<String> {
 fn plan(devices: &DeviceList, state: &PiHoleState) -> Plan {
     let mut plan = Plan::default();
     let with_address: Vec<_> = devices
-        .devices
+        .interfaces
         .iter()
         .filter(|device| device.ip.is_some())
         .collect();

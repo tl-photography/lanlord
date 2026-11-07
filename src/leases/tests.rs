@@ -1,10 +1,10 @@
 //! Unit tests of `leases`.
 
 use super::*;
-use crate::devices::Device;
+use crate::devices::Interface;
 
-fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Device {
-    Device {
+fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Interface {
+    Interface {
         name: name.to_owned(),
         mac: mac.to_owned(),
         group: "lan".to_owned(),
@@ -12,7 +12,7 @@ fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Device {
         note: String::new(),
         self_assigned: false,
         unreviewed: false,
-        machine: String::new(),
+        device: String::new(),
     }
 }
 
@@ -31,8 +31,8 @@ const LAN: Network = Network {
     prefix: 24,
 };
 
-fn list(devices: Vec<Device>) -> DeviceList {
-    DeviceList { devices }
+fn list(devices: Vec<Interface>) -> DeviceList {
+    DeviceList { interfaces: devices }
 }
 
 #[test]
@@ -200,7 +200,7 @@ fn a_device_that_sets_its_address_itself_gets_no_lease() {
     let mut router = device("router", "aa:bb:cc:dd:ee:01", Some([192, 0, 2, 1]));
     router.self_assigned = true;
     let list = DeviceList {
-        devices: vec![router],
+        interfaces: vec![router],
     };
     let networks = [LAN];
     let plan = plan(&list, &[], &networks);

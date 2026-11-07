@@ -351,7 +351,7 @@ fn router_with_omv() -> FakeUci {
 }
 
 fn devices() -> DeviceList {
-    let device = |name: &str, mac: &str, ip: [u8; 4]| crate::devices::Device {
+    let device = |name: &str, mac: &str, ip: [u8; 4]| crate::devices::Interface {
         name: name.to_owned(),
         mac: mac.to_owned(),
         group: "lan".to_owned(),
@@ -359,10 +359,10 @@ fn devices() -> DeviceList {
         self_assigned: false,
         unreviewed: false,
         note: String::new(),
-        machine: String::new(),
+        device: String::new(),
     };
     DeviceList {
-        devices: vec![
+        interfaces: vec![
             device("OMV", "aa:bb:cc:00:00:01", [192, 0, 2, 2]),
             device("plug", "aa:bb:cc:00:00:02", [203, 0, 113, 20]),
         ],

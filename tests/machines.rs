@@ -85,7 +85,11 @@ async fn connections_of_a_machine_share_one_card_and_move_together() {
     assert_eq!(status, StatusCode::SEE_OTHER);
     let groups = ["lan".to_owned(), "iot".to_owned()];
     let list = lanlord::devices::DeviceList::load(&data.path().join("devices.toml"), &groups).unwrap();
-    let in_iot = list.devices.iter().filter(|device| device.group == "iot").count();
+    let in_iot = list
+        .interfaces
+        .iter()
+        .filter(|device| device.group == "iot")
+        .count();
     assert_eq!(in_iot, 3, "{list:?}");
     let (_, page) = send(&app, get("/")).await;
     assert_eq!(page.matches(r#"data-device="machine:ThinkPad""#).count(), 1);

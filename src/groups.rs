@@ -56,7 +56,7 @@ struct GroupsPage {
 fn page(state: &AppState, form: GroupForm, error: String) -> Response {
     let config = state.groups();
     let devices = match state.devices() {
-        Ok(list) => list.devices,
+        Ok(list) => list.interfaces,
         Err(error) => return server_error(&error),
     };
     let groups = config
@@ -97,13 +97,13 @@ pub async fn list(State(state): State<AppState>) -> Response {
 fn change(
     state: &AppState,
     form: GroupForm,
-    change: impl FnOnce(&mut Config, &[crate::devices::Device]) -> Result<(), String>,
+    change: impl FnOnce(&mut Config, &[crate::devices::Interface]) -> Result<(), String>,
 ) -> Response {
     let Ok(guard) = state.inner.write_lock.lock() else {
         return server_error(&"write lock poisoned");
     };
     let devices = match state.devices() {
-        Ok(list) => list.devices,
+        Ok(list) => list.interfaces,
         Err(error) => return server_error(&error),
     };
     let before = state.groups();

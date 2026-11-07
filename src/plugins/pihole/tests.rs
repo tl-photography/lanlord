@@ -7,13 +7,13 @@ use std::os::unix::fs::PermissionsExt;
 use std::sync::Mutex;
 
 use super::*;
-use crate::devices::Device;
+use crate::devices::Interface;
 
 const FINGERPRINT: &str =
     "00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF";
 
-fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Device {
-    Device {
+fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Interface {
+    Interface {
         name: name.to_owned(),
         mac: format!("00:00:00:00:00:{:02x}", name.len()),
         group: group.to_owned(),
@@ -21,7 +21,7 @@ fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Device {
         self_assigned: false,
         unreviewed: false,
         note: String::new(),
-        machine: String::new(),
+        device: String::new(),
     }
 }
 
@@ -53,7 +53,7 @@ fn details(plan: &Plan) -> Vec<String> {
 #[test]
 fn groups_and_clients_are_added_for_devices_with_an_address() {
     let devices = DeviceList {
-        devices: vec![
+        interfaces: vec![
             device("tv", "iot", Some([192, 0, 2, 20])),
             device("plug", "iot", Some([192, 0, 2, 21])),
             device("phone", "guest", None),
@@ -74,7 +74,7 @@ fn groups_and_clients_are_added_for_devices_with_an_address() {
 #[test]
 fn own_clients_follow_the_device_and_others_are_left_alone() {
     let devices = DeviceList {
-        devices: vec![
+        interfaces: vec![
             device("tv", "lan", Some([192, 0, 2, 20])),
             device("nas", "lan", Some([192, 0, 2, 2])),
             device("same", "lan", Some([192, 0, 2, 3])),
@@ -270,7 +270,7 @@ fn plugin_with(url: &str, data: &Path, password: &str, extra: &str) -> PiHole {
 
 fn devices() -> DeviceList {
     DeviceList {
-        devices: vec![device("tv", "iot", Some([192, 0, 2, 20]))],
+        interfaces: vec![device("tv", "iot", Some([192, 0, 2, 20]))],
     }
 }
 

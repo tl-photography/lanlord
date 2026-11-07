@@ -8,8 +8,8 @@ fn groups() -> Vec<String> {
     vec!["lan".to_owned(), "iot".to_owned()]
 }
 
-fn device(name: &str, mac: &str) -> Device {
-    Device {
+fn device(name: &str, mac: &str) -> Interface {
+    Interface {
         name: name.to_owned(),
         mac: mac.to_owned(),
         group: "lan".to_owned(),
@@ -17,7 +17,7 @@ fn device(name: &str, mac: &str) -> Device {
         note: String::new(),
         self_assigned: false,
         unreviewed: false,
-        machine: String::new(),
+        device: String::new(),
     }
 }
 
@@ -55,24 +55,24 @@ fn names_must_be_dns_names() {
 #[test]
 fn duplicates_and_unknown_groups_are_rejected() {
     let mut list = DeviceList {
-        devices: vec![device("a", "00:00:00:00:00:01"), device("A", "00:00:00:00:00:02")],
+        interfaces: vec![device("a", "00:00:00:00:00:01"), device("A", "00:00:00:00:00:02")],
     };
     assert!(list.validate(&groups()).is_err(), "names differ only in case");
 
-    list.devices[1].name = "b".to_owned();
-    list.devices[1].mac = "00:00:00:00:00:01".to_owned();
+    list.interfaces[1].name = "b".to_owned();
+    list.interfaces[1].mac = "00:00:00:00:00:01".to_owned();
     assert!(list.validate(&groups()).is_err(), "same MAC");
 
-    list.devices[1].mac = "00:00:00:00:00:02".to_owned();
-    list.devices[0].ip = Some(Ipv4Addr::new(192, 0, 2, 10));
-    list.devices[1].ip = Some(Ipv4Addr::new(192, 0, 2, 10));
+    list.interfaces[1].mac = "00:00:00:00:00:02".to_owned();
+    list.interfaces[0].ip = Some(Ipv4Addr::new(192, 0, 2, 10));
+    list.interfaces[1].ip = Some(Ipv4Addr::new(192, 0, 2, 10));
     assert!(list.validate(&groups()).is_err(), "same IP");
 
-    list.devices[1].ip = None;
-    list.devices[1].group = "guest".to_owned();
+    list.interfaces[1].ip = None;
+    list.interfaces[1].group = "guest".to_owned();
     assert!(list.validate(&groups()).is_err(), "unknown group");
 
-    list.devices[1].group = "iot".to_owned();
+    list.interfaces[1].group = "iot".to_owned();
     assert!(list.validate(&groups()).is_ok());
 }
 
@@ -81,10 +81,10 @@ fn save_and_load_keep_the_list() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("devices.toml");
     let mut list = DeviceList {
-        devices: vec![device("OMV", "00:00:00:00:00:01")],
+        interfaces: vec![device("OMV", "00:00:00:00:00:01")],
     };
-    list.devices[0].ip = Some(Ipv4Addr::new(192, 0, 2, 2));
-    list.devices[0].note = "server".to_owned();
+    list.interfaces[0].ip = Some(Ipv4Addr::new(192, 0, 2, 2));
+    list.interfaces[0].note = "server".to_owned();
 
     list.save(&path, &groups()).unwrap();
     assert_eq!(DeviceList::load(&path, &groups()).unwrap(), list);
@@ -117,8 +117,8 @@ fn interfaces_are_nested_in_the_file_and_older_files_still_load() {
                  [[device]]\nname = \"tv\"\nmac = \"00:00:00:00:00:03\"\ngroup = \"lan\"\n";
     fs::write(&path, older).unwrap();
     let list = DeviceList::load(&path, &groups()).unwrap();
-    assert_eq!(list.devices.len(), 3);
-    assert_eq!(list.devices[1].machine, "ThinkPad");
+    assert_eq!(list.interfaces.len(), 3);
+    assert_eq!(list.interfaces[1].device, "ThinkPad");
 
     list.save(&path, &groups()).unwrap();
     let saved = fs::read_to_string(&path).unwrap();

@@ -101,7 +101,7 @@ pub enum Finding {
 /// differences per device, then foreign entries.
 #[must_use]
 pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -> Vec<Finding> {
-    let known: HashSet<&str> = list.devices.iter().map(|device| device.mac.as_str()).collect();
+    let known: HashSet<&str> = list.interfaces.iter().map(|device| device.mac.as_str()).collect();
     let vlans: HashMap<&str, u16> = groups
         .iter()
         .map(|group| (group.name.as_str(), group.vlan))
@@ -123,7 +123,7 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
         return findings;
     };
     let by_mac: HashMap<&str, &Assigned> = entries.iter().map(|entry| (entry.mac.as_str(), entry)).collect();
-    for device in &list.devices {
+    for device in &list.interfaces {
         let Some(entry) = by_mac.get(device.mac.as_str()) else {
             if !device.self_assigned {
                 findings.push(Finding::Missing {

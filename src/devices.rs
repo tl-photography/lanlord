@@ -1,4 +1,4 @@
-//! The device list: one entry per device, stored as TOML.
+//! The device list, stored as TOML: every device with its interfaces.
 
 use std::collections::HashSet;
 use std::fmt;
@@ -10,15 +10,14 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// One connection of the network: a device with one MAC address, or one interface of a machine. Leases, DNS names
-/// and clients work per connection.
+/// What the network sees of a device: one MAC address. Leases, DNS names and clients work per interface.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Device {
-    /// DNS name of the device, without domain.
+pub struct Interface {
+    /// DNS name, without domain.
     pub name: String,
     /// MAC address, lowercase with colons.
     pub mac: String,
-    /// Group of the device, decides the VLAN.
+    /// Group, decides the VLAN.
     pub group: String,
     /// Fixed address; it gets a static lease unless `self_assigned`.
     pub ip: Option<Ipv4Addr>,
@@ -28,17 +27,17 @@ pub struct Device {
     pub unreviewed: bool,
     /// Free text.
     pub note: String,
-    /// The machine this connection is an interface of, for example `ThinkPad` for its dock, Wi-Fi and cable; empty
-    /// for a device with one connection.
-    pub machine: String,
+    /// The device with several interfaces this one belongs to, for example `ThinkPad` for its dock, Wi-Fi and cable;
+    /// empty for a device with one interface, which then has the same name.
+    pub device: String,
 }
 
-/// All connections, in the order of the file. In the file, the interfaces of a machine are nested under it.
+/// All interfaces, in the order of the file. In the file, the interfaces of a device are nested under it.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(try_from = "FileList", into = "FileList")]
 pub struct DeviceList {
-    /// The connections.
-    pub devices: Vec<Device>,
+    /// The interfaces.
+    pub interfaces: Vec<Interface>,
 }
 
 /// `devices.toml`.
@@ -49,12 +48,12 @@ struct FileList {
     devices: Vec<FileDevice>,
 }
 
-/// A `[[device]]`: a device with one connection, or a machine with `[[device.interface]]` tables.
+/// A `[[device]]`: a device with one interface, or one with `[[device.interface]]` tables.
 #[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FileDevice {
     name: String,
-    /// Older files have `machine` on every connection instead of the nested tables.
+    /// Older files have `machine` on every interface instead of the nested tables.
     #[serde(default, skip_serializing)]
     machine: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -72,7 +71,7 @@ struct FileDevice {
     interfaces: Vec<FileInterface>,
 }
 
-/// A `[[device.interface]]`; without a group it is in the group of its machine.
+/// A `[[device.interface]]`; without a group it is in the group of its device.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct FileInterface {
@@ -100,7 +99,7 @@ impl TryFrom<FileList> for DeviceList {
                 if entry.mac.is_empty() {
                     return Err(format!("{}: a device needs a mac or interfaces", entry.name));
                 }
-                devices.push(Device {
+                devices.push(Interface {
                     name: entry.name,
                     mac: entry.mac,
                     group: entry.group,
@@ -108,7 +107,7 @@ impl TryFrom<FileList> for DeviceList {
                     self_assigned: entry.self_assigned,
                     unreviewed: entry.unreviewed,
                     note: entry.note,
-                    machine: entry.machine,
+                    device: entry.machine,
                 });
                 continue;
             }
@@ -116,7 +115,7 @@ impl TryFrom<FileList> for DeviceList {
                 return Err(format!("{}: mac and ip belong to its interfaces", entry.name));
             }
             for interface in entry.interfaces {
-                devices.push(Device {
+                devices.push(Interface {
                     name: interface.name,
                     mac: interface.mac,
                     group: interface.group.unwrap_or_else(|| entry.group.clone()),
@@ -124,19 +123,19 @@ impl TryFrom<FileList> for DeviceList {
                     self_assigned: interface.self_assigned,
                     unreviewed: interface.unreviewed,
                     note: interface.note,
-                    machine: entry.name.clone(),
+                    device: entry.name.clone(),
                 });
             }
         }
-        Ok(Self { devices })
+        Ok(Self { interfaces: devices })
     }
 }
 
 impl From<DeviceList> for FileList {
     fn from(list: DeviceList) -> Self {
         let mut devices: Vec<FileDevice> = Vec::new();
-        for device in list.devices {
-            if device.machine.is_empty() {
+        for device in list.interfaces {
+            if device.device.is_empty() {
                 devices.push(FileDevice {
                     name: device.name,
                     mac: device.mac,
@@ -151,10 +150,10 @@ impl From<DeviceList> for FileList {
             }
             let position = devices
                 .iter()
-                .position(|entry| entry.name == device.machine && !entry.interfaces.is_empty());
+                .position(|entry| entry.name == device.device && !entry.interfaces.is_empty());
             let index = position.unwrap_or_else(|| {
                 devices.push(FileDevice {
-                    name: device.machine.clone(),
+                    name: device.device.clone(),
                     group: device.group.clone(),
                     ..FileDevice::default()
                 });
@@ -283,7 +282,7 @@ impl DeviceList {
         let mut names = HashSet::new();
         let mut macs = HashSet::new();
         let mut ips = HashSet::new();
-        for device in &self.devices {
+        for device in &self.interfaces {
             let name = &device.name;
             if !is_valid_name(name) {
                 return Err(Error::Invalid(format!("invalid name: {name}")));
@@ -294,10 +293,10 @@ impl DeviceList {
                     device.mac
                 )));
             }
-            if !device.machine.is_empty() && !is_valid_name(&device.machine) {
+            if !device.device.is_empty() && !is_valid_name(&device.device) {
                 return Err(Error::Invalid(format!(
                     "{name}: invalid device name {}",
-                    device.machine
+                    device.device
                 )));
             }
             if !groups.contains(&device.group) {

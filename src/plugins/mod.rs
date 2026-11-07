@@ -73,7 +73,7 @@ pub enum FieldKind {
     /// Yes or no, a checkbox; off when the form does not send it.
     Switch,
     /// The name of a device in the list, chosen from a dropdown.
-    Device,
+    Interface,
 }
 
 /// One setting of a plugin type.
@@ -160,7 +160,9 @@ pub fn field_value(field: &Field, value: &str) -> Result<toml::Value, String> {
                 field.label
             ))
         }
-        FieldKind::Device if !is_valid_name(value) => Err(format!("{} must be a device name", field.label)),
+        FieldKind::Interface if !is_valid_name(value) => {
+            Err(format!("{} must be a device name", field.label))
+        }
         FieldKind::DataFile if !is_data_file(value) => Err(format!(
             "{} must be a file name in the data directory, without / or ..",
             field.label
@@ -356,7 +358,7 @@ fn build_one(
         if plugin_type
             .fields
             .iter()
-            .any(|field| field.kind == FieldKind::Device)
+            .any(|field| field.kind == FieldKind::Interface)
         {
             resolve_address(&name, &mut table, data_dir)?;
         }
@@ -387,7 +389,7 @@ fn resolve_address(name: &str, table: &mut toml::Table, data_dir: &Path) -> Resu
     let list: crate::devices::DeviceList =
         toml::from_str(&content).map_err(|error| Error::Invalid(format!("{name}: devices.toml: {error}")))?;
     let ip = list
-        .devices
+        .interfaces
         .iter()
         .find(|entry| entry.name == device)
         .ok_or_else(|| Error::Invalid(format!("{name}: device {device} is not in the list")))?

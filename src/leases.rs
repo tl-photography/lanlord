@@ -235,7 +235,7 @@ pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> P
     let mut kept_own: Vec<String> = Vec::new();
     let mut deleted: Vec<&str> = Vec::new();
 
-    for device in &list.devices {
+    for device in &list.interfaces {
         let id = section_id(&device.name);
         let own = hosts.iter().find(|host| host.id == id);
         let Some(ip) = device.ip.filter(|_| !device.self_assigned) else {
@@ -299,7 +299,7 @@ pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> P
             && !deleted.contains(&host.id.as_str())
         {
             let renamed = list
-                .devices
+                .interfaces
                 .iter()
                 .find(|device| host.macs.contains(&device.mac) && device.name != host.name);
             let why = match renamed {
@@ -324,7 +324,7 @@ pub fn plan(list: &DeviceList, hosts: &[HostSection], networks: &[Network]) -> P
 /// Adds the DNS names of devices that set their address themselves: they have no lease that would give them one.
 pub fn plan_names(list: &DeviceList, names: &[NameSection], networks: &[Network], plan: &mut Plan) {
     let mut wanted: Vec<String> = Vec::new();
-    for device in list.devices.iter().filter(|device| device.self_assigned) {
+    for device in list.interfaces.iter().filter(|device| device.self_assigned) {
         let Some(ip) = device.ip else { continue };
         let id = name_id(&device.name);
         let own = names.iter().find(|name| name.id == id);

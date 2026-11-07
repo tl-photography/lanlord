@@ -1,7 +1,7 @@
 //! Unit tests of `compare`.
 
 use super::*;
-use crate::devices::Device;
+use crate::devices::Interface;
 
 fn groups() -> Vec<Group> {
     vec![
@@ -22,8 +22,8 @@ fn groups() -> Vec<Group> {
 
 fn list() -> DeviceList {
     DeviceList {
-        devices: vec![
-            Device {
+        interfaces: vec![
+            Interface {
                 name: "omv".to_owned(),
                 mac: "00:00:00:00:00:01".to_owned(),
                 group: "lan".to_owned(),
@@ -31,9 +31,9 @@ fn list() -> DeviceList {
                 note: String::new(),
                 self_assigned: false,
                 unreviewed: false,
-                machine: String::new(),
+                device: String::new(),
             },
-            Device {
+            Interface {
                 name: "plug".to_owned(),
                 mac: "00:00:00:00:00:02".to_owned(),
                 group: "iot".to_owned(),
@@ -41,7 +41,7 @@ fn list() -> DeviceList {
                 note: String::new(),
                 self_assigned: false,
                 unreviewed: false,
-                machine: String::new(),
+                device: String::new(),
             },
         ],
     }
@@ -152,7 +152,7 @@ fn differences_per_device_and_foreign_entries_are_found() {
 #[test]
 fn a_device_that_sets_its_address_itself_has_no_lease_to_miss() {
     let list = DeviceList {
-        devices: vec![Device {
+        interfaces: vec![Interface {
             name: "router".to_owned(),
             mac: "aa:bb:cc:dd:ee:01".to_owned(),
             group: "lan".to_owned(),
@@ -160,7 +160,7 @@ fn a_device_that_sets_its_address_itself_has_no_lease_to_miss() {
             self_assigned: true,
             unreviewed: false,
             note: String::new(),
-            machine: String::new(),
+            device: String::new(),
         }],
     };
     assert_eq!(compare(&list, &groups(), &Observation::default()), Vec::new());
@@ -168,7 +168,7 @@ fn a_device_that_sets_its_address_itself_has_no_lease_to_miss() {
 
 fn address_device(self_assigned: bool) -> DeviceList {
     DeviceList {
-        devices: vec![Device {
+        interfaces: vec![Interface {
             name: "ap".to_owned(),
             mac: "aa:bb:cc:dd:ee:01".to_owned(),
             group: "lan".to_owned(),
@@ -176,7 +176,7 @@ fn address_device(self_assigned: bool) -> DeviceList {
             self_assigned,
             unreviewed: false,
             note: String::new(),
-            machine: String::new(),
+            device: String::new(),
         }],
     }
 }

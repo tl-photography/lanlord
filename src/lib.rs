@@ -338,7 +338,7 @@ pub(crate) fn server_error(error: &impl std::fmt::Display) -> Response {
 }
 
 fn device_row(
-    device: &devices::Device,
+    device: &devices::Interface,
     group: &config::Group,
     links: &HashMap<String, Vec<String>>,
 ) -> DeviceRow {
@@ -368,14 +368,14 @@ fn group_cards(
     links: &HashMap<String, Vec<String>>,
     move_groups: &[MoveGroup],
 ) -> Vec<CardView> {
-    let members: Vec<&devices::Device> = list
-        .devices
+    let members: Vec<&devices::Interface> = list
+        .interfaces
         .iter()
         .filter(|device| device.group == group.name)
         .collect();
     let mut cards: Vec<CardView> = Vec::new();
     for device in &members {
-        if device.machine.is_empty() {
+        if device.device.is_empty() {
             cards.push(CardView {
                 key: device.name.clone(),
                 title: device.name.clone(),
@@ -392,13 +392,13 @@ fn group_cards(
         }
         if cards
             .iter()
-            .any(|card| card.machine && card.title == device.machine)
+            .any(|card| card.machine && card.title == device.device)
         {
             continue;
         }
         let mut rows: Vec<DeviceRow> = members
             .iter()
-            .filter(|other| other.machine == device.machine)
+            .filter(|other| other.device == device.device)
             .map(|other| device_row(other, group, links))
             .collect();
         rows.sort_by_key(|row| row.name.to_ascii_lowercase());
@@ -408,21 +408,21 @@ fn group_cards(
             .filter(|other| {
                 other.name != group.name
                     && list
-                        .devices
+                        .interfaces
                         .iter()
-                        .any(|entry| entry.machine == device.machine && entry.group == other.name)
+                        .any(|entry| entry.device == device.device && entry.group == other.name)
             })
             .map(|other| other.title().to_owned())
             .collect();
         cards.push(CardView {
-            key: format!("machine:{}", device.machine),
-            title: device.machine.clone(),
-            initial: initial(&device.machine),
+            key: format!("machine:{}", device.device),
+            title: device.device.clone(),
+            initial: initial(&device.device),
             machine: true,
-            move_action: format!("/machines/{}/move", device.machine),
+            move_action: format!("/machines/{}/move", device.device),
             group: group.name.clone(),
             rows,
-            plugins: links.get(&device.machine).cloned().unwrap_or_default(),
+            plugins: links.get(&device.device).cloned().unwrap_or_default(),
             also_in: elsewhere.join(", "),
             move_groups: move_groups.to_vec(),
         });

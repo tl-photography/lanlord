@@ -95,7 +95,7 @@ fn input(field: &Field) -> &'static str {
     match field.kind {
         FieldKind::Url => "url",
         FieldKind::Switch => "checkbox",
-        FieldKind::Device => "select",
+        FieldKind::Interface => "select",
         _ => "text",
     }
 }
@@ -114,7 +114,7 @@ fn field_views(
             input: input(field),
             placeholder: field.placeholder,
             optional: field.optional,
-            options: if field.kind == FieldKind::Device {
+            options: if field.kind == FieldKind::Interface {
                 devices.to_vec()
             } else {
                 Vec::new()
@@ -145,7 +145,7 @@ fn page_with_message(
 ) -> Response {
     let mut device_names: Vec<String> = state
         .devices()
-        .map(|list| list.devices.into_iter().map(|device| device.name).collect())
+        .map(|list| list.interfaces.into_iter().map(|device| device.name).collect())
         .unwrap_or_default();
     device_names.sort_by_key(|name| name.to_ascii_lowercase());
     let notifiers: Vec<String> = state.inner.plugins.read().map_or_else(

@@ -36,8 +36,8 @@ fn a_log_that_cannot_be_written_does_not_panic() {
     record(Path::new("/nonexistent/history.log"), &["lost".to_owned()]);
 }
 
-fn sample() -> Device {
-    Device {
+fn sample() -> Interface {
+    Interface {
         name: "tv".to_owned(),
         mac: "00:00:00:00:00:01".to_owned(),
         group: "lan".to_owned(),
@@ -45,7 +45,7 @@ fn sample() -> Device {
         note: String::new(),
         self_assigned: false,
         unreviewed: false,
-        machine: String::new(),
+        device: String::new(),
     }
 }
 
