@@ -8,8 +8,8 @@
       {% if !card.also_in.is_empty() %}<span class="note">Also in {{ card.also_in }}</span>{% endif %}
       <ul class="connections{% if !overview.show_mac && !overview.show_ip %} compact{% endif %}">
         {% for row in card.rows %}
-        <li>{% include "device_status.html" %}<span class="badge interface" title="Interface of {{ card.title }}">{{ row.name }}</span>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
-          {% include "device_meta.html" %}{% if !row.status.away.is_empty() %}<span class="note">{{ row.status.away }}</span>{% endif %}{% if !row.warning.is_empty() %}<span class="note warning">{{ row.warning }}</span>{% endif %}</li>
+        <li><span class="badge interface" title="Interface of {{ card.title }}">{{ row.name }}</span>{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}
+          {% include "device_meta.html" %}{% if !row.warning.is_empty() %}<span class="note warning">{{ row.warning }}</span>{% endif %}</li>
         {% endfor %}
       </ul>
     </div>
@@ -19,9 +19,9 @@
   <a class="card" href="/devices/{{ row.name }}">
     <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
     <span class="text">
-      <strong>{% include "device_status.html" %}{{ row.name }}</strong>
+      <strong>{{ row.name }}</strong>
 <span class="badges">{% if row.unreviewed %}<span class="badge new" title="Found by a scan, not reviewed yet">New</span>{% endif %}{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}</span>
-      {% include "device_meta.html" %}{% if !row.status.away.is_empty() %}<span class="note">{{ row.status.away }}</span>{% endif %}{% if !row.warning.is_empty() %}<span class="note warning">{{ row.warning }}</span>{% endif %}
+      {% include "device_meta.html" %}{% if !row.warning.is_empty() %}<span class="note warning">{{ row.warning }}</span>{% endif %}
       {% if !row.note.is_empty() %}<span class="note">{{ row.note }}</span>{% endif %}
     </span>
   </a>

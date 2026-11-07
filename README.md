@@ -143,20 +143,6 @@ you make in lanlord are no such thing, they wait for Apply.
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
 
-### What a scan saw
-
-The device list is the plan. After a scan, a dot on the card says whether a device was seen, and a card shows the
-address in use if it is not the planned one, for example for a device waiting for its VLAN. This stays in memory until
-the next start. A device counts as seen if it is on the Wi-Fi or in the neighbour table of an OpenWrt device
-(`/proc/net/arp`, see the ACL). Without that right a DHCP lease counts too, so a device that left stays green for the
-rest of its lease, and one with a static address and a cable is not seen at all.
-
-### Connections
-
-The Devices page also shows the network as a tree, from any device others hang on. Choose "Connected to" on a device's
-page. Wi-Fi clients need none of that: a scan puts them under their access point, as long as its plugin is linked to a
-device. Devices that have no place yet are listed below the tree.
-
 ### Subnets
 
 Every group can have a subnet on the Groups page. A device with a fixed address outside it gets a warning on its card

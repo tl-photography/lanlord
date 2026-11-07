@@ -16,7 +16,7 @@ use crate::devices::Error;
 use crate::history;
 use crate::notify::Notification;
 use crate::plugins::{self, Field, FieldKind, Plugin, PluginType, Settings};
-use crate::{AppState, live, server_error};
+use crate::{AppState, server_error};
 
 /// The answer of one plugin to a scan.
 pub(crate) type ObserveResult = Result<Result<Observation, String>, tokio::time::error::Elapsed>;
@@ -410,18 +410,6 @@ pub(crate) async fn observe_all(active: &[Arc<dyn Plugin>]) -> Vec<ObserveResult
     results.into_iter().map(|(_, result)| result).collect()
 }
 
-/// Keeps what a scan saw for the device cards.
-pub(crate) fn remember(state: &AppState, results: &[ObserveResult]) {
-    let complete = results.iter().all(|result| matches!(result, Ok(Ok(_))));
-    let observations = results.iter().filter_map(|result| match result {
-        Ok(Ok(observation)) => Some(observation),
-        _ => None,
-    });
-    if let Ok(mut live) = state.inner.live.lock() {
-        live.record(live::now(), observations, complete);
-    }
-}
-
 /// Scans every enabled plugin at the same time, each with a time limit, without changing anything.
 pub async fn scan(State(state): State<AppState>) -> Response {
     let devices = match state.devices() {
@@ -434,7 +422,6 @@ pub async fn scan(State(state): State<AppState>) -> Response {
         Err(_) => return server_error(&"plugin lock poisoned"),
     };
     let results = observe_all(&active).await;
-    remember(&state, &results);
     let scan_results = results
         .into_iter()
         .enumerate()

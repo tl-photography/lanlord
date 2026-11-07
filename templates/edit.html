@@ -29,15 +29,6 @@
     </select>
   </label>
   <small>Only with an IP address. Both give the device its <code>.lan</code> name.</small>
-  <label>Connected to
-    <select name="uplink">
-      <option value="">Not set</option>
-      {% for name in uplinks %}
-      <option value="{{ name }}"{% if *name == form.uplink %} selected{% endif %}>{{ name }}</option>
-      {% endfor %}
-    </select>
-  </label>
-  <small>A scan places Wi-Fi clients by itself; this is for the others.</small>
   <label>Note <input name="note" value="{{ form.note }}" maxlength="500"></label>
   <input type="hidden" name="machine" value="{{ form.machine }}">
   <div class="actions">

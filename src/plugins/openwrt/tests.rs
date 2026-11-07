@@ -359,7 +359,6 @@ fn devices() -> DeviceList {
         ip: Some(Ipv4Addr::from(ip)),
         self_assigned: false,
         unreviewed: false,
-        uplink: String::new(),
         note: String::new(),
         machine: String::new(),
     };

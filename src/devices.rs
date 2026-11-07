@@ -26,8 +26,6 @@ pub struct Device {
     pub self_assigned: bool,
     /// Found by a scan and not looked at yet.
     pub unreviewed: bool,
-    /// The device this one hangs on; Wi-Fi clients are placed by the scan instead.
-    pub uplink: String,
     /// Free text.
     pub note: String,
     /// The machine this connection is an interface of, for example `ThinkPad` for its dock, Wi-Fi and cable; empty
@@ -69,8 +67,6 @@ struct FileDevice {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     unreviewed: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
-    uplink: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     note: String,
     #[serde(default, rename = "interface", skip_serializing_if = "Vec::is_empty")]
     interfaces: Vec<FileInterface>,
@@ -90,8 +86,6 @@ struct FileInterface {
     self_assigned: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     unreviewed: bool,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    uplink: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     note: String,
 }
@@ -113,7 +107,6 @@ impl TryFrom<FileList> for DeviceList {
                     ip: entry.ip,
                     self_assigned: entry.self_assigned,
                     unreviewed: entry.unreviewed,
-                    uplink: entry.uplink,
                     note: entry.note,
                     machine: entry.machine,
                 });
@@ -130,7 +123,6 @@ impl TryFrom<FileList> for DeviceList {
                     ip: interface.ip,
                     self_assigned: interface.self_assigned,
                     unreviewed: interface.unreviewed,
-                    uplink: interface.uplink,
                     note: interface.note,
                     machine: entry.name.clone(),
                 });
@@ -152,7 +144,6 @@ impl From<DeviceList> for FileList {
                     ip: device.ip,
                     self_assigned: device.self_assigned,
                     unreviewed: device.unreviewed,
-                    uplink: device.uplink,
                     note: device.note,
                     ..FileDevice::default()
                 });
@@ -177,7 +168,6 @@ impl From<DeviceList> for FileList {
                 ip: device.ip,
                 self_assigned: device.self_assigned,
                 unreviewed: device.unreviewed,
-                uplink: device.uplink,
                 note: device.note,
             });
         }

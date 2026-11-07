@@ -4,14 +4,12 @@ mod apply;
 pub mod auth;
 pub mod compare;
 pub mod config;
-mod connections;
 pub mod devices;
 mod edit;
 mod groups;
 pub mod history;
 mod history_ui;
 pub mod leases;
-mod live;
 mod machines;
 pub mod notify;
 pub mod origin;
@@ -99,8 +97,6 @@ struct Inner {
     pending: Mutex<Option<(Instant, usize)>>,
     /// What the background scan remembers.
     watch: Mutex<watch::WatchState>,
-    /// What the scans saw.
-    live: Mutex<live::Live>,
 }
 
 impl AppState {
@@ -149,7 +145,6 @@ impl AppState {
                 history_path: data_dir.join("history.log"),
                 pending: Mutex::new(None),
                 watch: Mutex::default(),
-                live: Mutex::default(),
             }),
         })
     }
@@ -232,7 +227,6 @@ pub fn app(state: AppState) -> Router {
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/groups/{name}/subnet", axum::routing::post(groups::set_subnet))
-        .route("/connections", get(connections::show))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))
         .route(
             "/settings/background",
@@ -285,8 +279,6 @@ struct DeviceRow {
     mac: String,
     ip: String,
     note: String,
-    /// What the scans saw.
-    status: live::Status,
     /// The fixed address is outside the subnet of the group.
     warning: String,
     /// Found by a scan and not looked at yet.
@@ -349,7 +341,6 @@ fn device_row(
     device: &devices::Device,
     group: &config::Group,
     links: &HashMap<String, Vec<String>>,
-    seen: &Seen<'_>,
 ) -> DeviceRow {
     DeviceRow {
         plugins: links.get(&device.name).cloned().unwrap_or_default(),
@@ -357,19 +348,12 @@ fn device_row(
         mac: device.mac.clone(),
         ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
         note: device.note.clone(),
-        status: seen.live.status(device, seen.time),
         unreviewed: device.unreviewed,
         warning: device
             .ip
             .and_then(|ip| group.address_warning(ip))
             .unwrap_or_default(),
     }
-}
-
-/// The sightings at the moment the page is made.
-struct Seen<'a> {
-    live: &'a live::Live,
-    time: u64,
 }
 
 fn initial(name: &str) -> char {
@@ -383,7 +367,6 @@ fn group_cards(
     config: &Config,
     links: &HashMap<String, Vec<String>>,
     move_groups: &[MoveGroup],
-    seen: &Seen<'_>,
 ) -> Vec<CardView> {
     let members: Vec<&devices::Device> = list
         .devices
@@ -400,7 +383,7 @@ fn group_cards(
                 machine: false,
                 move_action: format!("/devices/{}/move", device.name),
                 group: group.name.clone(),
-                rows: vec![device_row(device, group, links, seen)],
+                rows: vec![device_row(device, group, links)],
                 plugins: Vec::new(),
                 also_in: String::new(),
                 move_groups: move_groups.to_vec(),
@@ -416,7 +399,7 @@ fn group_cards(
         let mut rows: Vec<DeviceRow> = members
             .iter()
             .filter(|other| other.machine == device.machine)
-            .map(|other| device_row(other, group, links, seen))
+            .map(|other| device_row(other, group, links))
             .collect();
         rows.sort_by_key(|row| row.name.to_ascii_lowercase());
         let elsewhere: Vec<String> = config
@@ -464,18 +447,11 @@ async fn index(State(state): State<AppState>) -> Response {
             label: group.title().to_owned(),
         })
         .collect();
-    let Ok(sightings) = state.inner.live.lock() else {
-        return server_error(&"scan results lock poisoned");
-    };
-    let seen = Seen {
-        live: &sightings,
-        time: live::now(),
-    };
     let groups = config
         .groups
         .iter()
         .map(|group| {
-            let cards = group_cards(group, &list, &config, &links, &move_groups, &seen);
+            let cards = group_cards(group, &list, &config, &links, &move_groups);
             GroupView {
                 name: group.name.clone(),
                 label: group.title().to_owned(),

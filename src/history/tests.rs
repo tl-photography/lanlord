@@ -45,7 +45,6 @@ fn sample() -> Device {
         note: String::new(),
         self_assigned: false,
         unreviewed: false,
-        uplink: String::new(),
         machine: String::new(),
     }
 }

@@ -8,7 +8,6 @@
 {% if !has_groups() %}
 <p class="notice">No groups yet. <a href="/groups">Set up the groups</a> first, every device belongs to one.</p>
 {% endif %}
-{% let view = "vlan" %}{% include "view_switch.html" %}
 <div class="columns">
   {% for group in groups %}
   <section class="group" data-group="{{ group.name }}">

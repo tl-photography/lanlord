@@ -248,31 +248,6 @@ async fn changes_in_the_list_wait_for_apply() {
 }
 
 #[tokio::test]
-async fn a_scan_shows_on_the_cards_what_it_saw() {
-    let (data, _uci, _received) = setup().await;
-    let devices = data.path().join("devices.toml");
-    let mut list = std::fs::read_to_string(&devices).unwrap();
-    list.push_str(
-        "\n[[device]]\nname = \"tv\"\nmac = \"aa:bb:cc:00:00:99\"\ngroup = \"lan\"\nip = \"198.51.100.9\"\n",
-    );
-    std::fs::write(&devices, list).unwrap();
-    let state = lanlord::AppState::load_without_login(data.path()).unwrap();
-    let app = lanlord::app(state.clone());
-
-    let index = || Request::get("/").body(Body::empty()).unwrap();
-    let (_, page) = send(&app, index()).await;
-    assert!(!page.contains("class=\"dot"), "{page}");
-    assert!(!page.contains("now 192.0.2.99"), "{page}");
-
-    lanlord::watch::run_once(&state).await;
-    let (_, page) = send(&app, index()).await;
-    assert!(page.contains("planned 198.51.100.9"), "{page}");
-    assert!(page.contains("now 192.0.2.99"), "{page}");
-    assert!(page.contains("class=\"dot seen\""), "{page}");
-    assert!(page.contains("Not seen yet"), "the other device: {page}");
-}
-
-#[tokio::test]
 async fn restore_undoes_outside_changes() {
     let (data, uci, received) = setup().await;
     let state = lanlord::AppState::load_without_login(data.path()).unwrap();

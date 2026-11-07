@@ -20,7 +20,6 @@ fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Device {
         ip: ip.map(Ipv4Addr::from),
         self_assigned: false,
         unreviewed: false,
-        uplink: String::new(),
         note: String::new(),
         machine: String::new(),
     }

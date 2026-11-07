@@ -65,7 +65,6 @@ async fn new_unknown(state: &AppState, active: &[Arc<dyn Plugin>], devices: &Dev
     let groups = state.groups().groups;
     let mut found = Vec::new();
     let results = plugin_ui::observe_all(active).await;
-    plugin_ui::remember(state, &results);
     for (plugin, result) in active.iter().zip(results) {
         let Ok(Ok(observation)) = result else { continue };
         for finding in compare::compare(devices, &groups, &observation) {

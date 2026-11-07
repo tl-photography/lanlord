@@ -28,8 +28,6 @@ pub struct DeviceForm {
     /// The address is set on the device itself.
     #[serde(default)]
     self_assigned: bool,
-    #[serde(default)]
-    uplink: String,
     /// Not in the form: saving a device means it has been looked at.
     #[serde(skip)]
     unreviewed: bool,
@@ -52,7 +50,6 @@ impl DeviceForm {
             ip: device.ip.map(|ip| ip.to_string()).unwrap_or_default(),
             self_assigned: device.self_assigned,
             unreviewed: device.unreviewed,
-            uplink: device.uplink.clone(),
             note: device.note.clone(),
             machine: device.machine.clone(),
             then: String::new(),
@@ -80,7 +77,6 @@ impl DeviceForm {
             ip,
             self_assigned: self.self_assigned,
             unreviewed: self.unreviewed,
-            uplink: self.uplink.trim().to_owned(),
             note: note.to_owned(),
             machine: self.machine.trim().to_owned(),
         })
@@ -120,8 +116,6 @@ struct EditPage {
     original: String,
     /// The address is outside the subnet of the group.
     warning: String,
-    /// The other devices, as possible uplinks.
-    uplinks: Vec<String>,
 }
 
 fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: String) -> Response {
@@ -135,12 +129,6 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
     } else {
         StatusCode::UNPROCESSABLE_ENTITY
     };
-    let mut uplinks: Vec<String> = state
-        .devices()
-        .map(|list| list.devices.into_iter().map(|device| device.name).collect())
-        .unwrap_or_default();
-    uplinks.retain(|name| Some(name.as_str()) != original);
-    uplinks.sort_by_key(|name| name.to_ascii_lowercase());
     let warning = state
         .groups()
         .groups
@@ -152,7 +140,6 @@ fn page(state: &AppState, original: Option<&str>, form: DeviceForm, error: Strin
     let page = EditPage {
         nav: "devices",
         warning,
-        uplinks,
         title,
         action,
         form,
@@ -298,9 +285,6 @@ pub async fn delete(State(state): State<AppState>, Path(name): Path<String>) -> 
         return (StatusCode::NOT_FOUND, "No such device").into_response();
     };
     let removed = list.devices.remove(position);
-    for other in list.devices.iter_mut().filter(|other| other.uplink == name) {
-        other.uplink.clear();
-    }
     let machine_left = !removed.machine.is_empty()
         && list
             .devices
@@ -463,11 +447,6 @@ fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response 
             None => return (StatusCode::NOT_FOUND, "No such device").into_response(),
         },
         None => list.devices.push(device.clone()),
-    }
-    if let Some(old) = before.as_ref().filter(|old| old.name != device.name) {
-        for other in list.devices.iter_mut().filter(|other| other.uplink == old.name) {
-            other.uplink.clone_from(&device.name);
-        }
     }
     match list.save(&state.inner.devices_path, &state.groups().group_names()) {
         Ok(()) => {

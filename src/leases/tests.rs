@@ -12,7 +12,6 @@ fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Device {
         note: String::new(),
         self_assigned: false,
         unreviewed: false,
-        uplink: String::new(),
         machine: String::new(),
     }
 }
