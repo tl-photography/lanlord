@@ -10,9 +10,9 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// A device of the network.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+/// One connection of the network: a device with one MAC address, or one interface of a machine. Leases, DNS names
+/// and clients work per connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Device {
     /// DNS name of the device, without domain.
     pub name: String,
@@ -21,24 +21,138 @@ pub struct Device {
     /// Group of the device, decides the VLAN.
     pub group: String,
     /// Fixed address, if the device gets a static lease.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ip: Option<Ipv4Addr>,
     /// Free text.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
-    /// The machine this connection belongs to, for example `ThinkPad` for its dock, Wi-Fi and cable; empty for a
-    /// device with one connection.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
+    /// The machine this connection is an interface of, for example `ThinkPad` for its dock, Wi-Fi and cable; empty
+    /// for a device with one connection.
     pub machine: String,
 }
 
-/// All devices, in the order of the file.
+/// All connections, in the order of the file. In the file, the interfaces of a machine are nested under it.
 #[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "FileList", into = "FileList")]
 pub struct DeviceList {
-    /// The devices.
-    #[serde(default, rename = "device")]
+    /// The connections.
     pub devices: Vec<Device>,
+}
+
+/// `devices.toml`.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileList {
+    #[serde(default, rename = "device", skip_serializing_if = "Vec::is_empty")]
+    devices: Vec<FileDevice>,
+}
+
+/// A `[[device]]`: a device with one connection, or a machine with `[[device.interface]]` tables.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileDevice {
+    name: String,
+    /// Older files have `machine` on every connection instead of the nested tables.
+    #[serde(default, skip_serializing)]
+    machine: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    mac: String,
+    group: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ip: Option<Ipv4Addr>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    note: String,
+    #[serde(default, rename = "interface", skip_serializing_if = "Vec::is_empty")]
+    interfaces: Vec<FileInterface>,
+}
+
+/// A `[[device.interface]]`; without a group it is in the group of its machine.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileInterface {
+    name: String,
+    mac: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ip: Option<Ipv4Addr>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    note: String,
+}
+
+impl TryFrom<FileList> for DeviceList {
+    type Error = String;
+
+    fn try_from(file: FileList) -> Result<Self, String> {
+        let mut devices = Vec::new();
+        for entry in file.devices {
+            if entry.interfaces.is_empty() {
+                if entry.mac.is_empty() {
+                    return Err(format!("{}: a device needs a mac or interfaces", entry.name));
+                }
+                devices.push(Device {
+                    name: entry.name,
+                    mac: entry.mac,
+                    group: entry.group,
+                    ip: entry.ip,
+                    note: entry.note,
+                    machine: entry.machine,
+                });
+                continue;
+            }
+            if !entry.mac.is_empty() || entry.ip.is_some() {
+                return Err(format!("{}: mac and ip belong to its interfaces", entry.name));
+            }
+            for interface in entry.interfaces {
+                devices.push(Device {
+                    name: interface.name,
+                    mac: interface.mac,
+                    group: interface.group.unwrap_or_else(|| entry.group.clone()),
+                    ip: interface.ip,
+                    note: interface.note,
+                    machine: entry.name.clone(),
+                });
+            }
+        }
+        Ok(Self { devices })
+    }
+}
+
+impl From<DeviceList> for FileList {
+    fn from(list: DeviceList) -> Self {
+        let mut devices: Vec<FileDevice> = Vec::new();
+        for device in list.devices {
+            if device.machine.is_empty() {
+                devices.push(FileDevice {
+                    name: device.name,
+                    mac: device.mac,
+                    group: device.group,
+                    ip: device.ip,
+                    note: device.note,
+                    ..FileDevice::default()
+                });
+                continue;
+            }
+            let position = devices
+                .iter()
+                .position(|entry| entry.name == device.machine && !entry.interfaces.is_empty());
+            let index = position.unwrap_or_else(|| {
+                devices.push(FileDevice {
+                    name: device.machine.clone(),
+                    group: device.group.clone(),
+                    ..FileDevice::default()
+                });
+                devices.len() - 1
+            });
+            let own_group = (device.group != devices[index].group).then_some(device.group);
+            devices[index].interfaces.push(FileInterface {
+                name: device.name,
+                mac: device.mac,
+                group: own_group,
+                ip: device.ip,
+                note: device.note,
+            });
+        }
+        Self { devices }
+    }
 }
 
 /// Errors when reading, checking or writing the device list.

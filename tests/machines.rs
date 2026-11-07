@@ -78,8 +78,10 @@ async fn connections_of_a_machine_share_one_card_and_move_together() {
 
     let (status, _) = send(&app, post("/machines/ThinkPad/move", "group=iot")).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
-    let list = std::fs::read_to_string(data.path().join("devices.toml")).unwrap();
-    assert_eq!(list.matches("group = \"iot\"").count(), 3, "{list}");
+    let groups = ["lan".to_owned(), "iot".to_owned()];
+    let list = lanlord::devices::DeviceList::load(&data.path().join("devices.toml"), &groups).unwrap();
+    let in_iot = list.devices.iter().filter(|device| device.group == "iot").count();
+    assert_eq!(in_iot, 3, "{list:?}");
     let (_, page) = send(&app, get("/")).await;
     assert_eq!(page.matches(r#"data-device="machine:ThinkPad""#).count(), 1);
     assert!(!page.contains("Also in"));
