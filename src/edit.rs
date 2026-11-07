@@ -300,41 +300,58 @@ fn follow_links(state: &AppState, old_name: Option<&str>, new_name: &str) {
     let Ok(mut settings) = plugins::read_settings(&state.inner.plugins_path) else {
         return;
     };
+    let renamed_from = old_name.filter(|old| *old != new_name);
     let mut linked = false;
-    let mut renamed = Vec::new();
+    let mut changes = Vec::new();
     for table in &mut settings.plugins {
-        let device = table
-            .get("device")
-            .and_then(toml::Value::as_str)
-            .unwrap_or_default()
-            .to_owned();
-        if device == new_name {
-            linked = true;
-        }
-        if let Some(old) = old_name
-            && old != new_name
-            && device == old
-        {
-            let plugin = table
-                .get("name")
+        let text = |key: &str| {
+            table
+                .get(key)
                 .and_then(toml::Value::as_str)
                 .unwrap_or_default()
-                .to_owned();
+                .to_owned()
+        };
+        let (plugin, device, url) = (text("name"), text("device"), text("url"));
+        linked |= device == new_name;
+        let Some(old) = renamed_from else {
+            continue;
+        };
+        if device == old {
             table.insert("device".to_owned(), toml::Value::String(new_name.to_owned()));
-            renamed.push(format!("Plugin {plugin} changed: device {old} → {new_name}"));
+            changes.push(format!("Plugin {plugin} changed: device {old} → {new_name}"));
+            linked = true;
+        }
+        if let Some(new_url) = renamed_url(&url, old, new_name) {
+            changes.push(format!("Plugin {plugin} changed: url {url} → {new_url}"));
+            table.insert("url".to_owned(), toml::Value::String(new_url));
             linked = true;
         }
     }
-    if !renamed.is_empty() {
+    if !changes.is_empty() {
         if let Err(error) = plugins::save_settings(&state.inner.plugins_path, &settings) {
-            tracing::error!("cannot update the plugins linked to {new_name}: {error}");
+            tracing::error!("cannot update the plugins of {new_name}: {error}");
             return;
         }
-        history::record(&state.inner.history_path, &renamed);
+        history::record(&state.inner.history_path, &changes);
     }
     if linked {
         state.reload_plugins();
     }
+}
+
+/// The address with the device's new name, if its host is the old name, with or without a domain.
+fn renamed_url(url: &str, old: &str, new: &str) -> Option<String> {
+    let mut parsed = reqwest::Url::parse(url).ok()?;
+    let host = parsed.host_str()?.to_owned();
+    let (first, domain) = host
+        .split_once('.')
+        .map_or((host.as_str(), None), |(first, rest)| (first, Some(rest)));
+    if !first.eq_ignore_ascii_case(old) {
+        return None;
+    }
+    let new_host = domain.map_or_else(|| new.to_owned(), |domain| format!("{new}.{domain}"));
+    parsed.set_host(Some(&new_host)).ok()?;
+    Some(parsed.to_string().trim_end_matches('/').to_owned())
 }
 
 fn save(state: &AppState, original: Option<&str>, form: DeviceForm) -> Response {
