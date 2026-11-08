@@ -2,16 +2,16 @@
 {% block title %}History{% endblock %}
 {% block content %}
 <h1>History</h1>
-<p>Every change in lanlord and every apply, newest first; times in UTC. The full log is <code>history.log</code> in
+<p>Every change in lanlord and every apply, newest first, in local time. The full log is <code>history.log</code> in
 the data directory.</p>
 {% if entries.is_empty() %}
 <p class="notice">No changes yet.</p>
 {% else %}
 <table class="history">
-  <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Change</th></tr></thead>
+  <thead><tr><th scope="col">Time</th><th scope="col">Change</th></tr></thead>
   <tbody>
     {% for entry in entries %}
-    <tr><td class="time">{{ entry.time }}</td><td>{{ entry.text }}</td></tr>
+    <tr><td class="time"><time datetime="{{ entry.time }}Z">{{ entry.time }}</time></td><td>{{ entry.text }}</td></tr>
     {% endfor %}
   </tbody>
 </table>

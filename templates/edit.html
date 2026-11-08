@@ -22,7 +22,7 @@
     </select>
   </label>
   <label>IP address <input name="ip" value="{{ form.ip }}" inputmode="decimal" placeholder="optional"></label>
-  <label>Address comes from
+  <label>IP address comes from
     <select name="self_assigned">
       <option value="false"{% if !form.self_assigned %} selected{% endif %}>Static lease from the router</option>
       <option value="true"{% if form.self_assigned %} selected{% endif %}>Set on the device</option>

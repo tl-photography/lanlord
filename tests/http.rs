@@ -184,3 +184,12 @@ async fn every_response_has_the_security_headers() {
         assert_eq!(headers["cross-origin-embedder-policy"], "require-corp", "{path}");
     }
 }
+
+#[test]
+fn long_names_can_break_at_their_words() {
+    assert_eq!(
+        lanlord::break_name("MonitorThomas-2Wifi"),
+        "Monitor<wbr>Thomas-2<wbr>Wifi"
+    );
+    assert_eq!(lanlord::break_name("<b>x"), "bx");
+}

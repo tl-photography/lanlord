@@ -342,7 +342,6 @@ struct CardView {
     /// Identifies the card for drag and drop.
     key: String,
     title: String,
-    initial: char,
     machine: bool,
     /// Where the move forms post to.
     move_action: String,
@@ -402,8 +401,23 @@ fn device_row(
     }
 }
 
-fn initial(name: &str) -> char {
-    name.chars().next().unwrap_or('?').to_ascii_uppercase()
+/// The name with a possible line break at each change to upper case, as HTML. Only letters, digits and `-` are kept,
+/// which is all a valid name has, so the result is safe to show unescaped.
+#[must_use]
+pub fn break_name(name: &str) -> String {
+    let mut html = String::new();
+    let mut after_lower = false;
+    for letter in name
+        .chars()
+        .filter(|letter| letter.is_ascii_alphanumeric() || *letter == '-')
+    {
+        if after_lower && letter.is_ascii_uppercase() {
+            html.push_str("<wbr>");
+        }
+        after_lower = letter.is_ascii_lowercase() || letter.is_ascii_digit();
+        html.push(letter);
+    }
+    html
 }
 
 /// The cards of one group: one per device, one per machine with its connections in this group.
@@ -425,7 +439,6 @@ fn group_cards(
             cards.push(CardView {
                 key: device.name.clone(),
                 title: device.name.clone(),
-                initial: initial(&device.name),
                 machine: false,
                 move_action: format!("/devices/{}/move", device.name),
                 group: group.name.clone(),
@@ -463,7 +476,6 @@ fn group_cards(
         cards.push(CardView {
             key: format!("machine:{}", device.device),
             title: device.device.clone(),
-            initial: initial(&device.device),
             machine: true,
             move_action: format!("/machines/{}/move", device.device),
             group: group.name.clone(),

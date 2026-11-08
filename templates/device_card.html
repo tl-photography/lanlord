@@ -1,9 +1,8 @@
 <li class="device-item" data-device="{{ card.key }}" draggable="false">
   {% if card.machine %}
   <a class="card machine" href="/machines/{{ card.title }}">
-    <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
     <div class="text">
-      <strong>{{ card.title }}</strong>
+      <strong>{{ crate::break_name(&card.title)|safe }}</strong>
 <span class="badges">{% for plugin in card.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}</span>
       {% if !card.also_in.is_empty() %}<span class="note">Also in {{ card.also_in }}</span>{% endif %}
       <ul class="connections{% if !overview.show_mac && !overview.show_ip %} compact{% endif %}">
@@ -17,9 +16,8 @@
   {% else %}
   {% for row in card.rows %}
   <a class="card" href="/devices/{{ row.name }}">
-    <span class="avatar" aria-hidden="true">{{ card.initial }}</span>
     <span class="text">
-      <strong>{{ row.name }}</strong>
+      <strong>{{ crate::break_name(&row.name)|safe }}</strong>
 <span class="badges">{% if row.unreviewed %}<span class="badge new" title="Found by a scan, not reviewed yet">New</span>{% endif %}{% for plugin in row.plugins %} <span class="badge" title="Plugin {{ plugin }} talks to this device">{{ plugin }}</span>{% endfor %}</span>
       {% include "device_meta.html" %}{% if !row.warning.is_empty() %}<span class="note warning">{{ row.warning }}</span>{% endif %}
       {% if !row.note.is_empty() %}<span class="note">{{ row.note }}</span>{% endif %}
