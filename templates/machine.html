@@ -7,36 +7,35 @@
 <p class="error" role="alert">{{ error }}</p>
 {% endif %}
 <p>Each interface has its own MAC address, lease and DNS name, and can be in its own group. Remove keeps the device in the list.</p>
-<table>
-  <thead><tr><th scope="col">Interface</th><th scope="col">Address</th><th scope="col">MAC</th><th scope="col">Group</th><th scope="col"><span class="sr-only">Actions</span></th></tr></thead>
-  <tbody>
-    {% for interface in interfaces %}
-    <tr>
-      <td><a href="/devices/{{ interface.name }}">{{ interface.name }}</a></td>
-      <td>{{ interface.ip }}</td>
-      <td><code>{{ interface.mac }}</code></td>
-      <td>{{ interface.group }}</td>
-      <td><form method="post" action="/machines/{{ name }}/interfaces/{{ interface.name }}/remove" class="inline"><button type="submit" aria-label="Remove {{ interface.name }} from {{ name }}">Remove</button></form></td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
+<ul class="cards">
+  {% for interface in interfaces %}
+  <li class="card">
+    <div class="text">
+      <strong><a href="/devices/{{ interface.name }}">{{ interface.name }}</a></strong>
+      <span class="meta"><span>{{ interface.ip }}</span><code>{{ interface.mac }}</code><span>{{ interface.group }}</span></span>
+    </div>
+    <form method="post" action="/machines/{{ name }}/interfaces/{{ interface.name }}/remove" class="inline"><button type="submit" aria-label="Remove {{ interface.name }} from {{ name }}">Remove</button></form>
+  </li>
+  {% endfor %}
+</ul>
 
 {% if !available.is_empty() %}
-<h2>Add an existing device</h2>
-<form method="post" action="/machines/{{ name }}/interfaces" class="row">
-  <select name="device" aria-label="Device" required>
-    <option value="" selected disabled>Choose a device</option>
-    {% for device in available %}
-    <option value="{{ device.name }}">{{ device.name }}{% if !device.machine.is_empty() %} (in {{ device.machine }}){% endif %}</option>
-    {% endfor %}
-  </select>
-  <button type="submit">Add</button>
+<form method="post" action="/machines/{{ name }}/interfaces" class="panel fields">
+  <h2>Add an existing device</h2>
+  <label>Device
+    <select name="device" required>
+      <option value="" selected disabled>Choose a device</option>
+      {% for device in available %}
+      <option value="{{ device.name }}">{{ device.name }}{% if !device.machine.is_empty() %} (in {{ device.machine }}){% endif %}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="actions"><button type="submit">Add</button></div>
 </form>
 {% endif %}
 
-<h2>Add a new interface</h2>
-<form method="post" action="/devices">
+<form method="post" action="/devices" class="panel fields">
+  <h2>Add a new interface</h2>
   <input type="hidden" name="machine" value="{{ name }}">
   <input type="hidden" name="then" value="machine">
   <label>Name <input name="name" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="{{ name }}-wifi"></label>
@@ -49,13 +48,13 @@
     </select>
   </label>
   <label>IP address <input name="ip" inputmode="decimal" placeholder="optional"></label>
-  <button type="submit">Add interface</button>
+  <div class="actions"><button type="submit">Add</button></div>
 </form>
 
-<h2>Rename</h2>
-<form method="post" action="/machines/{{ name }}">
+<form method="post" action="/machines/{{ name }}" class="panel fields">
+  <h2>Rename</h2>
   <label>Name <input name="new_name" value="{{ name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false"></label>
   <p>The interfaces keep their names and DNS names.</p>
-  <button type="submit">Rename</button>
+  <div class="actions"><button type="submit">Save</button></div>
 </form>
 {% endblock %}

@@ -21,7 +21,7 @@ them. Pi-hole has no rollback; lanlord reports what is missing.</p>
 </form>
 {% endif %}
 {% for target in targets %}
-<section class="plugin-result">
+<section class="panel plugin-result">
   <h2>{{ target.name }} <small>{{ target.title }}</small></h2>
   {% if !target.error.is_empty() %}
   <p class="error" role="alert">{{ target.error }}</p>

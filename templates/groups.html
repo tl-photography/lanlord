@@ -10,12 +10,12 @@
 {% else %}
 <p><small>A network reaches only the internet and the DNS server, and the groups ticked under "Reachable from" may open connections into it. "Also reaches" opens single ports on devices elsewhere, like <code>Server:1883/tcp</code>, separated by commas.</small></p>
 {% for group in groups %}
-<section class="panel group">
-  <header class="group-head">
+<section class="panel">
+  <header class="panel-head">
     <h2>{{ group.title }}{% if group.is_default %} <small>(default)</small>{% endif %}</h2>
     <p>ID <code>{{ group.name }}</code> · VLAN {{ group.vlan }} · {{ group.devices }} device{% if group.devices != 1 %}s{% endif %}</p>
   </header>
-  <form method="post" action="/groups/{{ group.name }}/network" class="group-form">
+  <form method="post" action="/groups/{{ group.name }}/network" class="fields">
     <label>Subnet <input name="subnet" value="{{ group.subnet }}" placeholder="192.168.1.0/24" autocapitalize="off" spellcheck="false"></label>
     <label>Also reaches <input name="reaches" value="{{ group.reaches }}" placeholder="Server:1883/tcp" autocapitalize="off" spellcheck="false"></label>
     <label>Own Wi-Fi <input name="ssid" value="{{ group.ssid }}" maxlength="32" placeholder="optional SSID" spellcheck="false"></label>
@@ -35,30 +35,33 @@
         {% endfor %}
       </span>
     </div>
-    <button type="submit" aria-label="Save {{ group.title }}">Save</button>
+    <div class="actions">
+      <button type="submit" aria-label="Save {{ group.title }}">Save</button>
+      {% if group.devices == 0 %}<button type="submit" form="delete-{{ group.name }}" class="danger" aria-label="Delete {{ group.title }}">Delete</button>{% endif %}
+    </div>
   </form>
-  {% if group.devices == 0 %}
-  <form method="post" action="/groups/{{ group.name }}/delete" class="inline" data-confirm="Delete group {{ group.title }}?"><button type="submit" class="danger">Delete</button></form>
-  {% endif %}
+  {% if group.devices == 0 %}<form method="post" action="/groups/{{ group.name }}/delete" id="delete-{{ group.name }}" data-confirm="Delete group {{ group.title }}?"></form>{% endif %}
 </section>
 {% endfor %}
-<h2>Default group</h2>
-<p>Devices that are not in the list land in this group.</p>
-<form method="post" action="/groups/default" class="row">
-  <select name="group" aria-label="Default group">
-    {% for group in groups %}
-    <option value="{{ group.name }}"{% if group.is_default %} selected{% endif %}>{{ group.title }}</option>
-    {% endfor %}
-  </select>
-  <button type="submit">Save</button>
+<form method="post" action="/groups/default" class="panel fields">
+  <h2>Default group</h2>
+  <p>Devices that are not in the list land in this group.</p>
+  <label>Group
+    <select name="group">
+      {% for group in groups %}
+      <option value="{{ group.name }}"{% if group.is_default %} selected{% endif %}>{{ group.title }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="actions"><button type="submit">Save</button></div>
 </form>
 {% endif %}
-<h2>Add a group</h2>
-<form method="post" action="/groups">
+<form method="post" action="/groups" class="panel fields">
+  <h2>Add a group</h2>
   <label>ID <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="iot"></label>
   <label>VLAN <input name="vlan" value="{{ form.vlan }}" required inputmode="numeric" pattern="[0-9]{1,4}" placeholder="20"></label>
   <label>Subnet <input name="subnet" value="{{ form.subnet }}" placeholder="optional, for example 192.168.20.0/24" autocapitalize="off" spellcheck="false"></label>
   <label>Name <input name="label" value="{{ form.label }}" maxlength="100" placeholder="optional, for example IoT"></label>
-  <button type="submit">Add</button>
+  <div class="actions"><button type="submit">Add</button></div>
 </form>
 {% endblock %}
