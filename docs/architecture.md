@@ -53,9 +53,10 @@ Rules:
 - Plugins never talk to each other. One offers a service to the core, the core passes it to the targets.
 - A plugin can have several roles. The OpenWrt plugin is a source and a target.
 - The core sets the VLAN of an interface through its group. How that reaches the network is up to each target: the
-  OpenWrt plugin per MAC address on the Wi-Fi, an SNMP plugin per switch port.
-- Wi-Fi: one main network puts each device into the VLAN of its group by MAC address. A group can also have an SSID of
-  its own, for devices that cannot use the main one; there the device decides by the password it uses.
+  OpenWrt plugin by a port or the group's own Wi-Fi, an SNMP plugin by a switch port.
+- Wi-Fi: a group can have an SSID of its own, optionally only on the 2.4 GHz radios. A device joins the network of its
+  group by using that SSID.
+- A group opens only what it is told to: which groups may reach it, and which single ports it may reach elsewhere.
 - A plugin instance can be linked to a device in its settings. That gives the plugin the device's address and shows
   it on the device. The plan does not know about it.
 
@@ -67,7 +68,7 @@ Stored, changed by the user, written to the history.
 
 ```text
 Network    dns_service
-Group      name, label, vlan, subnet, ssid
+Group      name, label, vlan, subnet, ssid, ssid_2g_only, reachable_from, reaches
 Interface  device, name, mac, group, address, note, reviewed
 Address    none | lease(ip) | on_device(ip)
 ```
