@@ -125,7 +125,8 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
     let by_mac: HashMap<&str, &Assigned> = entries.iter().map(|entry| (entry.mac.as_str(), entry)).collect();
     for device in &list.interfaces {
         let Some(entry) = by_mac.get(device.mac.as_str()) else {
-            if !device.self_assigned {
+            // Without a fixed address there is nothing the system should have configured.
+            if device.ip.is_some() && !device.self_assigned {
                 findings.push(Finding::Missing {
                     device: device.name.clone(),
                 });

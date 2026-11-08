@@ -223,7 +223,11 @@ impl OpenWrt {
             Err(error) if error.ends_with("not found") || error.ends_with("no data") => json!({}),
             Err(error) => return Err(error),
         };
+        let dhcp = self
+            .call(&session, "uci", "get", &json!({ "config": leases::CONFIG }))
+            .await?;
         let mut observation = observation(&leases, &hosts, &stations);
+        drop_empty_entries(&mut observation, &dhcp);
         match self.wifi_clients(&session).await {
             Ok(clients) => add_wifi(&mut observation, clients),
             // No Wi-Fi hardware, no iwinfo.
@@ -702,6 +706,13 @@ fn sections(data: &Value) -> impl Iterator<Item = &Value> {
         .and_then(Value::as_object)
         .into_iter()
         .flat_map(|values| values.values())
+}
+
+/// An access point that serves no DHCP and has no entries has nothing to compare with the list.
+fn drop_empty_entries(observation: &mut Observation, dhcp: &Value) {
+    if observation.assigned.as_ref().is_some_and(Vec::is_empty) && served_interfaces(dhcp).is_empty() {
+        observation.assigned = None;
+    }
 }
 
 /// The address each MAC holds now, from the DHCP leases.

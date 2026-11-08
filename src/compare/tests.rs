@@ -146,9 +146,6 @@ fn differences_per_device_and_foreign_entries_are_found() {
                 expected: 1,
                 actual: 20,
             },
-            Finding::Missing {
-                device: "plug".to_owned(),
-            },
             Finding::Foreign {
                 mac: "00:00:00:00:00:77".to_owned(),
                 name: "old-tv".to_owned(),
@@ -205,6 +202,20 @@ fn a_device_that_sets_its_address_itself_but_has_a_lease_is_reported() {
         findings,
         [Finding::UnexpectedLease {
             device: "ap".to_owned()
+        }]
+    );
+}
+
+#[test]
+fn only_a_device_with_a_fixed_address_can_miss_its_entry() {
+    let observation = Observation {
+        assigned: Some(vec![]),
+        ..Observation::default()
+    };
+    assert_eq!(
+        compare(&list(), &groups(), &observation),
+        [Finding::Missing {
+            device: "omv".to_owned(),
         }]
     );
 }

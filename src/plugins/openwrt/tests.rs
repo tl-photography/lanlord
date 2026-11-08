@@ -644,3 +644,33 @@ fn the_forwarding_table_keeps_learned_addresses() {
     assert_eq!(history.len(), 1);
     assert_eq!(history["lan1"].len(), 1);
 }
+
+#[test]
+fn only_a_device_without_dhcp_and_entries_has_nothing_to_compare() {
+    let serving = json!({ "values": { "lan": { ".type": "dhcp", "interface": "lan" } } });
+    let not_serving = json!({ "values": { "lan": { ".type": "dhcp", "interface": "lan", "ignore": "1" } } });
+    let empty = || Observation {
+        assigned: Some(Vec::new()),
+        ..Observation::default()
+    };
+
+    let mut access_point = empty();
+    drop_empty_entries(&mut access_point, &not_serving);
+    assert_eq!(access_point.assigned, None);
+
+    let mut router = empty();
+    drop_empty_entries(&mut router, &serving);
+    assert_eq!(router.assigned, Some(Vec::new()));
+
+    let mut with_station = Observation {
+        assigned: Some(vec![Assigned {
+            mac: "aa:bb:cc:00:00:01".to_owned(),
+            name: String::new(),
+            ip: None,
+            vlan: Some(20),
+        }]),
+        ..Observation::default()
+    };
+    drop_empty_entries(&mut with_station, &not_serving);
+    assert_eq!(with_station.assigned.map(|entries| entries.len()), Some(1));
+}
