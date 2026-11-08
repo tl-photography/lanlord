@@ -348,6 +348,20 @@ async fn fake_target(fake: FakeUci) -> (String, Arc<std::sync::Mutex<FakeUci>>) 
                     ] }]),
                 "uci" => state.lock().unwrap().answer(method, &params[3]),
                 "luci-rpc" => json!([0, { "dhcp_leases": [] }]),
+                "network.device" => json!([0, { "bridge-members": ["lan1", "phy0-ap0"] }]),
+                "file"
+                    if params[3]["path"]
+                        .as_str()
+                        .unwrap_or_default()
+                        .ends_with("port_no") =>
+                {
+                    json!([0, { "data": "0x1\n" }])
+                }
+                "file" => {
+                    let mut entry = vec![0xaa, 0xbb, 0xcc, 0, 0, 1, 1];
+                    entry.resize(16, 0);
+                    json!([0, { "data": BASE64.encode(entry) }])
+                }
                 _ => json!([3]),
             };
             Json(json!({ "jsonrpc": "2.0", "id": 1, "result": result }))
@@ -673,4 +687,28 @@ fn only_a_device_without_dhcp_and_entries_has_nothing_to_compare() {
     };
     drop_empty_entries(&mut with_station, &not_serving);
     assert_eq!(with_station.assigned.map(|entries| entries.len()), Some(1));
+}
+
+#[tokio::test]
+async fn a_scan_remembers_which_device_is_on_which_port() {
+    let data = tempfile::tempdir().unwrap();
+    let (url, _fake) = fake_target(router_with_a_bridge()).await;
+    let router = managing(&url, data.path());
+    let ports = data.path().join("router.ports");
+    std::fs::write(&ports, "lan2 aa:bb:cc:00:00:09\n").unwrap();
+
+    let observation = router.observe().await.unwrap();
+    assert!(
+        !observation
+            .notes
+            .iter()
+            .any(|note| note.starts_with("Ports not read")),
+        "{:?}",
+        observation.notes
+    );
+    assert_eq!(
+        std::fs::read_to_string(&ports).unwrap(),
+        "lan1 aa:bb:cc:00:00:01\nlan2 aa:bb:cc:00:00:09\n",
+        "the new port is added and the old one stays"
+    );
 }
