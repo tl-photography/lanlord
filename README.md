@@ -175,9 +175,8 @@ offers it at the fixed address of the device it is linked to.
 
 ### Own Wi-Fi
 
-The main Wi-Fi puts each device into the VLAN of its group. A group can also have an SSID of its own, for devices that
-cannot use the main one, like ESP8266 devices that fail with fast roaming. Its password is in a file in the data
-directory with mode 0600, named on the Groups page.
+A group can have an SSID of its own, for example for ESP8266 devices that fail with fast roaming. Its password is in a
+file in the data directory with mode 0600, named on the Groups page. Two boxes choose whether it runs on 2.4 GHz, 5 GHz or both.
 
 ### Subnets
 

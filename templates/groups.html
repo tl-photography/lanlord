@@ -24,6 +24,10 @@
           <input form="network-{{ group.name }}" name="ssid" value="{{ group.ssid }}" maxlength="32" aria-label="SSID of {{ group.title }}" placeholder="optional SSID" spellcheck="false">
           <input form="network-{{ group.name }}" name="password_file" value="{{ group.password_file }}" aria-label="Password file of {{ group.title }}" placeholder="iot.wifi" autocapitalize="off" spellcheck="false">
         </span>
+        <span class="row">
+          <label class="switch"><input type="checkbox" form="network-{{ group.name }}" name="band_2g"{% if group.band_2g %} checked{% endif %}> 2.4 GHz</label>
+          <label class="switch"><input type="checkbox" form="network-{{ group.name }}" name="band_5g"{% if group.band_5g %} checked{% endif %}> 5 GHz</label>
+        </span>
       </td>
       <td data-label="Reachable from">
         <span class="checks">

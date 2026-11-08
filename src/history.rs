@@ -169,6 +169,20 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
                         changes.push(format!("{what} {} → {}", optional(before), optional(after)));
                     }
                 }
+                if old.ssid_bands != group.ssid_bands {
+                    let bands = |list: &[String]| {
+                        if list.is_empty() {
+                            "every radio".to_owned()
+                        } else {
+                            list.join(", ")
+                        }
+                    };
+                    changes.push(format!(
+                        "Wi-Fi bands {} → {}",
+                        bands(&old.ssid_bands),
+                        bands(&group.ssid_bands)
+                    ));
+                }
                 if old.reaches != group.reaches {
                     changes.push(format!(
                         "reaches {} → {}",

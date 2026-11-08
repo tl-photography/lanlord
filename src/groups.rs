@@ -43,6 +43,8 @@ struct Source {
 
 struct GroupRow {
     name: String,
+    band_2g: bool,
+    band_5g: bool,
     reaches: String,
     sources: Vec<Source>,
     vlan: u16,
@@ -75,6 +77,8 @@ fn page(state: &AppState, form: GroupForm, error: String) -> Response {
         .iter()
         .map(|group| GroupRow {
             name: group.name.clone(),
+            band_2g: group.ssid_bands.is_empty() || group.ssid_bands.iter().any(|band| band == "2g"),
+            band_5g: group.ssid_bands.is_empty() || group.ssid_bands.iter().any(|band| band == "5g"),
             reaches: group.reaches.join(", "),
             sources: config
                 .groups
@@ -168,6 +172,7 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<GroupForm>) 
         label: form.label.trim().to_owned(),
         ssid: String::new(),
         ssid_password_file: String::new(),
+        ssid_bands: Vec::new(),
         reachable_from: Vec::new(),
         reaches: Vec::new(),
     };
@@ -202,6 +207,19 @@ pub async fn set_network(
             field("password_file")
         };
         file.clone_into(&mut group.ssid_password_file);
+        let bands: Vec<String> = ["2g", "5g"]
+            .into_iter()
+            .filter(|band| form.contains_key(&format!("band_{band}")))
+            .map(str::to_owned)
+            .collect();
+        if !group.ssid.is_empty() && bands.is_empty() {
+            return Err(format!("{}: its Wi-Fi needs at least one band", group.title()));
+        }
+        group.ssid_bands = if bands.len() == 2 || group.ssid.is_empty() {
+            Vec::new()
+        } else {
+            bands
+        };
         group.reaches = field("reaches")
             .split([',', ' '])
             .filter(|reach| !reach.is_empty())

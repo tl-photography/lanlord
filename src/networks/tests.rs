@@ -15,6 +15,7 @@ fn group(name: &str, vlan: u16, subnet: &str, ssid: &str) -> Group {
         } else {
             format!("{name}.wifi")
         },
+        ssid_bands: Vec::new(),
         reachable_from: Vec::new(),
         reaches: Vec::new(),
     }
@@ -512,4 +513,55 @@ fn a_reached_port_must_look_like_a_port() {
     ] {
         assert!(crate::config::parse_reach(bad).is_none(), "{bad}");
     }
+}
+
+#[test]
+fn a_group_can_choose_its_radios() {
+    let mut current = router();
+    current.extend(sections(
+        "wireless",
+        &json!({ "values": {
+            "radio1": { ".type": "wifi-device", ".index": 1, "band": "2g" }
+        } }),
+    ));
+    let mut wanted = wanted_plan();
+    wanted.groups[1].ssid_bands = vec!["2g".to_owned()];
+    let result = plan(&wanted, &current, Role::Router, &passwords(), &BTreeMap::new());
+    assert_eq!(
+        find(&result.changes, "lanlordnet_iot_radio1").get("device"),
+        Some(&Opt::one("radio1"))
+    );
+    assert!(!result.changes.iter().any(|change| matches!(
+        change,
+        Change::Add(section, _) if section.id == "lanlordnet_iot_radio0"
+    )));
+
+    let after = applied(
+        current.clone(),
+        &plan(
+            &wanted_plan(),
+            &current,
+            Role::Router,
+            &passwords(),
+            &BTreeMap::new(),
+        )
+        .changes,
+    );
+    let narrowed = plan(&wanted, &after, Role::Router, &passwords(), &BTreeMap::new());
+    assert!(narrowed.changes.iter().any(|change| matches!(
+        change,
+        Change::Delete { id, .. } if id == "lanlordnet_iot_radio0"
+    )));
+}
+
+#[test]
+fn a_device_without_a_chosen_band_is_explained() {
+    let mut wanted = wanted_plan();
+    wanted.groups[1].ssid_bands = vec!["2g".to_owned()];
+    let result = plan(&wanted, &router(), Role::Router, &passwords(), &BTreeMap::new());
+    assert!(
+        result.notes.contains(&"iot: no radio for its Wi-Fi".to_owned()),
+        "{:?}",
+        result.notes
+    );
 }
