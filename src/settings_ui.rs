@@ -148,10 +148,10 @@ pub async fn dns(State(state): State<AppState>, Form(form): Form<DnsForm>) -> Re
         return server_error(&"settings lock poisoned");
     };
     let service = form.service.trim();
-    let offered = state
-        .devices()
-        .map(|list| state.services(&list))
-        .unwrap_or_default();
+    let offered = match state.devices() {
+        Ok(list) => state.services(&list),
+        Err(_) => Vec::new(),
+    };
     if !service.is_empty()
         && !offered
             .iter()
