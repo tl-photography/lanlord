@@ -47,18 +47,6 @@
   </tbody>
 </table>
 <p><small>A network reaches only the internet and the DNS server, and the groups ticked under "Reachable from" may open connections into it. "Also reaches" opens single ports on devices elsewhere, like <code>Server:1883/tcp</code>, separated by commas.</small></p>
-<h2>DNS</h2>
-<p>All networks use this DNS server. Devices may reach it from every network, and DNS to anywhere else goes to it.</p>
-<form method="post" action="/groups/dns" class="row">
-  <select name="service" aria-label="DNS service">
-    <option value=""{% if dns_service.is_empty() %} selected{% endif %}>The router</option>
-    {% for option in dns_options %}
-    <option value="{{ option.source }}"{% if option.source == dns_service %} selected{% endif %}>{{ option.label }}</option>
-    {% endfor %}
-  </select>
-  <button type="submit">Save</button>
-</form>
-{% if dns_options.is_empty() %}<p><small>A plugin that offers DNS, like Pi-hole, appears here once it is linked to a device with a fixed address.</small></p>{% endif %}
 <h2>Default group</h2>
 <p>Devices that are not in the list land in this group.</p>
 <form method="post" action="/groups/default" class="row">

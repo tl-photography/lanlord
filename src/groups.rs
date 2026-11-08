@@ -28,18 +28,6 @@ pub struct GroupForm {
 /// Prefix of the checkbox fields for the groups a group is reachable from.
 const FROM: &str = "from_";
 
-/// Field of the form for the DNS service.
-#[derive(Debug, Deserialize)]
-pub struct DnsForm {
-    service: String,
-}
-
-/// A DNS service to choose.
-struct DnsOption {
-    source: String,
-    label: String,
-}
-
 /// Field of the form for the default group.
 #[derive(Debug, Deserialize)]
 pub struct DefaultForm {
@@ -71,8 +59,6 @@ struct GroupRow {
 struct GroupsPage {
     nav: &'static str,
     groups: Vec<GroupRow>,
-    dns_options: Vec<DnsOption>,
-    dns_service: String,
     form: GroupForm,
     error: String,
 }
@@ -83,15 +69,6 @@ fn page(state: &AppState, form: GroupForm, error: String) -> Response {
         Ok(list) => list,
         Err(error) => return server_error(&error),
     };
-    let dns_options = state
-        .services(&list)
-        .into_iter()
-        .filter(|service| service.kind == "dns")
-        .map(|service| DnsOption {
-            label: format!("{} ({})", service.source, service.address),
-            source: service.source,
-        })
-        .collect();
     let devices = list.interfaces;
     let groups = config
         .groups
@@ -126,8 +103,6 @@ fn page(state: &AppState, form: GroupForm, error: String) -> Response {
     let page = GroupsPage {
         nav: "groups",
         groups,
-        dns_options,
-        dns_service: config.dns_service.clone(),
         form,
         error,
     };
@@ -265,26 +240,6 @@ pub async fn delete(State(state): State<AppState>, Path(name): Path<String>) -> 
 pub async fn set_default(State(state): State<AppState>, Form(form): Form<DefaultForm>) -> Response {
     change(&state, GroupForm::default(), |config, _| {
         config.default_group = form.group;
-        Ok(())
-    })
-}
-
-/// Chooses the DNS service of all networks; empty is the router.
-pub async fn set_dns(State(state): State<AppState>, Form(form): Form<DnsForm>) -> Response {
-    let offered = state
-        .devices()
-        .map(|list| state.services(&list))
-        .unwrap_or_default();
-    change(&state, GroupForm::default(), |config, _| {
-        let service = form.service.trim();
-        if !service.is_empty()
-            && !offered
-                .iter()
-                .any(|offer| offer.kind == "dns" && offer.source == service)
-        {
-            return Err(format!("{service} offers no DNS service"));
-        }
-        service.clone_into(&mut config.dns_service);
         Ok(())
     })
 }

@@ -270,7 +270,7 @@ pub fn app(state: AppState) -> Router {
         )
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
-        .route("/groups/dns", axum::routing::post(groups::set_dns))
+        .route("/settings/dns", axum::routing::post(settings_ui::dns))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/groups/{name}/network", axum::routing::post(groups::set_network))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))

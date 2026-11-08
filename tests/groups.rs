@@ -130,7 +130,7 @@ async fn a_linked_dns_plugin_can_serve_all_networks() {
         ),
     )
     .unwrap();
-    let request = Request::get("/groups").body(Body::empty()).unwrap();
+    let request = Request::get("/settings").body(Body::empty()).unwrap();
     let response = app(&data).oneshot(request).await.unwrap();
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let page = String::from_utf8(body.to_vec()).unwrap();
@@ -140,7 +140,7 @@ async fn a_linked_dns_plugin_can_serve_all_networks() {
     );
 
     assert_eq!(
-        post(&data, "/groups/dns", "service=filter").await.0,
+        post(&data, "/settings/dns", "service=filter").await.0,
         StatusCode::SEE_OTHER
     );
     assert!(
@@ -148,11 +148,11 @@ async fn a_linked_dns_plugin_can_serve_all_networks() {
         "{}",
         groups_file(&data)
     );
-    let (status, page) = post(&data, "/groups/dns", "service=other").await;
+    let (status, page) = post(&data, "/settings/dns", "service=other").await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(page.contains("other offers no DNS service"), "{page}");
     assert_eq!(
-        post(&data, "/groups/dns", "service=").await.0,
+        post(&data, "/settings/dns", "service=").await.0,
         StatusCode::SEE_OTHER
     );
     assert!(!groups_file(&data).contains("dns_service"));

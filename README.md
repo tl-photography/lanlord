@@ -166,7 +166,7 @@ The ACL then also needs `network`, `firewall` and `wireless` in `read.uci` and `
 
 ### DNS
 
-On the Groups page: the DNS server of all networks, the router or a plugin that offers DNS, like Pi-hole. A plugin
+On the Settings page: the DNS server of all networks, the router or a plugin that offers DNS, like Pi-hole. A plugin
 offers it at the fixed address of the device it is linked to.
 
 ### Own Wi-Fi
