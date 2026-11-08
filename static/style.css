@@ -223,6 +223,13 @@ button.secondary { background: transparent; color: var(--text); border-color: va
 .switch input { flex: none; width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--accent); }
 .checks { display: grid; gap: 0.4rem; }
 .checks .switch { white-space: nowrap; }
+.checks-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; }
+.group-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.25rem 1rem; margin-bottom: 0.9rem; }
+.group-form { grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); max-width: none; align-items: start; }
+.group-form > button { grid-column: 1 / -1; }
+.group form.inline { display: block; margin-top: 0.6rem; }
+.field { display: grid; gap: 0.4rem; }
+.field-label { font-weight: 600; }
 .panel { padding: 1.25rem; border: 1px solid var(--border); border-radius: 0.8rem; background: var(--surface); box-shadow: var(--shadow); }
 .panel + .panel { margin-top: 1rem; }
 .panel h2 { margin: 0; }

@@ -221,11 +221,22 @@ async fn one_save_keeps_the_subnet_and_the_wifi_of_a_group() {
     let response = app(&data).oneshot(request).await.unwrap();
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let page = String::from_utf8(body.to_vec()).unwrap();
-    assert_eq!(
-        page.matches(r#"form="network-guest""#).count(),
-        7,
-        "every field of the row is in its form: {page}"
-    );
+    let form = page
+        .split(r#"action="/groups/guest/network""#)
+        .nth(1)
+        .and_then(|rest| rest.split("</form>").next())
+        .unwrap();
+    for field in [
+        "subnet",
+        "reaches",
+        "ssid",
+        "password_file",
+        "band_2g",
+        "band_5g",
+        "from_lan",
+    ] {
+        assert!(form.contains(&format!(r#"name="{field}""#)), "{field}: {form}");
+    }
 }
 
 #[tokio::test]
