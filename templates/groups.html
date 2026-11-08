@@ -15,6 +15,8 @@
     <h2>{{ group.title }}{% if group.is_default %} <small>(default)</small>{% endif %}</h2>
     <p>ID <code>{{ group.name }}</code> · VLAN {{ group.vlan }} · {{ group.devices }} device{% if group.devices != 1 %}s{% endif %}</p>
   </header>
+  <details class="plugin-config"{% if !error.is_empty() %} open{% endif %}>
+    <summary>Settings</summary>
   <form method="post" action="/groups/{{ group.name }}/network" class="fields">
     <label>Subnet <input name="subnet" value="{{ group.subnet }}" placeholder="192.168.1.0/24" autocapitalize="off" spellcheck="false"></label>
     <label>Also reaches <input name="reaches" value="{{ group.reaches }}" placeholder="Server:1883/tcp" autocapitalize="off" spellcheck="false"></label>
@@ -42,6 +44,7 @@
     </div>
   </form>
   {% if group.devices == 0 %}<form method="post" action="/groups/{{ group.name }}/delete" id="delete-{{ group.name }}" data-confirm="Delete group {{ group.title }}?"></form>{% endif %}
+  </details>
 </section>
 {% endfor %}
 <form method="post" action="/groups/default" class="panel fields">
