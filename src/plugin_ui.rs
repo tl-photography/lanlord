@@ -492,7 +492,7 @@ fn finding_text(finding: &Finding) -> String {
         }
         Finding::Missing { device } => format!("{device} has no entry"),
         Finding::UnexpectedLease { device } => format!(
-            "{device} should set its address itself but has a DHCP lease. Change where its address comes from"
+            "{device} should set its address itself but has a DHCP lease. Change where its IP address comes from"
         ),
         Finding::WrongName { device, actual } => format!("{device} is named {actual}"),
         Finding::WrongIp {

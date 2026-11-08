@@ -139,3 +139,20 @@ if (pendingBadge && !document.querySelector('nav a[href="/apply"][aria-current]'
     })
     .catch(() => {});
 }
+
+// The log is in UTC; the page shows the time of the browser.
+document.querySelectorAll("time[datetime]").forEach((element) => {
+  const time = new Date(element.dateTime.replace(" ", "T"));
+  if (!Number.isNaN(time.getTime())) element.textContent = time.toLocaleString("sv-SE");
+});
+
+// Where the address comes from only matters with an address.
+const address = document.querySelector('input[name="ip"]');
+const addressSource = document.querySelector('select[name="self_assigned"]');
+if (address && addressSource) {
+  const update = () => {
+    addressSource.disabled = address.value.trim() === "";
+  };
+  address.addEventListener("input", update);
+  update();
+}
