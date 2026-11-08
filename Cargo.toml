@@ -1,6 +1,6 @@
 [package]
 name = "lanlord"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 rust-version = "1.99"
 description = "Device list for a small OpenWrt network"
