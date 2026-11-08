@@ -112,3 +112,180 @@ async fn unused_groups_can_be_deleted_down_to_none() {
     assert!(!file.contains("[[group]]"), "{file}");
     assert!(file.contains("default_group = \"\""), "{file}");
 }
+
+#[tokio::test]
+async fn a_linked_dns_plugin_can_serve_all_networks() {
+    let data = setup().await;
+    std::fs::write(
+        data.path().join("devices.toml"),
+        "[[device]]\nname = \"dnsbox\"\nmac = \"00:00:00:00:00:35\"\ngroup = \"lan\"\nip = \"192.0.2.53\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        data.path().join("lanlord.toml"),
+        format!(
+            "[[plugin]]\ntype = \"pihole\"\nname = \"filter\"\nenabled = true\nurl = \"https://pi.hole\"\n\
+             device = \"dnsbox\"\npassword_file = \"pihole.password\"\ncertificate = \"{}\"\n",
+            "00".repeat(32)
+        ),
+    )
+    .unwrap();
+    let request = Request::get("/settings").body(Body::empty()).unwrap();
+    let response = app(&data).oneshot(request).await.unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let page = String::from_utf8(body.to_vec()).unwrap();
+    assert!(
+        page.contains(r#"<option value="filter">filter (192.0.2.53)</option>"#),
+        "{page}"
+    );
+
+    assert_eq!(
+        post(&data, "/settings/dns", "service=filter").await.0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(
+        groups_file(&data).contains("dns_service = \"filter\""),
+        "{}",
+        groups_file(&data)
+    );
+    let (status, page) = post(&data, "/settings/dns", "service=other").await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(page.contains("other offers no DNS service"), "{page}");
+    assert_eq!(
+        post(&data, "/settings/dns", "service=").await.0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("dns_service"));
+}
+
+#[tokio::test]
+async fn a_group_gets_its_own_wifi_with_a_password_file() {
+    let data = setup().await;
+    let form = "ssid=Home+IoT&password_file=iot.wifi";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let file = groups_file(&data);
+    assert!(
+        file.contains("ssid = \"Home IoT\"\nssid_password_file = \"iot.wifi\""),
+        "{file}"
+    );
+
+    let (status, page) = post(
+        &data,
+        "/groups/guest/network",
+        "ssid=Home+IoT&password_file=..%2Fsecret",
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        page.contains("needs a password file in the data directory"),
+        "{page}"
+    );
+    let long = "x".repeat(33);
+    let (status, _) = post(
+        &data,
+        "/groups/guest/network",
+        &format!("ssid={long}&password_file=iot.wifi"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    assert_eq!(
+        post(&data, "/groups/guest/network", "ssid=&password_file=iot.wifi")
+            .await
+            .0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("ssid"), "{}", groups_file(&data));
+}
+
+#[tokio::test]
+async fn one_save_keeps_the_subnet_and_the_wifi_of_a_group() {
+    let data = setup().await;
+    let form = "subnet=192.0.2.0%2F24&ssid=Things&password_file=iot.wifi";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let file = groups_file(&data);
+    assert!(file.contains("subnet = \"192.0.2.0/24\""), "{file}");
+    assert!(file.contains("ssid = \"Things\""), "{file}");
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(
+        log.contains("Group guest changed: subnet none → 192.0.2.0/24, SSID none → Things, password file none → iot.wifi"),
+        "{log}"
+    );
+    let request = Request::get("/groups").body(Body::empty()).unwrap();
+    let response = app(&data).oneshot(request).await.unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let page = String::from_utf8(body.to_vec()).unwrap();
+    assert_eq!(
+        page.matches(r#"form="network-guest""#).count(),
+        5,
+        "every field of the row is in its form: {page}"
+    );
+}
+
+#[tokio::test]
+async fn a_group_is_reachable_from_the_ticked_groups() {
+    let data = setup().await;
+    let form = "subnet=192.0.2.0%2F24&from_lan=on";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let file = groups_file(&data);
+    assert!(file.contains("reachable_from = [\"lan\"]"), "{file}");
+    let request = Request::get("/groups").body(Body::empty()).unwrap();
+    let response = app(&data).oneshot(request).await.unwrap();
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let page = String::from_utf8(body.to_vec()).unwrap();
+    assert!(page.contains(r#"name="from_lan" checked"#), "{page}");
+    assert_eq!(
+        post(&data, "/groups/guest/network", "subnet=192.0.2.0%2F24")
+            .await
+            .0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("reachable_from"));
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("reachable from none → lan"), "{log}");
+    assert!(log.contains("reachable from lan → none"), "{log}");
+}
+
+#[tokio::test]
+async fn a_group_cannot_be_reachable_from_itself() {
+    let data = setup().await;
+    let form = "from_guest=on";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("reachable_from"));
+}
+
+#[tokio::test]
+async fn a_group_reaches_single_ports() {
+    let data = setup().await;
+    let form = "reaches=Server%3A1883%2Ftcp%2C+Server%3A5683%2Fudp";
+    assert_eq!(
+        post(&data, "/groups/guest/network", form).await.0,
+        StatusCode::SEE_OTHER
+    );
+    let file = groups_file(&data);
+    assert!(file.contains("\"Server:1883/tcp\""), "{file}");
+    assert!(file.contains("\"Server:5683/udp\""), "{file}");
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(
+        log.contains("reaches none → Server:1883/tcp, Server:5683/udp"),
+        "{log}"
+    );
+    let (status, page) = post(&data, "/groups/guest/network", "reaches=Server%3A1883").await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(
+        page.contains("Server:1883 must look like Server:1883/tcp"),
+        "{page}"
+    );
+}

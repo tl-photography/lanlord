@@ -9,7 +9,7 @@
 <p class="notice">No groups yet. Every group is a VLAN; add one for each, for example LAN, IoT and guests.</p>
 {% else %}
 <table>
-  <thead><tr><th>Name</th><th>ID</th><th>VLAN</th><th>Subnet</th><th>Devices</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>ID</th><th>VLAN</th><th>Subnet</th><th>Own Wi-Fi</th><th>Reachable from</th><th>Also reaches</th><th>Devices</th><th></th></tr></thead>
   <tbody>
     {% for group in groups %}
     <tr>
@@ -17,13 +17,27 @@
       <td data-label="ID"><code>{{ group.name }}</code></td>
       <td data-label="VLAN">{{ group.vlan }}</td>
       <td data-label="Subnet">
-        <form method="post" action="/groups/{{ group.name }}/subnet" class="row">
-          <input name="subnet" value="{{ group.subnet }}" aria-label="Subnet of {{ group.title }}" placeholder="192.168.1.0/24" autocapitalize="off" spellcheck="false">
-          <button type="submit" class="secondary" aria-label="Save the subnet of {{ group.title }}">Save</button>
-        </form>
+        <input form="network-{{ group.name }}" name="subnet" value="{{ group.subnet }}" aria-label="Subnet of {{ group.title }}" placeholder="192.168.1.0/24" autocapitalize="off" spellcheck="false">
+      </td>
+      <td data-label="Own Wi-Fi">
+        <span class="row">
+          <input form="network-{{ group.name }}" name="ssid" value="{{ group.ssid }}" maxlength="32" aria-label="SSID of {{ group.title }}" placeholder="optional SSID" spellcheck="false">
+          <input form="network-{{ group.name }}" name="password_file" value="{{ group.password_file }}" aria-label="Password file of {{ group.title }}" placeholder="iot.wifi" autocapitalize="off" spellcheck="false">
+        </span>
+      </td>
+      <td data-label="Reachable from">
+        <span class="checks">
+          {% for source in group.sources %}
+          <label class="switch"><input type="checkbox" form="network-{{ group.name }}" name="from_{{ source.name }}"{% if source.checked %} checked{% endif %}> {{ source.title }}</label>
+          {% endfor %}
+        </span>
+      </td>
+      <td data-label="Also reaches">
+        <input form="network-{{ group.name }}" name="reaches" value="{{ group.reaches }}" aria-label="Ports {{ group.title }} reaches" placeholder="Server:1883/tcp" autocapitalize="off" spellcheck="false">
       </td>
       <td data-label="Devices">{{ group.devices }}</td>
       <td>
+        <form method="post" action="/groups/{{ group.name }}/network" id="network-{{ group.name }}" class="inline"><button type="submit" class="secondary" aria-label="Save {{ group.title }}">Save</button></form>
         {% if group.devices == 0 %}
         <form method="post" action="/groups/{{ group.name }}/delete" class="inline" data-confirm="Delete group {{ group.title }}?"><button type="submit" class="danger">Delete</button></form>
         {% endif %}
@@ -32,6 +46,7 @@
     {% endfor %}
   </tbody>
 </table>
+<p><small>A network reaches only the internet and the DNS server, and the groups ticked under "Reachable from" may open connections into it. "Also reaches" opens single ports on devices elsewhere, like <code>Server:1883/tcp</code>, separated by commas.</small></p>
 <h2>Default group</h2>
 <p>Devices that are not in the list land in this group.</p>
 <form method="post" action="/groups/default" class="row">

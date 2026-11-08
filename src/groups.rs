@@ -1,5 +1,7 @@
 //! Setting up the groups: add, delete and choose the default group.
 
+use std::collections::HashMap;
+
 use askama::Template;
 use axum::Form;
 use axum::extract::{Path, State};
@@ -23,11 +25,8 @@ pub struct GroupForm {
     label: String,
 }
 
-/// Field of the form that sets a subnet.
-#[derive(Debug, Deserialize)]
-pub struct SubnetForm {
-    subnet: String,
-}
+/// Prefix of the checkbox fields for the groups a group is reachable from.
+const FROM: &str = "from_";
 
 /// Field of the form for the default group.
 #[derive(Debug, Deserialize)]
@@ -35,10 +34,21 @@ pub struct DefaultForm {
     group: String,
 }
 
+/// A group another group may be reachable from, and whether it is.
+struct Source {
+    name: String,
+    title: String,
+    checked: bool,
+}
+
 struct GroupRow {
     name: String,
+    reaches: String,
+    sources: Vec<Source>,
     vlan: u16,
     subnet: String,
+    ssid: String,
+    password_file: String,
     title: String,
     devices: usize,
     is_default: bool,
@@ -55,17 +65,31 @@ struct GroupsPage {
 
 fn page(state: &AppState, form: GroupForm, error: String) -> Response {
     let config = state.groups();
-    let devices = match state.devices() {
-        Ok(list) => list.interfaces,
+    let list = match state.devices() {
+        Ok(list) => list,
         Err(error) => return server_error(&error),
     };
+    let devices = list.interfaces;
     let groups = config
         .groups
         .iter()
         .map(|group| GroupRow {
             name: group.name.clone(),
+            reaches: group.reaches.join(", "),
+            sources: config
+                .groups
+                .iter()
+                .filter(|other| other.name != group.name)
+                .map(|other| Source {
+                    name: other.name.clone(),
+                    title: other.title().to_owned(),
+                    checked: group.reachable_from.contains(&other.name),
+                })
+                .collect(),
             vlan: group.vlan,
             subnet: group.subnet.clone(),
+            ssid: group.ssid.clone(),
+            password_file: group.ssid_password_file.clone(),
             title: group.title().to_owned(),
             devices: devices.iter().filter(|device| device.group == group.name).count(),
             is_default: group.name == config.default_group,
@@ -142,6 +166,10 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<GroupForm>) 
         vlan,
         subnet: form.subnet.trim().to_owned(),
         label: form.label.trim().to_owned(),
+        ssid: String::new(),
+        ssid_password_file: String::new(),
+        reachable_from: Vec::new(),
+        reaches: Vec::new(),
     };
     change(&state, form, |config, _| {
         if config.groups.is_empty() {
@@ -152,19 +180,37 @@ pub async fn create(State(state): State<AppState>, Form(form): Form<GroupForm>) 
     })
 }
 
-/// Sets or clears the subnet of a group.
-pub async fn set_subnet(
+/// Sets the subnet of a group, its own Wi-Fi and the groups it is reachable from, all from one form.
+pub async fn set_network(
     State(state): State<AppState>,
     Path(name): Path<String>,
-    Form(form): Form<SubnetForm>,
+    Form(form): Form<HashMap<String, String>>,
 ) -> Response {
+    let field = |key: &str| form.get(key).map_or("", |value| value.trim());
     change(&state, GroupForm::default(), |config, _| {
+        let names = config.group_names();
         let group = config
             .groups
             .iter_mut()
             .find(|group| group.name == name)
             .ok_or_else(|| format!("No such group: {name}"))?;
-        form.subnet.trim().clone_into(&mut group.subnet);
+        field("subnet").clone_into(&mut group.subnet);
+        field("ssid").clone_into(&mut group.ssid);
+        let file = if group.ssid.is_empty() {
+            ""
+        } else {
+            field("password_file")
+        };
+        file.clone_into(&mut group.ssid_password_file);
+        group.reaches = field("reaches")
+            .split([',', ' '])
+            .filter(|reach| !reach.is_empty())
+            .map(str::to_owned)
+            .collect();
+        group.reachable_from = names
+            .into_iter()
+            .filter(|source| *source != name && form.contains_key(&format!("{FROM}{source}")))
+            .collect();
         Ok(())
     })
 }

@@ -143,6 +143,38 @@ you make in lanlord are no such thing, they wait for Apply.
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
 
+### Networks
+
+With "Manage networks" on, the OpenWrt plugin builds a network for every group with a VLAN other than 1. On a router:
+a VLAN on the bridge, an interface with the first address of the group's subnet, a DHCP pool from .100 to .249 with
+the DNS service, and a firewall zone that may reach the internet, DHCP and the DNS service, with DNS to anywhere else
+redirected to it. No IPv6. On an access point, a device without DHCP: the VLAN and an interface without an address. A
+group with its own SSID gets a Wi-Fi network on every radio.
+
+The first network turns the bridge into a VLAN bridge: VLAN 1 untagged on every port, the LAN interface moves to
+`br-lan.1`. Every other section lanlord adds is named `lanlordnet_`. A bridge with VLANs set up outside lanlord is left
+alone. Network changes are applied with a rollback after 60 seconds, so a change that cuts lanlord off undoes itself.
+
+Cabled devices get their VLAN on the bridge port: a port where only one known device was ever seen carries that
+device's VLAN untagged and nothing else, every other port carries VLAN 1 untagged and the other VLANs tagged. The
+plugin keeps every MAC address ever seen per port in `<plugin>.ports` in the data directory, so a device that was quiet
+for a while does not make a shared port look like it had one device.
+
+The ACL then also needs `network`, `firewall` and `wireless` in `read.uci` and `write.uci`, `network.device`
+`status` in `read.ubus`, and in `read.file` `/sys/class/net/br-lan/brforward` and
+`/sys/class/net/br-lan/brif/*/port_no`.
+
+### DNS
+
+On the Settings page: the DNS server of all networks, the router or a plugin that offers DNS, like Pi-hole. A plugin
+offers it at the fixed address of the device it is linked to.
+
+### Own Wi-Fi
+
+The main Wi-Fi puts each device into the VLAN of its group. A group can also have an SSID of its own, for devices that
+cannot use the main one, like ESP8266 devices that fail with fast roaming. Its password is in a file in the data
+directory with mode 0600, named on the Groups page.
+
 ### Subnets
 
 Every group can have a subnet on the Groups page. A device with a fixed address outside it gets a warning on its card

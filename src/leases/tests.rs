@@ -55,7 +55,7 @@ fn section_ids_are_uci_names() {
 fn an_unnamed_entry_is_taken_over() {
     let devices = list(vec![device("OMV", "00:00:00:00:00:01", Some([192, 0, 2, 2]))]);
     let hosts = [host("cfg01", "OMV", &["00:00:00:00:00:01"], "192.0.2.2")];
-    let plan = plan(&devices, &hosts, &[LAN]);
+    let plan = plan(&devices, &hosts, &[LAN], &HashMap::new());
     assert_eq!(plan.changes.len(), 2);
     assert_eq!(plan.changes[0].commands(), ["uci delete dhcp.cfg01"]);
     assert_eq!(
@@ -75,7 +75,7 @@ fn an_unnamed_entry_is_taken_over() {
 fn own_sections_only_change_what_differs() {
     let devices = list(vec![device("OMV", "00:00:00:00:00:01", Some([192, 0, 2, 3]))]);
     let hosts = [host("lanlord_omv", "OMV", &["00:00:00:00:00:01"], "192.0.2.2")];
-    let plan = plan(&devices, &hosts, &[LAN]);
+    let plan = plan(&devices, &hosts, &[LAN], &HashMap::new());
     assert_eq!(plan.changes.len(), 1);
     assert_eq!(
         plan.changes[0].commands(),
@@ -84,7 +84,10 @@ fn own_sections_only_change_what_differs() {
     assert_eq!(plan.changes[0].description(), "OMV: change ip");
 
     let same = list(vec![device("OMV", "00:00:00:00:00:01", Some([192, 0, 2, 2]))]);
-    assert_eq!(super::plan(&same, &hosts, &[LAN]), LeasePlan::default());
+    assert_eq!(
+        super::plan(&same, &hosts, &[LAN], &HashMap::new()),
+        LeasePlan::default()
+    );
 }
 
 #[test]
@@ -98,7 +101,7 @@ fn devices_outside_the_served_networks_wait() {
         host("cfg02", "plug", &["00:00:00:00:00:02"], "192.0.2.20"),
         host("lanlord_plug", "plug", &["00:00:00:00:00:02"], "192.0.2.20"),
     ];
-    let plan = plan(&devices, &hosts, &[LAN]);
+    let plan = plan(&devices, &hosts, &[LAN], &HashMap::new());
     assert_eq!(plan.changes, []);
     assert!(plan.notes[0].starts_with("plug waits"));
 }
@@ -111,7 +114,7 @@ fn leases_of_removed_devices_and_devices_without_address_go() {
         host("lanlord_old", "old", &["00:00:00:00:00:09"], "192.0.2.90"),
         host("cfg09", "foreign", &["00:00:00:00:00:08"], "192.0.2.80"),
     ];
-    let plan = plan(&devices, &hosts, &[LAN]);
+    let plan = plan(&devices, &hosts, &[LAN], &HashMap::new());
     let commands: Vec<String> = plan.changes.iter().flat_map(Change::commands).collect();
     assert_eq!(
         commands,
@@ -135,7 +138,7 @@ fn shared_entries_and_taken_addresses_are_left_out() {
         ),
         host("cfg02", "printer", &["00:00:00:00:00:06"], "192.0.2.11"),
     ];
-    let plan = plan(&devices, &hosts, &[LAN]);
+    let plan = plan(&devices, &hosts, &[LAN], &HashMap::new());
     assert_eq!(plan.changes, []);
     assert!(plan.notes[0].contains("entry cfg01 holds several"));
     assert!(plan.notes[1].contains("address of entry printer (cfg02)"));
@@ -148,7 +151,7 @@ fn a_mac_moved_to_another_device_is_fixed_with_that_device() {
         device("old", "00:00:00:00:00:02", Some([192, 0, 2, 11])),
     ]);
     let hosts = [host("lanlord_old", "old", &["00:00:00:00:00:01"], "192.0.2.11")];
-    let plan = plan(&devices, &hosts, &[LAN]);
+    let plan = plan(&devices, &hosts, &[LAN], &HashMap::new());
     let commands: Vec<String> = plan.changes.iter().flat_map(Change::commands).collect();
     assert_eq!(commands[0], "uci set dhcp.lanlord_new=host");
     assert!(commands.contains(&"uci set dhcp.lanlord_old.mac='00:00:00:00:00:02'".to_owned()));
@@ -157,18 +160,24 @@ fn a_mac_moved_to_another_device_is_fixed_with_that_device() {
 #[test]
 fn the_digest_follows_the_changes() {
     let devices = list(vec![device("OMV", "00:00:00:00:00:01", Some([192, 0, 2, 2]))]);
-    let first = plan(&devices, &[], &[LAN]);
+    let first = plan(&devices, &[], &[LAN], &HashMap::new());
     assert_eq!(first.digest().len(), 32);
-    assert_eq!(first.digest(), plan(&devices, &[], &[LAN]).digest());
+    assert_eq!(
+        first.digest(),
+        plan(&devices, &[], &[LAN], &HashMap::new()).digest()
+    );
     let other = list(vec![device("OMV", "00:00:00:00:00:01", Some([192, 0, 2, 3]))]);
-    assert_ne!(first.digest(), plan(&other, &[], &[LAN]).digest());
+    assert_ne!(
+        first.digest(),
+        plan(&other, &[], &[LAN], &HashMap::new()).digest()
+    );
 }
 
 #[test]
 fn a_renamed_device_gets_a_warning() {
     let devices = list(vec![device("New", "00:00:00:00:00:01", Some([192, 0, 2, 2]))]);
     let hosts = [host("lanlord_old", "Old", &["00:00:00:00:00:01"], "192.0.2.2")];
-    let plan = plan(&devices, &hosts, &[LAN]);
+    let plan = plan(&devices, &hosts, &[LAN], &HashMap::new());
     let commands: Vec<String> = plan.changes.iter().flat_map(Change::commands).collect();
     assert!(
         commands.contains(&"uci delete dhcp.lanlord_old".to_owned()),
@@ -203,7 +212,7 @@ fn a_device_that_sets_its_address_itself_gets_no_lease() {
         interfaces: vec![router],
     };
     let networks = [LAN];
-    let plan = plan(&list, &[], &networks);
+    let plan = plan(&list, &[], &networks, &HashMap::new());
     assert!(plan.changes.is_empty(), "{:?}", plan.changes);
 }
 
@@ -251,4 +260,37 @@ fn a_name_outside_the_served_networks_waits_and_stays() {
     let mut plan = LeasePlan::default();
     plan_names(&list(vec![router]), &[name], &[LAN], &mut plan);
     assert!(plan.changes.is_empty(), "{:?}", plan.changes);
+}
+
+const IOT: Network = Network {
+    address: Ipv4Addr::new(198, 51, 100, 1),
+    prefix: 24,
+};
+
+#[test]
+fn a_device_still_in_another_network_keeps_a_lease_there() {
+    let devices = list(vec![device("Plug", "00:00:00:00:00:09", Some([198, 51, 100, 9]))]);
+    let seen = HashMap::from([("00:00:00:00:00:09".to_owned(), Ipv4Addr::new(192, 0, 2, 9))]);
+    let waiting = plan(&devices, &[], &[LAN, IOT], &seen);
+    assert_eq!(
+        waiting.changes[0].commands().last().map(String::as_str),
+        Some("uci set dhcp.lanlord_plug.dns='1'")
+    );
+    assert!(
+        waiting.changes[0]
+            .commands()
+            .contains(&"uci set dhcp.lanlord_plug.ip='192.0.2.9'".to_owned())
+    );
+    assert_eq!(
+        waiting.notes,
+        ["Plug waits at 192.0.2.9: it gets 198.51.100.9 once it is in that network"]
+    );
+    let moved = HashMap::from([("00:00:00:00:00:09".to_owned(), Ipv4Addr::new(198, 51, 100, 150))]);
+    let there = plan(&devices, &[], &[LAN, IOT], &moved);
+    assert!(
+        there.changes[0]
+            .commands()
+            .contains(&"uci set dhcp.lanlord_plug.ip='198.51.100.9'".to_owned())
+    );
+    assert_eq!(there.notes, Vec::<String>::new());
 }

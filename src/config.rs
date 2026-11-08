@@ -24,6 +24,42 @@ pub struct Group {
     /// Text shown in the interface.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
+    /// A Wi-Fi network of its own, for devices that cannot use the main one; empty for none.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ssid: String,
+    /// File in the data directory with the password of `ssid`.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub ssid_password_file: String,
+    /// Groups whose devices may open connections into this group, like `lan` for a smart home server.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reachable_from: Vec<String>,
+    /// Single ports in other groups its devices may open, like `Server:1883/tcp`: a device name, a port and a protocol.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reaches: Vec<String>,
+}
+
+/// One port a group may reach on a device in another group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reach {
+    /// Device or interface name.
+    pub device: String,
+    /// Port, 1 to 65535.
+    pub port: u16,
+    /// `tcp` or `udp`.
+    pub proto: String,
+}
+
+/// Reads `Server:1883/tcp`.
+#[must_use]
+pub fn parse_reach(text: &str) -> Option<Reach> {
+    let (device, rest) = text.split_once(':')?;
+    let (port, proto) = rest.split_once('/')?;
+    let port: u16 = port.parse().ok().filter(|port| *port > 0)?;
+    (is_valid_name(device) && matches!(proto, "tcp" | "udp")).then(|| Reach {
+        device: device.to_owned(),
+        port,
+        proto: proto.to_owned(),
+    })
 }
 
 /// Reads `192.0.2.0/24`.
@@ -38,6 +74,15 @@ pub fn parse_subnet(text: &str) -> Option<Network> {
 }
 
 impl Group {
+    /// The ports it may reach, skipping any that do not parse.
+    #[must_use]
+    pub fn reaches(&self) -> Vec<Reach> {
+        self.reaches
+            .iter()
+            .filter_map(|reach| parse_reach(reach))
+            .collect()
+    }
+
     /// The network, if one is set.
     #[must_use]
     pub fn network(&self) -> Option<Network> {
@@ -70,6 +115,9 @@ pub struct Config {
     /// Group for devices that are not in the list; empty while there are no groups.
     #[serde(default)]
     pub default_group: String,
+    /// The plugin whose DNS service all networks use; empty for the router.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub dns_service: String,
     /// All groups.
     #[serde(default, rename = "group")]
     pub groups: Vec<Group>,
@@ -129,6 +177,20 @@ impl Config {
                     group.name
                 )));
             }
+            if !(group.ssid.is_empty() || (1..=32).contains(&group.ssid.len()))
+                || group.ssid.chars().any(char::is_control)
+            {
+                return Err(Error::Invalid(format!(
+                    "{}: the SSID must be 1 to 32 bytes",
+                    group.name
+                )));
+            }
+            if !group.ssid.is_empty() && !crate::plugins::is_data_file(&group.ssid_password_file) {
+                return Err(Error::Invalid(format!(
+                    "{}: the SSID needs a password file in the data directory",
+                    group.name
+                )));
+            }
             if !(1..=4094).contains(&group.vlan) {
                 return Err(Error::Invalid(format!("{}: VLAN must be 1 to 4094", group.name)));
             }
@@ -140,6 +202,22 @@ impl Config {
                     "{}: duplicate VLAN {}",
                     group.name, group.vlan
                 )));
+            }
+        }
+        for group in &self.groups {
+            if let Some(bad) = group.reaches.iter().find(|reach| parse_reach(reach).is_none()) {
+                return Err(Error::Invalid(format!(
+                    "{}: {bad} must look like Server:1883/tcp",
+                    group.name
+                )));
+            }
+            for source in &group.reachable_from {
+                if source == &group.name || !names.contains(source) {
+                    return Err(Error::Invalid(format!(
+                        "{}: cannot be reachable from {source}",
+                        group.name
+                    )));
+                }
             }
         }
         let networks: Vec<(&Group, Network)> = self

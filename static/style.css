@@ -221,6 +221,8 @@ input:focus, select:focus, button:focus, a:focus-visible { outline: 2px solid va
 button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
 .switch { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; }
 .switch input { flex: none; width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--accent); }
+.checks { display: grid; gap: 0.4rem; }
+.checks .switch { white-space: nowrap; }
 .panel { padding: 1.25rem; border: 1px solid var(--border); border-radius: 0.8rem; background: var(--surface); box-shadow: var(--shadow); }
 .panel + .panel { margin-top: 1rem; }
 .panel h2 { margin: 0; }

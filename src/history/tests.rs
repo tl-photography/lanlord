@@ -73,13 +73,19 @@ fn group_changes_are_listed() {
         vlan: 1,
         subnet: String::new(),
         label: String::new(),
+        ssid: String::new(),
+        ssid_password_file: String::new(),
+        reachable_from: Vec::new(),
+        reaches: Vec::new(),
     };
     let before = Config {
         default_group: "lan".to_owned(),
         groups: vec![lan.clone()],
+        ..Config::default()
     };
     let after = Config {
         default_group: "guest".to_owned(),
+        dns_service: "PiHole".to_owned(),
         groups: vec![
             Group {
                 label: "LAN".to_owned(),
@@ -90,18 +96,23 @@ fn group_changes_are_listed() {
                 vlan: 30,
                 subnet: String::new(),
                 label: String::new(),
+                ssid: String::new(),
+                ssid_password_file: String::new(),
+                reachable_from: Vec::new(),
+                reaches: Vec::new(),
             },
         ],
     };
     assert_eq!(
         groups(&before, &after),
         [
-            "Group lan changed: VLAN 1 → 1, label none → LAN",
+            "Group lan changed: label none → LAN",
             "Group guest added: VLAN 30",
+            "DNS service router → PiHole",
             "Default group lan → guest",
         ]
     );
-    assert_eq!(groups(&after, &Config::default()).len(), 3);
+    assert_eq!(groups(&after, &Config::default()).len(), 4);
 }
 
 #[test]

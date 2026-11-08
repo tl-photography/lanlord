@@ -1,4 +1,4 @@
-//! The settings page: what the overview shows and the background scan.
+//! The settings page: what the overview shows, the background scan and the DNS service of all networks.
 
 use std::collections::HashMap;
 
@@ -21,7 +21,15 @@ struct SettingsPage {
     scan: ScanSettings,
     /// One line about the last background scan.
     last_scan: String,
+    dns_options: Vec<DnsOption>,
+    dns_service: String,
     error: String,
+}
+
+/// A DNS service to choose.
+struct DnsOption {
+    source: String,
+    label: String,
 }
 
 fn page(state: &AppState, status: StatusCode, error: String) -> Response {
@@ -29,6 +37,17 @@ fn page(state: &AppState, status: StatusCode, error: String) -> Response {
         Ok(settings) => (settings, error),
         Err(problem) => (Settings::default(), problem.to_string()),
     };
+    let dns_options = state
+        .devices()
+        .map(|list| state.services(&list))
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|service| service.kind == "dns")
+        .map(|service| DnsOption {
+            label: format!("{} ({})", service.source, service.address),
+            source: service.source,
+        })
+        .collect();
     let page = SettingsPage {
         nav: "settings",
         overview: settings.overview,
@@ -39,6 +58,8 @@ fn page(state: &AppState, status: StatusCode, error: String) -> Response {
             .lock()
             .map(|watch| watch.last.clone())
             .unwrap_or_default(),
+        dns_options,
+        dns_service: state.groups().dns_service,
         error,
     };
     match page.render() {
@@ -113,6 +134,49 @@ pub async fn save(State(state): State<AppState>, Form(form): Form<SettingsForm>)
             )]
         },
     )
+}
+
+/// Field of the form for the DNS service.
+#[derive(Debug, Deserialize)]
+pub struct DnsForm {
+    service: String,
+}
+
+/// Chooses the DNS service of all networks; empty is the router.
+pub async fn dns(State(state): State<AppState>, Form(form): Form<DnsForm>) -> Response {
+    let Ok(guard) = state.inner.write_lock.lock() else {
+        return server_error(&"settings lock poisoned");
+    };
+    let service = form.service.trim();
+    let offered = match state.devices() {
+        Ok(list) => state.services(&list),
+        Err(_) => Vec::new(),
+    };
+    if !service.is_empty()
+        && !offered
+            .iter()
+            .any(|offer| offer.kind == "dns" && offer.source == service)
+    {
+        drop(guard);
+        return page(
+            &state,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            format!("{service} offers no DNS service"),
+        );
+    }
+    let before = state.groups();
+    let mut config = before.clone();
+    service.clone_into(&mut config.dns_service);
+    match config.save(&state.inner.groups_path) {
+        Ok(()) => {
+            history::record(&state.inner.history_path, &history::groups(&before, &config));
+            if let Ok(mut groups) = state.inner.groups.write() {
+                *groups = config;
+            }
+            Redirect::to("/settings").into_response()
+        }
+        Err(error) => server_error(&error),
+    }
 }
 
 /// Sets the interval and the restore option of the background scan.

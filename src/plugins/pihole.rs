@@ -45,7 +45,7 @@ pub(super) const TYPE: PluginType = PluginType {
         Field {
             key: "device",
             label: "Device (optional, its fixed address is used when the address is empty)",
-            kind: FieldKind::Interface,
+            kind: FieldKind::Device,
             placeholder: "",
             optional: true,
         },
@@ -581,6 +581,10 @@ fn observation(devices: &Value) -> Observation {
 impl Plugin for PiHole {
     fn name(&self) -> &str {
         &self.name
+    }
+
+    fn offers(&self) -> &'static [&'static str] {
+        &["dns"]
     }
 
     fn kind(&self) -> &'static str {

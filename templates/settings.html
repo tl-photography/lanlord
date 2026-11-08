@@ -20,4 +20,18 @@
   <button type="submit">Save</button>
   {% if !last_scan.is_empty() %}<p>Last scan: {{ last_scan }}</p>{% endif %}
 </form>
+<form method="post" action="/settings/dns" class="panel">
+  <h2>DNS</h2>
+  <p>All networks use this DNS server. Devices may reach it from every network, and DNS to anywhere else goes to it.</p>
+  <label>DNS server
+    <select name="service">
+      <option value=""{% if dns_service.is_empty() %} selected{% endif %}>The router</option>
+      {% for option in dns_options %}
+      <option value="{{ option.source }}"{% if option.source == dns_service %} selected{% endif %}>{{ option.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <button type="submit">Save</button>
+  {% if dns_options.is_empty() %}<p><small>A plugin that offers DNS, like Pi-hole, appears here once it is linked to a device with a fixed address.</small></p>{% endif %}
+</form>
 {% endblock %}
