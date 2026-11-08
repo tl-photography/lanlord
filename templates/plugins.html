@@ -38,11 +38,14 @@
 <label class="plugin-search">Search <input id="plugin-search" type="search" autocomplete="off"></label>
 <div class="plugin-list">
   {% for plugin in plugins %}
+  {% if !plugin.heading.is_empty() %}<h2 class="plugin-group">{{ plugin.heading }}</h2>{% endif %}
   <section class="panel plugin-entry" data-search="{{ plugin.search }}">
     <div class="panel-head">
       <h2>{{ plugin.name }}</h2>
-      <span class="badge">{{ plugin.title }}</span>
-      {% if !plugin.device.is_empty() %}<span class="badge linked" title="Linked to device {{ plugin.device }}">{{ plugin.device }}</span>{% endif %}
+      <span class="badges">
+        <span class="badge">{{ plugin.title }}</span>
+        {% if !plugin.device.is_empty() %}<span class="badge linked" title="Linked to device {{ plugin.device }}">{{ plugin.device }}</span>{% endif %}
+      </span>
       <form class="plugin-toggle" method="post" action="/plugins/{{ plugin.name }}/enabled">
         <label class="switch"><input type="checkbox" name="enabled" value="true"{% if plugin.enabled %} checked{% endif %}> Enabled</label>
         <noscript><button type="submit">Save</button></noscript>

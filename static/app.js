@@ -110,6 +110,14 @@ for (const form of document.querySelectorAll(".plugin-toggle")) {
   form.querySelector('input[name="enabled"]')?.addEventListener("change", () => form.requestSubmit());
 }
 
+for (const ssid of document.querySelectorAll('input[name="ssid"]')) {
+  ssid.addEventListener("input", () => {
+    const empty = ssid.value.trim() === "";
+    for (const band of ssid.form.querySelectorAll('input[name^="band_"]')) band.disabled = empty;
+    ssid.form.querySelector("[data-bands-hint]").hidden = !empty;
+  });
+}
+
 const pluginSearch = document.querySelector("#plugin-search");
 pluginSearch?.addEventListener("input", () => {
   const query = pluginSearch.value.trim().toLowerCase();

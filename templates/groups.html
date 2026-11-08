@@ -23,9 +23,10 @@
     <div class="field">
       <span class="field-label">Wi-Fi bands</span>
       <span class="checks checks-row">
-        <label class="switch"><input type="checkbox" name="band_2g"{% if group.band_2g %} checked{% endif %}> 2.4 GHz</label>
-        <label class="switch"><input type="checkbox" name="band_5g"{% if group.band_5g %} checked{% endif %}> 5 GHz</label>
+        <label class="switch"><input type="checkbox" name="band_2g"{% if group.band_2g %} checked{% endif %}{% if group.ssid.is_empty() %} disabled{% endif %}> 2.4 GHz</label>
+        <label class="switch"><input type="checkbox" name="band_5g"{% if group.band_5g %} checked{% endif %}{% if group.ssid.is_empty() %} disabled{% endif %}> 5 GHz</label>
       </span>
+      <small data-bands-hint{% if !group.ssid.is_empty() %} hidden{% endif %}>Needs Own Wi-Fi</small>
     </div>
     <div class="field">
       <span class="field-label">Reachable from</span>
