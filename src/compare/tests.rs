@@ -219,3 +219,23 @@ fn only_a_device_with_a_fixed_address_can_miss_its_entry() {
         }]
     );
 }
+
+#[test]
+fn a_partial_observation_only_compares_the_vlan() {
+    let observation = Observation {
+        assigned: Some(vec![
+            entry("00:00:00:00:00:01", "", None, Some(20)),
+            entry("00:00:00:00:00:77", "", None, Some(1)),
+        ]),
+        partial: true,
+        ..Observation::default()
+    };
+    assert_eq!(
+        compare(&list(), &groups(), &observation),
+        [Finding::WrongVlan {
+            device: "omv".to_owned(),
+            expected: 1,
+            actual: 20,
+        }]
+    );
+}

@@ -40,6 +40,7 @@ differences.
 | ------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
 | `openwrt`     | DHCP leases, static leases, Wi-Fi clients and Wi-Fi VLANs per MAC       | static leases, if the device serves DHCP |
 | `pihole`      | the devices in Pi-hole's network table, if switched on                  | client groups per lanlord group          |
+| `snmp`        | the VLAN of the ports of a managed switch, for drift                    | -                                        |
 | `leases-file` | the devices in a dnsmasq lease file in the data directory               | -                                        |
 | `webhook`     | -                                                                       | notifications as JSON to a URL           |
 | `ntfy`        | -                                                                       | notifications to an ntfy topic           |
@@ -97,9 +98,6 @@ certificate, so a self-signed one works without a certificate authority. The fin
 openssl s_client -connect router.lan:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
 ```
 
-Assigning VLANs per Wi-Fi device needs the full `wpad` variant (`wpad-mbedtls` or `wpad-openssl`) on every access
-point; the basic variants cannot.
-
 ### Pi-hole
 
 lanlord uses the REST API of Pi-hole v6. It adds a Pi-hole group for every lanlord group of a device with a fixed
@@ -119,6 +117,12 @@ Pi-hole's certificate:
 ```sh
 openssl s_client -connect pi.hole:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
 ```
+
+### SNMP
+
+For a managed switch: lanlord reads with SNMP v2c which VLAN each port is in, and reports a device on a port of another
+VLAN than its group. Only ports with exactly one device count. It changes nothing on the switch. Put the read
+community in a file in the data directory, mode 0600. SNMP v2c is not encrypted, so limit it to the LAN.
 
 ### Notifications
 
