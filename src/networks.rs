@@ -450,7 +450,8 @@ fn wifi_sections(group: &Group, base: &str, radios: &[String], key: &str) -> Vec
 /// What a device already has around the networks.
 struct Device<'a> {
     bridge: Bridge<'a>,
-    radios: Vec<String>,
+    /// The id and band of each radio.
+    radios: Vec<(String, String)>,
     dns: Option<(Ipv4Addr, String)>,
     /// Ports that lead to one device, with its VLAN.
     access: HashMap<String, u16>,
@@ -491,7 +492,18 @@ fn group_sections<S: BuildHasher>(
     }
     if !group.ssid.is_empty() {
         match passwords.get(&group.name) {
-            Some(key) => wanted.extend(wifi_sections(group, &base, &device.radios, key)),
+            Some(key) => {
+                let radios: Vec<String> = device
+                    .radios
+                    .iter()
+                    .filter(|(_, band)| group.ssid_bands.is_empty() || group.ssid_bands.contains(band))
+                    .map(|(radio, _)| radio.clone())
+                    .collect();
+                if radios.is_empty() {
+                    notes.push(format!("{}: no radio for its Wi-Fi", group.title()));
+                }
+                wanted.extend(wifi_sections(group, &base, &radios, key));
+            }
             None => notes.push(format!(
                 "{}: the password file {} cannot be read, its Wi-Fi is left out",
                 group.title(),
@@ -865,7 +877,7 @@ pub fn plan<S: BuildHasher>(
         radios: current
             .iter()
             .filter(|section| section.config == "wireless" && section.kind == "wifi-device")
-            .map(|section| section.id.clone())
+            .map(|section| (section.id.clone(), section.text("band")))
             .collect(),
         dns: dns_target(plan, current),
         bridge,

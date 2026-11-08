@@ -11,7 +11,7 @@
 {% if form.unreviewed %}
 <p class="notice">A scan found this device. Saving it or moving it marks it as reviewed.</p>
 {% endif %}
-<form method="post" action="{{ action }}">
+<form method="post" action="{{ action }}" class="panel fields">
   <label>Name <input name="name" value="{{ form.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false"></label>
   <label>MAC address <input name="mac" value="{{ form.mac }}" required autocapitalize="off" spellcheck="false" placeholder="aa:bb:cc:dd:ee:ff"></label>
   <label>Group
@@ -34,16 +34,18 @@
   <div class="actions">
     <button type="submit">Save</button>
     {% if has_targets %}<button type="submit" name="then" value="review" class="secondary">Save and review changes</button>{% endif %}
+    {% if !original.is_empty() %}
+    {% if form.machine.is_empty() %}
+    <button type="submit" form="add-interfaces" class="secondary">Add more interfaces</button>
+    {% else %}
+    <a href="/machines/{{ form.machine }}">All interfaces of {{ form.machine }}</a>
+    {% endif %}
+    <button type="submit" form="delete-device" class="danger" aria-label="Delete {{ original }}">Delete</button>
+    {% endif %}
   </div>
 </form>
 {% if !original.is_empty() %}
-<div class="actions">
-  {% if form.machine.is_empty() %}
-  <form method="post" action="/devices/{{ original }}/interfaces" class="inline"><button type="submit">Add more interfaces</button></form>
-  {% else %}
-  <a href="/machines/{{ form.machine }}">All interfaces of {{ form.machine }}</a>
-  {% endif %}
-  <form method="post" action="/devices/{{ original }}/delete" class="inline" data-confirm="Delete {{ original }}?"><button type="submit" class="danger">Delete {{ original }}</button></form>
-</div>
+<form method="post" action="/devices/{{ original }}/interfaces" id="add-interfaces"></form>
+<form method="post" action="/devices/{{ original }}/delete" id="delete-device" data-confirm="Delete {{ original }}?"></form>
 {% endif %}
 {% endblock %}

@@ -18,7 +18,7 @@
 {% else %}
 <div class="plugin-results">
   {% for result in scan_results %}
-  <section class="plugin-result">
+  <section class="panel plugin-result">
     <h3>{{ result.name }} <small>{{ result.title }}</small></h3>
     <p>{{ result.status }}</p>
     {% if !result.error.is_empty() %}<p class="error" role="alert">{{ result.error }}</p>{% endif %}
@@ -38,11 +38,14 @@
 <label class="plugin-search">Search <input id="plugin-search" type="search" autocomplete="off"></label>
 <div class="plugin-list">
   {% for plugin in plugins %}
-  <section class="plugin-entry" data-search="{{ plugin.search }}">
-    <div class="plugin-heading">
+  {% if !plugin.heading.is_empty() %}<h2 class="plugin-group">{{ plugin.heading }}</h2>{% endif %}
+  <section class="panel plugin-entry" data-search="{{ plugin.search }}">
+    <div class="panel-head">
       <h2>{{ plugin.name }}</h2>
-      <span class="badge">{{ plugin.title }}</span>
-      {% if !plugin.device.is_empty() %}<span class="badge linked" title="Linked to device {{ plugin.device }}">{{ plugin.device }}</span>{% endif %}
+      <span class="badges">
+        <span class="badge">{{ plugin.title }}</span>
+        {% if !plugin.device.is_empty() %}<span class="badge linked" title="Linked to device {{ plugin.device }}">{{ plugin.device }}</span>{% endif %}
+      </span>
       <form class="plugin-toggle" method="post" action="/plugins/{{ plugin.name }}/enabled">
         <label class="switch"><input type="checkbox" name="enabled" value="true"{% if plugin.enabled %} checked{% endif %}> Enabled</label>
         <noscript><button type="submit">Save</button></noscript>
@@ -53,7 +56,7 @@
     {% endif %}
     <details class="plugin-config"{% if !plugin.problem.is_empty() %} open{% endif %}>
       <summary>Settings</summary>
-      <form method="post" action="/plugins/{{ plugin.name }}">
+      <form method="post" action="/plugins/{{ plugin.name }}" class="fields">
         <label>Name <input name="new_name" value="{{ plugin.name }}" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false"></label>
         {% for field in plugin.fields %}
         {% if field.is_switch() %}
@@ -69,16 +72,14 @@
         <label>{{ field.label }} <input type="{{ field.input }}" name="{{ field.key }}" value="{{ field.value }}"{% if !field.optional %} required{% endif %} placeholder="{{ field.placeholder }}" autocapitalize="off" spellcheck="false"></label>
         {% endif %}
         {% endfor %}
-        <button type="submit">Save settings</button>
+        <div class="actions">
+          <button type="submit">Save</button>
+          {% if plugin.notifies %}<button type="submit" form="test-{{ plugin.name }}" class="secondary">Send test notification</button>{% endif %}
+          <button type="submit" form="delete-{{ plugin.name }}" class="danger" aria-label="Delete {{ plugin.name }}">Delete</button>
+        </div>
       </form>
-      {% if plugin.notifies %}
-      <form method="post" action="/plugins/{{ plugin.name }}/test" class="inline">
-        <button type="submit">Send test notification</button>
-      </form>
-      {% endif %}
-      <form method="post" action="/plugins/{{ plugin.name }}/delete" class="inline" data-confirm="Delete {{ plugin.name }} and its settings?">
-        <button type="submit" class="danger">Delete {{ plugin.name }}</button>
-      </form>
+      {% if plugin.notifies %}<form method="post" action="/plugins/{{ plugin.name }}/test" id="test-{{ plugin.name }}"></form>{% endif %}
+      <form method="post" action="/plugins/{{ plugin.name }}/delete" id="delete-{{ plugin.name }}" data-confirm="Delete {{ plugin.name }} and its settings?"></form>
     </details>
   </section>
   {% endfor %}
@@ -87,10 +88,10 @@
 
 <h2>Add a plugin</h2>
 {% for plugin_type in types %}
-<details class="plugin-add">
+<details class="panel plugin-add">
   <summary>{{ plugin_type.title }}</summary>
   <p>{{ plugin_type.description }}</p>
-  <form method="post" action="/plugins">
+  <form method="post" action="/plugins" class="fields">
     <input type="hidden" name="type" value="{{ plugin_type.kind }}">
     <label>Name <input name="name" required maxlength="63" pattern="[A-Za-z0-9]([A-Za-z0-9\-]*[A-Za-z0-9])?" autocapitalize="off" spellcheck="false" placeholder="router"></label>
     {% for field in plugin_type.fields %}
@@ -107,7 +108,7 @@
     <label>{{ field.label }} <input type="{{ field.input }}" name="{{ field.key }}"{% if !field.optional %} required{% endif %} placeholder="{{ field.placeholder }}" autocapitalize="off" spellcheck="false"></label>
     {% endif %}
     {% endfor %}
-    <button type="submit">Add</button>
+    <div class="actions"><button type="submit">Add</button></div>
   </form>
 </details>
 {% endfor %}

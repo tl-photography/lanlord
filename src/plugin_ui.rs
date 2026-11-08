@@ -53,6 +53,8 @@ struct PluginRow {
     title: &'static str,
     device: String,
     enabled: bool,
+    /// Set on the first row of the enabled and of the disabled plugins.
+    heading: &'static str,
     search: String,
     fields: Vec<FieldView>,
 }
@@ -162,7 +164,7 @@ fn page_with_message(
         &plugins::data_dir(&state.inner.plugins_path),
     )
     .problems;
-    let rows = settings
+    let mut rows: Vec<PluginRow> = settings
         .plugins
         .iter()
         .zip(problems)
@@ -185,10 +187,18 @@ fn page_with_message(
                     .get("enabled")
                     .and_then(toml::Value::as_bool)
                     .unwrap_or(true),
+                heading: "",
                 fields,
             }
         })
         .collect();
+    rows.sort_by_key(|row| (!row.enabled, row.title, row.name.to_ascii_lowercase()));
+    if let Some(first) = rows.first_mut() {
+        first.heading = if first.enabled { "Enabled" } else { "Disabled" };
+    }
+    if let Some(first) = rows.iter_mut().skip(1).find(|row| !row.enabled) {
+        first.heading = "Disabled";
+    }
     let types = plugins::TYPES
         .iter()
         .map(|plugin_type| TypeView {

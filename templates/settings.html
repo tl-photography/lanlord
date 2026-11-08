@@ -5,22 +5,22 @@
 {% if !error.is_empty() %}
 <p class="error" role="alert">{{ error }}</p>
 {% endif %}
-<form method="post" action="/settings" class="panel">
+<form method="post" action="/settings" class="panel fields">
   <h2>Device overview</h2>
   <p>What the cards on the Devices page show.</p>
   <label class="switch"><input type="checkbox" name="show_mac" value="true"{% if overview.show_mac %} checked{% endif %}> Show MAC addresses</label>
   <label class="switch"><input type="checkbox" name="show_ip" value="true"{% if overview.show_ip %} checked{% endif %}> Show IP addresses</label>
-  <button type="submit">Save</button>
+  <div class="actions"><button type="submit">Save</button></div>
 </form>
-<form method="post" action="/settings/background" class="panel">
+<form method="post" action="/settings/background" class="panel fields">
   <h2>Background scan</h2>
   <p>Scans on its own and tells the notification plugins about new unknown devices and about changes made outside lanlord. Changes you make in lanlord always wait for Apply.</p>
   <label>Every how many minutes (0 = off) <input type="number" name="interval" min="0" max="1440" value="{{ scan.interval_minutes }}"></label>
   <label class="switch"><input type="checkbox" name="restore" value="true"{% if scan.restore %} checked{% endif %}> Restore: undo changes made outside lanlord automatically</label>
-  <button type="submit">Save</button>
+  <div class="actions"><button type="submit">Save</button></div>
   {% if !last_scan.is_empty() %}<p>Last scan: {{ last_scan }}</p>{% endif %}
 </form>
-<form method="post" action="/settings/dns" class="panel">
+<form method="post" action="/settings/dns" class="panel fields">
   <h2>DNS</h2>
   <p>All networks use this DNS server. Devices may reach it from every network, and DNS to anywhere else goes to it.</p>
   <label>DNS server
@@ -31,7 +31,7 @@
       {% endfor %}
     </select>
   </label>
-  <button type="submit">Save</button>
+  <div class="actions"><button type="submit">Save</button></div>
   {% if dns_options.is_empty() %}<p><small>A plugin that offers DNS, like Pi-hole, appears here once it is linked to a device with a fixed address.</small></p>{% endif %}
 </form>
 {% endblock %}

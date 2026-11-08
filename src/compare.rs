@@ -37,6 +37,8 @@ pub struct Observation {
     pub present: Vec<Present>,
     /// What a system has configured for devices; `None` for a plugin that only reports.
     pub assigned: Option<Vec<Assigned>>,
+    /// The entries only cover some devices and only say their VLAN, like the ports of one switch.
+    pub partial: bool,
     /// Remarks of the plugin, for example data it could not read.
     pub notes: Vec<String>,
 }
@@ -126,7 +128,7 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
     for device in &list.interfaces {
         let Some(entry) = by_mac.get(device.mac.as_str()) else {
             // Without a fixed address there is nothing the system should have configured.
-            if device.ip.is_some() && !device.self_assigned {
+            if !observation.partial && device.ip.is_some() && !device.self_assigned {
                 findings.push(Finding::Missing {
                     device: device.name.clone(),
                 });
@@ -134,24 +136,26 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
             continue;
         };
         // Entries without a name, like a Wi-Fi station without a static lease, have no name to compare.
-        if !entry.name.is_empty() && !entry.name.eq_ignore_ascii_case(&device.name) {
+        if !observation.partial && !entry.name.is_empty() && !entry.name.eq_ignore_ascii_case(&device.name) {
             findings.push(Finding::WrongName {
                 device: device.name.clone(),
                 actual: entry.name.clone(),
             });
         }
-        if device.self_assigned {
-            if entry.ip.is_some() {
-                findings.push(Finding::UnexpectedLease {
+        if !observation.partial {
+            if device.self_assigned {
+                if entry.ip.is_some() {
+                    findings.push(Finding::UnexpectedLease {
+                        device: device.name.clone(),
+                    });
+                }
+            } else if entry.ip != device.ip {
+                findings.push(Finding::WrongIp {
                     device: device.name.clone(),
+                    expected: device.ip,
+                    actual: entry.ip,
                 });
             }
-        } else if entry.ip != device.ip {
-            findings.push(Finding::WrongIp {
-                device: device.name.clone(),
-                expected: device.ip,
-                actual: entry.ip,
-            });
         }
         if let (Some(actual), Some(&expected)) = (entry.vlan, vlans.get(device.group.as_str()))
             && actual != expected
@@ -164,7 +168,7 @@ pub fn compare(list: &DeviceList, groups: &[Group], observation: &Observation) -
         }
     }
     for entry in entries {
-        if !known.contains(entry.mac.as_str()) {
+        if !observation.partial && !known.contains(entry.mac.as_str()) {
             findings.push(Finding::Foreign {
                 mac: entry.mac.clone(),
                 name: entry.name.clone(),

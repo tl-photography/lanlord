@@ -570,6 +570,7 @@ fn plan_with_iot() -> Plan {
         label: String::new(),
         ssid: String::new(),
         ssid_password_file: String::new(),
+        ssid_bands: Vec::new(),
         reachable_from: Vec::new(),
         reaches: Vec::new(),
     };

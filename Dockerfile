@@ -12,9 +12,11 @@ COPY templates ./templates
 COPY static ./static
 COPY assets ./assets
 # The registry and target stay in BuildKit caches between builds: only changed crates are compiled again.
+# A cached source layer brings back old file times, so cargo would keep a binary built from other sources: touch first.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
 	--mount=type=cache,target=/src/target,sharing=locked \
-	cargo auditable build --profile "${PROFILE}" --locked \
+	touch src/main.rs src/lib.rs \
+	&& cargo auditable build --profile "${PROFILE}" --locked \
 	&& cp "target/${PROFILE}/lanlord" /lanlord
 
 FROM scratch

@@ -30,6 +30,9 @@ pub struct Group {
     /// File in the data directory with the password of `ssid`.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ssid_password_file: String,
+    /// The bands of its own Wi-Fi, `2g` and `5g`; empty for every radio.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ssid_bands: Vec<String>,
     /// Groups whose devices may open connections into this group, like `lan` for a smart home server.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reachable_from: Vec<String>,
@@ -188,6 +191,16 @@ impl Config {
             if !group.ssid.is_empty() && !crate::plugins::is_data_file(&group.ssid_password_file) {
                 return Err(Error::Invalid(format!(
                     "{}: the SSID needs a password file in the data directory",
+                    group.name
+                )));
+            }
+            if group
+                .ssid_bands
+                .iter()
+                .any(|band| !matches!(band.as_str(), "2g" | "5g"))
+            {
+                return Err(Error::Invalid(format!(
+                    "{}: the bands must be 2g or 5g",
                     group.name
                 )));
             }

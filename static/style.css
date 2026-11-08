@@ -140,14 +140,12 @@ code { font-size: 0.9em; }
 }
 .move-options button:hover { border-color: var(--border); background: var(--field); }
 .plugin-search { max-width: 32rem; margin-bottom: 1rem; }
-.plugin-entry { padding: 1rem 0; border-top: 1px solid var(--border); }
+.plugin-group { margin: 1rem 0 0.5rem; font-size: 1rem; color: var(--muted); }
 .plugin-entry h2 { margin: 0; font-size: 1.15rem; }
-.plugin-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
 .plugin-toggle { display: flex; align-items: center; gap: 0.4rem; }
 .plugin-toggle input { width: auto; }
 .plugin-config { margin-top: 0.8rem; }
 .scan-plugins { margin: 0 0 1rem; }
-.plugin-result { padding: 0.8rem 0; border-top: 1px solid var(--border); }
 .plugin-result h3 { margin: 0; }
 .plugin-result p { margin: 0.25rem 0; }
 .changes li, .notes li { margin: 0.3rem 0; }
@@ -174,8 +172,6 @@ form > button { justify-self: start; }
 .login form > button { justify-self: stretch; }
 form.inline { display: inline; }
 form.inline button { padding: 0.25rem 0.75rem; background: transparent; color: var(--text); border-color: var(--border); font-weight: normal; }
-form.inline button.danger { color: var(--error); border-color: var(--error); }
-.plugin-config > form.inline { display: inline-block; margin-top: 0.6rem; }
 form.row { display: flex; gap: 0.5rem; max-width: 32rem; }
 form.row select { flex: 1; }
 label { display: grid; gap: 0.25rem; font-weight: 600; }
@@ -217,16 +213,26 @@ input:focus, select:focus, button:focus, a:focus-visible { outline: 2px solid va
 .history th, .history td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
 .history .time { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .pending { margin-left: 0.3rem; background: var(--accent); color: #fff; }
-.actions { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.actions .danger { margin-left: auto; }
+button.danger { background: transparent; color: var(--error); border-color: var(--error); }
 button.secondary { background: transparent; color: var(--text); border-color: var(--border); }
 .switch { display: flex; align-items: center; gap: 0.5rem; font-weight: normal; }
 .switch input { flex: none; width: 1.1rem; height: 1.1rem; margin: 0; accent-color: var(--accent); }
 .checks { display: grid; gap: 0.4rem; }
 .checks .switch { white-space: nowrap; }
-.panel { padding: 1.25rem; border: 1px solid var(--border); border-radius: 0.8rem; background: var(--surface); box-shadow: var(--shadow); }
-.panel + .panel { margin-top: 1rem; }
+.switch:has(input:disabled) { color: var(--muted); }
+.checks-row { display: flex; flex-wrap: wrap; gap: 0.4rem 1.2rem; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.25rem 0.75rem; margin-bottom: 0.75rem; }
+.panel-head .badges { flex: 1; }
+.fields { grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); gap: 0.75rem; max-width: none; align-items: start; }
+.fields > h2, .fields > p, .fields > small, .fields > .switch, .fields > .actions { grid-column: 1 / -1; }
+.field { display: grid; gap: 0.4rem; }
+.field-label { font-weight: 600; }
+.card form.inline { margin-left: auto; }
+.panel { margin: 0 0 0.75rem; padding: 1rem; border: 1px solid var(--border); border-radius: 0.8rem; background: var(--surface); box-shadow: var(--shadow); }
 .panel h2 { margin: 0; }
-.panel p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.panel p:not(.error):not(.notice) { margin: 0; color: var(--muted); font-size: 0.9rem; }
 .panel h2 + p { margin: -0.6rem 0 0.2rem; }
 .legend { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 1.5rem 0 0; color: var(--muted); font-size: 0.85rem; }
 .back { margin: 0.25rem 0 0; }

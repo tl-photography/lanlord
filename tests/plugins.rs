@@ -58,6 +58,27 @@ async fn plugins_can_be_added_configured_and_toggled() {
 }
 
 #[tokio::test]
+async fn enabled_plugins_come_first_and_are_sorted() {
+    let data = tempfile::tempdir().unwrap();
+    for name in ["aaa", "ccc", "bbb"] {
+        post(
+            &data,
+            "/plugins",
+            &format!("type=leases-file&name={name}&path=dhcp.leases"),
+        )
+        .await;
+    }
+    post(&data, "/plugins/aaa/enabled", "").await;
+
+    let (_, page) = get(&data, "/plugins").await;
+    let position = |text: &str| page.find(text).unwrap();
+    assert!(position(r#"plugin-group">Enabled"#) < position("<h2>bbb</h2>"));
+    assert!(position("<h2>bbb</h2>") < position("<h2>ccc</h2>"));
+    assert!(position("<h2>ccc</h2>") < position(r#"plugin-group">Disabled"#));
+    assert!(position(r#"plugin-group">Disabled"#) < position("<h2>aaa</h2>"));
+}
+
+#[tokio::test]
 async fn page_offers_the_built_in_types() {
     let data = tempfile::tempdir().unwrap();
     let (status, page) = get(&data, "/plugins").await;

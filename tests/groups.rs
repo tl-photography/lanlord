@@ -161,7 +161,7 @@ async fn a_linked_dns_plugin_can_serve_all_networks() {
 #[tokio::test]
 async fn a_group_gets_its_own_wifi_with_a_password_file() {
     let data = setup().await;
-    let form = "ssid=Home+IoT&password_file=iot.wifi";
+    let form = "ssid=Home+IoT&password_file=iot.wifi&band_2g=on";
     assert_eq!(
         post(&data, "/groups/guest/network", form).await.0,
         StatusCode::SEE_OTHER
@@ -175,7 +175,7 @@ async fn a_group_gets_its_own_wifi_with_a_password_file() {
     let (status, page) = post(
         &data,
         "/groups/guest/network",
-        "ssid=Home+IoT&password_file=..%2Fsecret",
+        "ssid=Home+IoT&password_file=..%2Fsecret&band_2g=on",
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -187,7 +187,7 @@ async fn a_group_gets_its_own_wifi_with_a_password_file() {
     let (status, _) = post(
         &data,
         "/groups/guest/network",
-        &format!("ssid={long}&password_file=iot.wifi"),
+        &format!("ssid={long}&password_file=iot.wifi&band_2g=on"),
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -204,7 +204,7 @@ async fn a_group_gets_its_own_wifi_with_a_password_file() {
 #[tokio::test]
 async fn one_save_keeps_the_subnet_and_the_wifi_of_a_group() {
     let data = setup().await;
-    let form = "subnet=192.0.2.0%2F24&ssid=Things&password_file=iot.wifi";
+    let form = "subnet=192.0.2.0%2F24&ssid=Things&password_file=iot.wifi&band_2g=on&band_5g=on";
     assert_eq!(
         post(&data, "/groups/guest/network", form).await.0,
         StatusCode::SEE_OTHER
@@ -221,11 +221,22 @@ async fn one_save_keeps_the_subnet_and_the_wifi_of_a_group() {
     let response = app(&data).oneshot(request).await.unwrap();
     let body = response.into_body().collect().await.unwrap().to_bytes();
     let page = String::from_utf8(body.to_vec()).unwrap();
-    assert_eq!(
-        page.matches(r#"form="network-guest""#).count(),
-        5,
-        "every field of the row is in its form: {page}"
-    );
+    let form = page
+        .split(r#"action="/groups/guest/network""#)
+        .nth(1)
+        .and_then(|rest| rest.split("</form>").next())
+        .unwrap();
+    for field in [
+        "subnet",
+        "reaches",
+        "ssid",
+        "password_file",
+        "band_2g",
+        "band_5g",
+        "from_lan",
+    ] {
+        assert!(form.contains(&format!(r#"name="{field}""#)), "{field}: {form}");
+    }
 }
 
 #[tokio::test]
@@ -288,4 +299,28 @@ async fn a_group_reaches_single_ports() {
         page.contains("Server:1883 must look like Server:1883/tcp"),
         "{page}"
     );
+}
+
+#[tokio::test]
+async fn the_bands_of_a_groups_wifi_are_chosen_with_two_boxes() {
+    let data = setup().await;
+    let wifi = "ssid=Things&password_file=iot.wifi";
+    let save = |boxes: &str| format!("{wifi}{boxes}");
+    assert_eq!(
+        post(&data, "/groups/guest/network", &save("&band_5g=on")).await.0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(groups_file(&data).contains("ssid_bands = [\"5g\"]"));
+    let log = std::fs::read_to_string(data.path().join("history.log")).unwrap();
+    assert!(log.contains("Wi-Fi bands every radio → 5g"), "{log}");
+    assert_eq!(
+        post(&data, "/groups/guest/network", &save("&band_2g=on&band_5g=on"))
+            .await
+            .0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("ssid_bands"));
+    let (status, page) = post(&data, "/groups/guest/network", wifi).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(page.contains("needs at least one band"), "{page}");
 }

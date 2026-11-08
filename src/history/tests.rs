@@ -75,6 +75,7 @@ fn group_changes_are_listed() {
         label: String::new(),
         ssid: String::new(),
         ssid_password_file: String::new(),
+        ssid_bands: Vec::new(),
         reachable_from: Vec::new(),
         reaches: Vec::new(),
     };
@@ -98,6 +99,7 @@ fn group_changes_are_listed() {
                 label: String::new(),
                 ssid: String::new(),
                 ssid_password_file: String::new(),
+                ssid_bands: Vec::new(),
                 reachable_from: Vec::new(),
                 reaches: Vec::new(),
             },

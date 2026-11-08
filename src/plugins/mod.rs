@@ -8,6 +8,7 @@ mod mqtt;
 mod ntfy;
 mod openwrt;
 mod pihole;
+mod snmp;
 pub(crate) mod webhook;
 
 use std::collections::HashSet;
@@ -117,6 +118,7 @@ pub const TYPES: &[PluginType] = &[
     leases_file::TYPE,
     openwrt::TYPE,
     pihole::TYPE,
+    snmp::TYPE,
     webhook::TYPE,
     ntfy::TYPE,
     mqtt::TYPE,
