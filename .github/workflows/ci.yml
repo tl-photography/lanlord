@@ -107,7 +107,7 @@ jobs:
 
       - name: Install clippy-sarif
         if: always()
-        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39
         with:
           tool: clippy-sarif@0.8.0
 
@@ -149,7 +149,7 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b
+        uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39
         with:
           tool: cargo-llvm-cov@0.9.1
 
