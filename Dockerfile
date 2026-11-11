@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # One static binary on an empty base: no shell, no package manager, no libraries.
-FROM rust:1.99.1-alpine3.24@sha256:27cd9befd4a05d6f6eb407c3e28365f5092f008bfc5946207cca76ae5179ef23 AS chef
+FROM rust:1.99.1-alpine3.24@sha256:44819b27be4c97b0e4d7203bd2e02c4820f97700211b6a37fb4c246a2de59383 AS chef
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
 	cargo install cargo-auditable@0.7.7 cargo-chef@0.1.78 --locked
 WORKDIR /src
