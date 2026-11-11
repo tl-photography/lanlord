@@ -23,10 +23,36 @@ Working rules for lanlord. The project will be published: nothing in the repo de
 - Secrets (passwords) live in `0600` files in the data directory, never in `lanlord.toml` or the log.
 - New code comes with tests; network plugins are tested against a small fake server in the test. Unit tests are
   in `src/<module>/tests.rs` (`#[cfg(test)] mod tests;` at the end of the module), so they can test private code;
-  HTTP tests are in `tests/`.
+  HTTP tests are in `tests/`. The rules and coverage targets are in `TESTING.md`.
+
+## Tests
+
+- Shared helpers instead of copies: the HTTP tests use `tests/common/mod.rs` (`app`, `send`, `get`, `post`).
+- Test data sets only the fields a test is about and fills the rest with `..Default::default()`.
+- Several inputs of one function are one test over a table of cases, with the case in the assertion message, not
+  several near-identical tests.
 
 ## Commits
 
 - Small commits, one change each, short imperative subject in sentence case ("Add the login", "Fix ...").
 - Stage files by name, never `git add -A`: other work may be in the same working copy.
 - Commits are signed; the key is set in the repo's git config.
+- Hooks are installed with `pre-commit install` and never skipped (no `--no-verify`, no `SKIP`).
+
+## Pull requests
+
+- One change per pull request, small enough to review at once; a branch from the current `main`.
+- Open it with `gh pr create`, then `gh pr merge <number> --auto --squash`. `main` only takes squash merges of
+  signed commits with a linear history.
+- A branch that conflicts with `main` is rebased onto it, never merged with it, and pushed with
+  `--force-with-lease`. After a squash merge of the base of a stacked branch: `git rebase --onto origin/main <old base>`.
+- The ruleset on `main` needs the CI checks and the code scanning results of CodeQL, clippy and Trivy. A pull
+  request that only changes documentation skips the jobs that produce them: start them with
+  `gh workflow run ci.yml --ref <branch>`.
+- CI runs only the checks a change needs, and on a later push only those its changes touch plus every one that
+  failed; see `CONTRIBUTING.md`.
+
+## Local notes
+
+Notes for one installation (deployment, the network it manages, local tools) are in `AGENTS.local.md` and open work
+in `ToDo.md`. Both are not committed.
