@@ -52,7 +52,7 @@ openssl s_client -connect router.lan:443 </dev/null 2>/dev/null | openssl x509 -
 With "Manage networks" on, the OpenWrt plugin builds a network for every group with a VLAN other than 1. On a router:
 a VLAN on the bridge, an interface with the first address of the group's subnet, a DHCP pool from .100 to .249 with
 the DNS service, and a firewall zone that may reach the internet, DHCP and the DNS service, with DNS to anywhere else
-redirected to it. No IPv6. On an access point, a device without DHCP: the VLAN and an interface without an address. A
+redirected to it. No IPv6: router advertisements and DHCPv6 are off in its DHCP pool. On an access point, a device without DHCP: the VLAN and an interface without an address. A
 group with its own SSID gets a Wi-Fi network on every radio.
 
 The first network turns the bridge into a VLAN bridge: VLAN 1 untagged on every port, the LAN interface moves to

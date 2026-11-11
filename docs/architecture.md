@@ -6,7 +6,8 @@ lanlord manages small, mostly private networks of medium complexity. It keeps on
 the network follow it, from a web page, without playbooks or a laptop. The list says what should be. Scans say what
 is. lanlord shows the difference and closes it when asked.
 
-Not in scope: traffic monitoring, custom firewall rules, presence, showing how devices are connected. A later plugin
+Not in scope: traffic monitoring, custom firewall rules, presence, showing how devices are connected, IPv6 (the
+networks of groups get none; the IPv6 of an existing LAN stays as it is). A later plugin
 may add views such as a device tree, without changing the model.
 
 ## Use cases
