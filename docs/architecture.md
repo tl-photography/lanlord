@@ -54,6 +54,9 @@ Rules:
 - A plugin can have several roles. The OpenWrt plugin is a source and a target.
 - The core sets the VLAN of an interface through its group. How that reaches the network is up to each target: the
   OpenWrt plugin by a port or the group's own Wi-Fi, an SNMP plugin by a switch port.
+- The core works out the network of each group once: whether it is one, the router's address and DHCP pool, its
+  Wi-Fi, where the DNS service is, which groups may reach it and which single ports it may reach. A target only turns
+  that into the configuration of its system.
 - Wi-Fi: a group can have an SSID of its own, optionally only on the 2.4 GHz radios. A device joins the network of its
   group by using that SSID.
 - A group opens only what it is told to: which groups may reach it, and which single ports it may reach elsewhere.
