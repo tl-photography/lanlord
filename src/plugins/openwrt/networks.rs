@@ -1,7 +1,7 @@
-//! Plans the networks of an `OpenWrt` router or access point from the groups: a VLAN on the bridge, an interface, and
-//! on a router a DHCP pool and a firewall zone that reaches only the internet and the DNS service. The groups it is
-//! reachable from may open connections into it, and it may open the single ports it reaches elsewhere. A group with
-//! an SSID of its own also gets a Wi-Fi network on every radio.
+//! Turns the networks the core works out for the groups into uci sections of an `OpenWrt` router or access point: a
+//! VLAN on the bridge, an interface, and on a router a DHCP pool and a firewall zone that reaches only the internet and
+//! the DNS service. The groups it is reachable from may open connections into it, and it may open the single ports it
+//! reaches elsewhere. A group with an SSID of its own also gets a Wi-Fi network on every radio.
 //!
 //! lanlord owns the sections it names `lanlordnet_`. The first network turns the bridge into a VLAN bridge: VLAN 1
 //! stays untagged on every port and the LAN interface moves to `<bridge>.1`. That is the one section outside its own
@@ -14,6 +14,9 @@ use std::net::Ipv4Addr;
 use serde_json::Value;
 
 use crate::config::Group;
+use crate::networks::{
+    LAN_VLAN, POOL_LIMIT, POOL_START, Wifi, access_ports, candidates, dns_service, gateway, netmask, sources,
+};
 use crate::plan::Plan;
 use crate::preview::Step;
 
@@ -21,11 +24,6 @@ use crate::preview::Step;
 pub const PREFIX: &str = "lanlordnet_";
 /// The configurations lanlord reads and changes, in the order changes are made.
 pub const CONFIGS: [&str; 4] = ["network", "dhcp", "firewall", "wireless"];
-/// The VLAN of the LAN, untagged on every port.
-const LAN_VLAN: u16 = 1;
-/// First and last host of a DHCP pool.
-const POOL_START: u32 = 100;
-const POOL_LIMIT: u32 = 150;
 /// Options whose value is a secret and is not shown.
 const SECRETS: [&str; 1] = ["key"];
 
@@ -259,17 +257,6 @@ fn id(name: &str) -> String {
     format!("{PREFIX}{}", name.to_ascii_lowercase().replace('-', "_"))
 }
 
-fn netmask(prefix: u8) -> Ipv4Addr {
-    Ipv4Addr::from(u32::MAX.checked_shl(32 - u32::from(prefix.min(32))).unwrap_or(0))
-}
-
-/// The router's own address in a network: the first host.
-fn router_address(group: &Group) -> Option<(Ipv4Addr, u8)> {
-    let network = group.network()?;
-    let base = u32::from(network.address) & u32::from(netmask(network.prefix));
-    (network.prefix <= 30).then(|| (Ipv4Addr::from(base + 1), network.prefix))
-}
-
 /// The firewall zone a group gets: its name, which must not be one the device already uses.
 fn zone_name(group: &Group) -> String {
     group.name.to_ascii_lowercase().replace('-', "_")
@@ -327,7 +314,7 @@ fn router_sections(
     device: &str,
     dns: Option<&(Ipv4Addr, String)>,
 ) -> Option<Vec<Section>> {
-    let (address, prefix) = router_address(group)?;
+    let (address, prefix) = gateway(group)?;
     let zone = zone_name(group);
     let (dns_address, dns_zone) = dns.cloned().unwrap_or((address, String::new()));
     let both = Opt::list(&["tcp", "udp"]);
@@ -417,7 +404,7 @@ fn router_sections(
 }
 
 /// The Wi-Fi network of a group on every radio.
-fn wifi_sections(group: &Group, base: &str, radios: &[String], key: &str) -> Vec<Section> {
+fn wifi_sections(wifi: &Wifi<'_>, base: &str, radios: &[String]) -> Vec<Section> {
     radios
         .iter()
         .map(|radio| {
@@ -429,9 +416,9 @@ fn wifi_sections(group: &Group, base: &str, radios: &[String], key: &str) -> Vec
                     ("device", Opt::one(radio)),
                     ("mode", Opt::one("ap")),
                     ("network", Opt::one(base)),
-                    ("ssid", Opt::one(&group.ssid)),
+                    ("ssid", Opt::one(wifi.ssid)),
                     ("encryption", Opt::one("psk2")),
-                    ("key", Opt::one(key)),
+                    ("key", Opt::one(wifi.key)),
                 ],
             )
         })
@@ -445,7 +432,7 @@ struct Device<'a> {
     radios: Vec<(String, String)>,
     dns: Option<(Ipv4Addr, String)>,
     /// Ports that lead to one device, with its VLAN.
-    access: HashMap<String, u16>,
+    access: BTreeMap<String, u16>,
 }
 
 /// The sections a group needs on this device.
@@ -481,26 +468,17 @@ fn group_sections<S: BuildHasher>(
             wanted.extend(router_sections(group, &base, &interface, device.dns.as_ref()).unwrap_or_default());
         }
     }
-    if !group.ssid.is_empty() {
-        match passwords.get(&group.name) {
-            Some(key) => {
-                let radios: Vec<String> = device
-                    .radios
-                    .iter()
-                    .filter(|(_, band)| group.ssid_bands.is_empty() || group.ssid_bands.contains(band))
-                    .map(|(radio, _)| radio.clone())
-                    .collect();
-                if radios.is_empty() {
-                    notes.push(format!("{}: no radio for its Wi-Fi", group.title()));
-                }
-                wanted.extend(wifi_sections(group, &base, &radios, key));
-            }
-            None => notes.push(format!(
-                "{}: the password file {} cannot be read, its Wi-Fi is left out",
-                group.title(),
-                group.ssid_password_file
-            )),
+    if let Some(wifi) = crate::networks::wifi(group, passwords, notes) {
+        let radios: Vec<String> = device
+            .radios
+            .iter()
+            .filter(|(_, band)| wifi.on(band))
+            .map(|(radio, _)| radio.clone())
+            .collect();
+        if radios.is_empty() {
+            notes.push(format!("{}: no radio for its Wi-Fi", group.title()));
         }
+        wanted.extend(wifi_sections(&wifi, &base, &radios));
     }
     wanted
 }
@@ -526,10 +504,7 @@ fn reach_sections(
 ) -> Vec<Section> {
     let mut wanted = Vec::new();
     for group in built {
-        for source in &group.reachable_from {
-            let Some(from) = plan.groups.iter().find(|other| &other.name == source) else {
-                continue;
-            };
+        for from in sources(plan, group) {
             let Some(zone) = zone_here(from, built, current) else {
                 notes.push(format!(
                     "{}: {} is not a network yet and cannot reach it",
@@ -560,92 +535,58 @@ fn port_sections(
 ) -> Vec<Section> {
     let src = zone_name(group);
     let mut wanted = Vec::new();
-    for reach in group.reaches() {
-        let targets: Vec<_> = plan
-            .devices
-            .interfaces
-            .iter()
-            .filter(|interface| {
-                interface.name.eq_ignore_ascii_case(&reach.device)
-                    || interface.device.eq_ignore_ascii_case(&reach.device)
-            })
-            .filter_map(|interface| Some((interface, interface.ip?)))
-            .collect();
-        if targets.is_empty() {
+    for port in crate::networks::ports(plan, group, notes) {
+        let Some(dest) = port.group.and_then(|other| zone_here(other, built, current)) else {
             notes.push(format!(
-                "{}: {} has no fixed address, {}/{} is left out",
+                "{}: {} is not in a network yet, {}/{} is left out",
                 group.title(),
-                reach.device,
-                reach.port,
-                reach.proto
+                port.interface.name,
+                port.port,
+                port.proto
             ));
+            continue;
+        };
+        if dest == src {
+            continue;
         }
-        for (interface, ip) in targets {
-            let Some(dest) = plan
-                .groups
-                .iter()
-                .find(|other| other.name == interface.group)
-                .and_then(|other| zone_here(other, built, current))
-            else {
-                notes.push(format!(
-                    "{}: {} is not in a network yet, {}/{} is left out",
-                    group.title(),
-                    interface.name,
-                    reach.port,
-                    reach.proto
-                ));
-                continue;
-            };
-            if dest == src {
-                continue;
-            }
-            wanted.push(Section::new(
-                "firewall",
-                format!(
-                    "{}_to_{}_{}_{}",
-                    id(&group.name),
-                    interface.name.to_ascii_lowercase().replace('-', "_"),
-                    reach.port,
-                    reach.proto
+        wanted.push(Section::new(
+            "firewall",
+            format!(
+                "{}_to_{}_{}_{}",
+                id(&group.name),
+                port.interface.name.to_ascii_lowercase().replace('-', "_"),
+                port.port,
+                port.proto
+            ),
+            "rule",
+            &[
+                (
+                    "name",
+                    Opt::one(format!(
+                        "{src} to {} {}/{}",
+                        port.interface.name, port.port, port.proto
+                    )),
                 ),
-                "rule",
-                &[
-                    (
-                        "name",
-                        Opt::one(format!(
-                            "{src} to {} {}/{}",
-                            interface.name, reach.port, reach.proto
-                        )),
-                    ),
-                    ("src", Opt::one(&src)),
-                    ("dest", Opt::one(dest)),
-                    ("dest_ip", Opt::one(ip.to_string())),
-                    ("dest_port", Opt::one(reach.port.to_string())),
-                    ("proto", Opt::one(&reach.proto)),
-                    ("family", Opt::one("ipv4")),
-                    ("target", Opt::one("ACCEPT")),
-                ],
-            ));
-        }
+                ("src", Opt::one(&src)),
+                ("dest", Opt::one(dest)),
+                ("dest_ip", Opt::one(port.ip.to_string())),
+                ("dest_port", Opt::one(port.port.to_string())),
+                ("proto", Opt::one(&port.proto)),
+                ("family", Opt::one("ipv4")),
+                ("target", Opt::one("ACCEPT")),
+            ],
+        ));
     }
     wanted
 }
 
 /// Where the DNS service is: its address and the firewall zone it is in.
 fn dns_target(plan: &Plan, current: &[Section]) -> Option<(Ipv4Addr, String)> {
-    let address = plan.dns()?;
-    let lan_zone = || zone_of(current, "lan").unwrap_or_else(|| "lan".to_owned());
-    let zone = plan
-        .groups
-        .iter()
-        .find(|group| group.network().is_some_and(|network| network.contains(address)))
-        .map_or_else(lan_zone, |group| {
-            if group.vlan == LAN_VLAN {
-                lan_zone()
-            } else {
-                zone_name(group)
-            }
-        });
+    let (address, group) = dns_service(plan)?;
+    let zone = match group {
+        Some(group) if group.vlan != LAN_VLAN => zone_name(group),
+        _ => zone_of(current, "lan").unwrap_or_else(|| "lan".to_owned()),
+    };
     Some((address, zone))
 }
 
@@ -736,40 +677,9 @@ fn changes(wanted: &[Section], current: &[Section], bridge: &Bridge<'_>, move_la
     changes
 }
 
-/// The ports that lead to exactly one known device, ever: they carry that device's VLAN untagged and nothing else.
-/// Only VLANs in `built` count, so a port never ends up in a network that does not exist.
-fn access_ports(
-    plan: &Plan,
-    bridge: &Bridge<'_>,
-    ports: &BTreeMap<String, BTreeSet<String>>,
-    built: &[u16],
-) -> HashMap<String, u16> {
-    bridge
-        .ports
-        .iter()
-        .filter_map(|port| {
-            let macs = ports.get(port)?;
-            let [mac] = macs.iter().collect::<Vec<_>>()[..] else {
-                return None;
-            };
-            let interface = plan
-                .devices
-                .interfaces
-                .iter()
-                .find(|interface| interface.mac == *mac)?;
-            let vlan = plan
-                .groups
-                .iter()
-                .find(|group| group.name == interface.group)?
-                .vlan;
-            built.contains(&vlan).then(|| (port.clone(), vlan))
-        })
-        .collect()
-}
-
 /// The ports of a VLAN on the bridge: untagged on its access ports, tagged on the shared ones. VLAN 1 is untagged
 /// on every port that is not an access port of another VLAN.
-fn vlan_ports(bridge: &Bridge<'_>, access: &HashMap<String, u16>, vlan: u16) -> Opt {
+fn vlan_ports(bridge: &Bridge<'_>, access: &BTreeMap<String, u16>, vlan: u16) -> Opt {
     Opt::List(
         bridge
             .ports
@@ -795,11 +705,7 @@ pub fn plan<S: BuildHasher>(
     ports: &BTreeMap<String, BTreeSet<String>>,
 ) -> NetworkPlan {
     let mut result = NetworkPlan::default();
-    let networks: Vec<&Group> = plan
-        .groups
-        .iter()
-        .filter(|group| group.vlan != LAN_VLAN)
-        .collect();
+    let networks = candidates(plan);
     let Some(bridge) = bridge(current) else {
         if !networks.is_empty() {
             result
@@ -831,7 +737,7 @@ pub fn plan<S: BuildHasher>(
             if role == Role::AccessPoint {
                 return true;
             }
-            if router_address(group).is_none() {
+            if gateway(group).is_none() {
                 result
                     .notes
                     .push(format!("{} needs a subnet to become a network", group.title()));
@@ -849,7 +755,7 @@ pub fn plan<S: BuildHasher>(
         })
         .collect();
     let vlans: Vec<u16> = built.iter().map(|group| group.vlan).collect();
-    let access = access_ports(plan, &bridge, ports, &vlans);
+    let access = access_ports(plan, &bridge.ports, ports, &vlans);
     let mut wanted = Vec::new();
     if find(current, "network", &format!("{PREFIX}vlan1")).is_some() || !built.is_empty() {
         wanted.push(Section::new(
