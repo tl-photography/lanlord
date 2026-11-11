@@ -20,6 +20,7 @@ mod plugin_ui;
 pub mod plugins;
 pub mod preview;
 mod settings_ui;
+pub mod ssh;
 pub mod watch;
 
 use std::collections::HashMap;

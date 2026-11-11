@@ -11,6 +11,10 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --locked
 ```
 
+Plugins use the libraries the core already has and add no dependency of their own, to keep the attack surface
+small. A new library is proposed in its own issue first: what it is needed for, why no existing one covers it, its
+maintenance, advisories, license and what it pulls in.
+
 Install the hooks once with `pre-commit install`.
 They check formatting and lints, scan for secrets and lint the Dockerfile, the workflows and shell scripts.
 Without a local Rust installation, pre-commit installs the pinned toolchain itself.
