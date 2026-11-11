@@ -36,106 +36,23 @@ differences.
 
 ### Plugins
 
-| Type          | Reports                                                                 | Applies                                  |
-| ------------- | ----------------------------------------------------------------------- | ---------------------------------------- |
-| `openwrt`     | DHCP leases, static leases, Wi-Fi clients and Wi-Fi VLANs per MAC       | static leases, if the device serves DHCP |
-| `pihole`      | the devices in Pi-hole's network table, if switched on                  | client groups per lanlord group          |
-| `snmp`        | the VLAN of the ports of a managed switch, for drift                    | -                                        |
-| `leases-file` | the devices in a dnsmasq lease file in the data directory               | -                                        |
-| `webhook`     | -                                                                       | notifications as JSON to a URL           |
-| `ntfy`        | -                                                                       | notifications to an ntfy topic           |
-| `mqtt`        | -                                                                       | notifications to an MQTT topic           |
-| `email`       | -                                                                       | notifications by mail                    |
+| Type                                               | Reports                                                           | Applies                                  |
+| -------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------- |
+| [`openwrt`](src/plugins/openwrt/README.md)         | DHCP leases, static leases, Wi-Fi clients and Wi-Fi VLANs per MAC | static leases, if the device serves DHCP |
+| [`pihole`](src/plugins/pihole/README.md)           | the devices in Pi-hole's network table, if switched on            | client groups per lanlord group          |
+| [`snmp`](src/plugins/snmp/README.md)               | the VLAN of the ports of a managed switch, for drift              | -                                        |
+| [`leases-file`](src/plugins/leases_file/README.md) | the devices in a dnsmasq lease file in the data directory         | -                                        |
+| [`webhook`](src/plugins/webhook/README.md)         | -                                                                 | notifications as JSON to a URL           |
+| [`ntfy`](src/plugins/ntfy/README.md)               | -                                                                 | notifications to an ntfy topic           |
+| [`mqtt`](src/plugins/mqtt/README.md)               | -                                                                 | notifications to an MQTT topic           |
+| [`email`](src/plugins/email/README.md)             | -                                                                 | notifications by mail                    |
 
 File settings, like password files, are file names in the data directory. Paths outside it are rejected.
 OpenWrt and Pi-hole plugins can be linked to the device they talk to. With a device and no address, lanlord uses
 the device's fixed address. The device card then shows the plugin, Wi-Fi clients name the device as access point,
 and renaming the device updates the plugin.
 
-### OpenWrt
-
-lanlord uses the ubus JSON-RPC API that LuCI uses, as its own rpcd user. An ACL on the device decides what that
-user may read and change, for example in `/usr/share/rpcd/acl.d/lanlord.json`:
-
-```json
-{
-  "lanlord": {
-    "description": "lanlord device list",
-    "read": {
-      "ubus": {
-        "luci-rpc": ["getDHCPLeases"],
-        "network.interface": ["dump"],
-        "uci": ["get"],
-        "iwinfo": ["devices", "assoclist"]
-      },
-      "uci": ["dhcp", "wireless"]
-    },
-    "write": {
-      "ubus": { "uci": ["add", "set", "delete", "apply", "confirm", "rollback", "revert"] },
-      "uci": ["dhcp"]
-    }
-  }
-}
-```
-
-and the user in `/etc/config/rpcd`, with a password hash from `uhttpd -m <password>`:
-
-```text
-config login
-	option username 'lanlord'
-	option password '$1$...'
-	list read 'lanlord'
-	list write 'lanlord'
-```
-
-Without the `write` part, lanlord only reads. An access point that serves no DHCP needs only the `read` part.
-
-The plugin needs the HTTPS address of the device, the user, the name of a file in the data directory with the
-password (mode `0600`) and the SHA-256 fingerprint of the device's certificate. lanlord trusts only that
-certificate, so a self-signed one works without a certificate authority. The fingerprint:
-
-```sh
-openssl s_client -connect router.lan:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
-```
-
-### Pi-hole
-
-lanlord uses the REST API of Pi-hole v6. It adds a Pi-hole group for every lanlord group of a device with a fixed
-address, and a client for that address in `Default` and that group. Blocklists assigned to a group then apply to its
-devices. Clients lanlord adds have the comment `lanlord: <device>`; lanlord changes and removes only those. Groups are
-never deleted, other clients never touched: a device whose address already has another client is listed as left out.
-
-Pi-hole has no rollback: lanlord makes the changes one by one, reads Pi-hole again and reports anything missing.
-
-"Report devices" adds the devices of Pi-hole's network table to a scan. Leave it off when Pi-hole runs in a container
-behind NAT: it then sees no real MAC addresses, only its virtual interfaces.
-
-The plugin needs the HTTPS address, the name of a file in the data directory with an app password (mode `0600`;
-create it in Pi-hole under Settings, Web interface / API, "Configure app password") and the SHA-256 fingerprint of
-Pi-hole's certificate:
-
-```sh
-openssl s_client -connect pi.hole:443 </dev/null 2>/dev/null | openssl x509 -noout -fingerprint -sha256
-```
-
-### SNMP
-
-For a managed switch: lanlord reads with SNMP v2c which VLAN each port is in, and reports a device on a port of another
-VLAN than its group. Only ports with exactly one device count. It changes nothing on the switch. Put the read
-community in a file in the data directory, mode 0600. SNMP v2c is not encrypted, so limit it to the LAN.
-
-### Notifications
-
-Notification plugins send lanlord's messages: `webhook` posts `{"title", "text", "source"}` as JSON to a URL, `ntfy`
-posts to a topic on an ntfy server. Both take an optional token file in the data directory (mode `0600`), sent as
-bearer token; with a token, the address must use `https://` (plain `http://` only to the own host).
-
-`mqtt` publishes the same JSON with QoS 1 to a topic, optionally with a user and password file. With TLS, a broker
-with a self-signed certificate needs its SHA-256 fingerprint. `email` sends through an SMTP server with `starttls`,
-`tls` or `none`, optionally with a user and password file; a password is never sent with `none`.
- Public
-servers are checked against the usual certificate authorities, built into lanlord. Each notification plugin has a
-"Send test notification" button on the Plugins page.
+Each plugin's README, linked in the table, describes its setup and what it needs on the device.
 
 ### Background scan
 
@@ -146,27 +63,6 @@ you make in lanlord are no such thing, they wait for Apply.
 
 With "Restore" on, lanlord undoes changes made outside it through the normal apply, with its rollback and read-back,
 and says so in the history and a notification. It is off by default.
-
-### Networks
-
-With "Manage networks" on, the OpenWrt plugin builds a network for every group with a VLAN other than 1. On a router:
-a VLAN on the bridge, an interface with the first address of the group's subnet, a DHCP pool from .100 to .249 with
-the DNS service, and a firewall zone that may reach the internet, DHCP and the DNS service, with DNS to anywhere else
-redirected to it. No IPv6. On an access point, a device without DHCP: the VLAN and an interface without an address. A
-group with its own SSID gets a Wi-Fi network on every radio.
-
-The first network turns the bridge into a VLAN bridge: VLAN 1 untagged on every port, the LAN interface moves to
-`br-lan.1`. Every other section lanlord adds is named `lanlordnet_`. A bridge with VLANs set up outside lanlord is left
-alone. Network changes are applied with a rollback after 60 seconds, so a change that cuts lanlord off undoes itself.
-
-Cabled devices get their VLAN on the bridge port: a port where only one known device was ever seen carries that
-device's VLAN untagged and nothing else, every other port carries VLAN 1 untagged and the other VLANs tagged. The
-plugin keeps every MAC address ever seen per port in `<plugin>.ports` in the data directory, so a device that was quiet
-for a while does not make a shared port look like it had one device.
-
-The ACL then also needs `network`, `firewall` and `wireless` in `read.uci` and `write.uci`, `network.device`
-`status` in `read.ubus`, and in `read.file` `/sys/class/net/br-lan/brforward` and
-`/sys/class/net/br-lan/brif/*/port_no`.
 
 ### DNS
 
