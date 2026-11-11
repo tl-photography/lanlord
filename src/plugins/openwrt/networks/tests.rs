@@ -136,7 +136,8 @@ fn the_first_network_turns_the_bridge_into_vlans() {
         pool.get("dhcp_option"),
         Some(&Opt::List(vec!["6,192.0.2.53".to_owned()]))
     );
-    assert_eq!(pool.get("dhcpv6"), None, "IPv4 only");
+    assert_eq!(pool.get("dhcpv6"), Some(&Opt::one("disabled")), "IPv4 only");
+    assert_eq!(pool.get("ra"), Some(&Opt::one("disabled")), "IPv4 only");
     let dns = find(changes, "lanlordnet_iot_dns");
     assert_eq!(dns.text("dest"), "lan");
     assert_eq!(dns.text("dest_ip"), "192.0.2.53");

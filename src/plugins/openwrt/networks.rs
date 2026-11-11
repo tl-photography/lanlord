@@ -351,6 +351,9 @@ fn router_sections(
                 ("limit", Opt::one(POOL_LIMIT.to_string())),
                 ("leasetime", Opt::one("12h")),
                 ("dhcpv4", Opt::one("server")),
+                // IPv4 only: no IPv6 router advertisements or DHCPv6 in the network of a group.
+                ("ra", Opt::one("disabled")),
+                ("dhcpv6", Opt::one("disabled")),
                 ("dhcp_option", Opt::List(vec![format!("6,{dns_address}")])),
             ],
         ),
