@@ -23,9 +23,10 @@ use super::{BoxFuture, Field, FieldKind, Plugin, PluginType, settings};
 use crate::compare::{Assigned, Observation, Present};
 use crate::devices::{Error, normalize_mac};
 use crate::leases::{self, Change, HostSection, LeasePlan, NameSection, Network};
-use crate::networks;
 use crate::plan::Plan;
 use crate::preview::Preview;
+
+mod networks;
 
 /// Static leases, DNS names and served networks of a device.
 type LeaseState = (
