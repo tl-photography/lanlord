@@ -53,6 +53,9 @@ Rules:
 - The core never asks which plugin something came from, except to name the source in a message.
 - A new plugin needs no change in the core. If it does, the vocabulary is missing a general concept.
 - Plugins never talk to each other. One offers a service to the core, the core passes it to the targets.
+- The core decides which libraries lanlord uses, to keep the attack surface small. Plugins use what the core offers:
+  HTTP and TLS with a pinned certificate, SSH with a password login and a pinned host key. No plugin brings a library
+  of its own. A plugin may propose a new one in its own issue; it is checked before it is added.
 - A plugin can have several roles. The OpenWrt plugin is a source and a target.
 - The core sets the VLAN of an interface through its group. How that reaches the network is up to each target: the
   OpenWrt plugin by a port or the group's own Wi-Fi, an SNMP plugin by a switch port.
