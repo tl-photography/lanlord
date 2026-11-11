@@ -2,9 +2,11 @@
 
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
+use common::app;
 use std::path::Path;
 
-use axum::Router;
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use http_body_util::BodyExt;
@@ -30,10 +32,6 @@ fn data() -> TempDir {
     std::fs::copy(example, data.path().join("groups.toml")).unwrap();
     std::fs::write(data.path().join("devices.toml"), DEVICES).unwrap();
     data
-}
-
-fn app(data: &TempDir) -> Router {
-    lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap())
 }
 
 fn devices(data: &TempDir) -> String {

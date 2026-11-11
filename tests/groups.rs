@@ -2,16 +2,14 @@
 
 #![allow(clippy::unwrap_used)]
 
-use axum::Router;
+mod common;
+
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
+use common::app;
 use http_body_util::BodyExt;
 use tempfile::TempDir;
 use tower::ServiceExt;
-
-fn app(data: &TempDir) -> Router {
-    lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap())
-}
 
 fn groups_file(data: &TempDir) -> String {
     std::fs::read_to_string(data.path().join("groups.toml")).unwrap_or_default()

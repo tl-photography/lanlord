@@ -2,17 +2,18 @@
 
 #![allow(clippy::unwrap_used)]
 
+mod common;
+
+use common::{post, send};
 use std::os::unix::fs::PermissionsExt;
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
 use axum::body::Body;
-use axum::http::{Request, StatusCode, header};
+use axum::http::{Request, StatusCode};
 use axum::{Json, routing};
-use http_body_util::BodyExt;
 use serde_json::{Map, Value, json};
 use tempfile::TempDir;
-use tower::ServiceExt;
 
 const FINGERPRINT: &str =
     "00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF";
@@ -140,21 +141,6 @@ async fn setup() -> (TempDir, Arc<Mutex<Uci>>, Arc<Mutex<Vec<Value>>>) {
     )
     .unwrap();
     (data, uci, received)
-}
-
-async fn send(app: &Router, request: Request<Body>) -> (StatusCode, String) {
-    let response = app.clone().oneshot(request).await.unwrap();
-    let status = response.status();
-    let body = response.into_body().collect().await.unwrap().to_bytes();
-    (status, String::from_utf8(body.to_vec()).unwrap())
-}
-
-fn post(path: &str, form: &str) -> Request<Body> {
-    Request::post(path)
-        .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
-        .header("sec-fetch-site", "same-origin")
-        .body(Body::from(form.to_owned()))
-        .unwrap()
 }
 
 /// Applies the open changes through the page, as a user would.
