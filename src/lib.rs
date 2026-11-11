@@ -321,7 +321,7 @@ pub fn app(state: AppState) -> Router {
 struct DeviceRow {
     name: String,
     /// Plugins that talk to this device.
-    plugins: Vec<String>,
+    plugins: Vec<plugins::Badge>,
     mac: String,
     ip: String,
     note: String,
@@ -348,7 +348,7 @@ struct CardView {
     group: String,
     rows: Vec<DeviceRow>,
     /// Plugins linked to the machine itself.
-    plugins: Vec<String>,
+    plugins: Vec<plugins::Badge>,
     /// Other groups with connections of the same machine.
     also_in: String,
     move_groups: Vec<MoveGroup>,
@@ -385,7 +385,7 @@ pub(crate) fn server_error(error: &impl std::fmt::Display) -> Response {
 fn device_row(
     device: &devices::Interface,
     group: &config::Group,
-    links: &HashMap<String, Vec<String>>,
+    links: &HashMap<String, Vec<plugins::Badge>>,
 ) -> DeviceRow {
     DeviceRow {
         plugins: links.get(&device.name).cloned().unwrap_or_default(),
@@ -425,7 +425,7 @@ fn group_cards(
     group: &config::Group,
     list: &DeviceList,
     config: &Config,
-    links: &HashMap<String, Vec<String>>,
+    links: &HashMap<String, Vec<plugins::Badge>>,
     move_groups: &[MoveGroup],
 ) -> Vec<CardView> {
     let members: Vec<&devices::Interface> = list
@@ -496,7 +496,7 @@ async fn index(State(state): State<AppState>) -> Response {
     };
     let config = state.groups();
     let settings = plugins::read_settings(&state.inner.plugins_path).unwrap_or_default();
-    let links = plugins::linked_plugins(&settings);
+    let links = plugins::plugin_badges(&settings);
     let move_groups: Vec<MoveGroup> = config
         .groups
         .iter()

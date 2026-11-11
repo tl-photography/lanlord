@@ -123,3 +123,33 @@ async fn a_rename_reaches_plugin_addresses_with_the_old_name() {
         "{page}"
     );
 }
+
+#[tokio::test]
+async fn a_plugin_named_like_its_device_shows_its_type() {
+    let data = tempfile::tempdir().unwrap();
+    std::fs::write(
+        data.path().join("devices.toml"),
+        "[[device]]\nname = \"router\"\nmac = \"00:00:00:00:00:01\"\ngroup = \"lan\"\nip = \"192.0.2.1\"\n",
+    )
+    .unwrap();
+    std::fs::write(
+        data.path().join("groups.toml"),
+        "default_group = \"lan\"\n[[group]]\nname = \"lan\"\nvlan = 1\n",
+    )
+    .unwrap();
+    std::fs::write(
+        data.path().join("lanlord.toml"),
+        format!(
+            "[[plugin]]\ntype = \"openwrt\"\nname = \"router\"\nenabled = true\nurl = \"\"\nuser = \"lanlord\"\n\
+             password_file = \"router.password\"\ncertificate = \"{}\"\ndevice = \"router\"\n",
+            "00".repeat(32)
+        ),
+    )
+    .unwrap();
+    let app = lanlord::app(lanlord::AppState::load_without_login(data.path()).unwrap());
+    let (_, page) = send(&app, get("/")).await;
+    assert!(
+        page.contains(r#"title="Plugin router talks to this device">OpenWrt</span>"#),
+        "{page}"
+    );
+}
