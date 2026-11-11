@@ -7,8 +7,9 @@ the network follow it, from a web page, without playbooks or a laptop. The list 
 is. lanlord shows the difference and closes it when asked.
 
 Not in scope: traffic monitoring, custom firewall rules, presence, showing how devices are connected, IPv6 (the
-networks of groups get none; the IPv6 of an existing LAN stays as it is). A later plugin
-may add views such as a device tree, without changing the model.
+networks of groups get none; the IPv6 of an existing LAN stays as it is), several sites (each site has its own
+lanlord; the sites are joined with a site-to-site VPN). A later plugin may add views such as a device tree, without
+changing the model.
 
 ## Use cases
 
@@ -58,9 +59,11 @@ Rules:
 - The core works out the network of each group once: whether it is one, the router's address and DHCP pool, its
   Wi-Fi, where the DNS service is, which groups may reach it and which single ports it may reach. A target only turns
   that into the configuration of its system.
-- Wi-Fi: a group can have an SSID of its own, optionally only on the 2.4 GHz radios. A device joins the network of its
+- Wi-Fi: a group can have an SSID of its own, on the bands chosen for it. A device joins the network of its
   group by using that SSID.
 - A group opens only what it is told to: which groups may reach it, and which single ports it may reach elsewhere.
+- Facts a plugin cannot observe, such as which device is on which port of a switch it cannot read, are settings of
+  that plugin. They stay plugin-specific and never become part of the plan.
 - A plugin instance can be linked to a device in its settings. That gives the plugin the device's address and shows
   it on the device. The plan does not know about it.
 
