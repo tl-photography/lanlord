@@ -10,11 +10,24 @@ the job. Only the config file and the token file stay on the PC.
   `lanlord_runner`, set again by `run` and `once`).
 - `status` shows the VMs and the registered runners, `clean` deletes them and the firewall table.
 
+## GitHub first, then this PC
+
+The jobs in `ci.yml` and `codeql.yml` run on `${{ vars.RUNNER || 'ubuntu-latest' }}`: GitHub's runners, unless the
+repository variable `RUNNER` names other ones. GitHub cannot give a job to whichever runner is free first, so `run`
+watches the queue instead:
+
+- A job that waits longer than `WAIT` minutes for GitHub's runners: `run` sets `RUNNER` to the first label of this
+  runner, cancels the waiting runs and runs their unfinished jobs again, now here.
+- After `BACK_AFTER` minutes it removes `RUNNER`, so new jobs try GitHub's runners again.
+- When `run` stops, it removes `RUNNER` and gives jobs that wait for this runner back to GitHub's runners.
+
+Publishing a release and the weekly security run stay on GitHub's runners.
+
 ## Setup
 
 1. Install Multipass, jq, curl and nftables: `sudo snap install multipass && sudo apt install jq curl nftables`.
-2. Create a fine-grained token on GitHub for this repository with the permission "Administration: read and write",
-   and save it in a file with mode `0600`.
+2. Create a fine-grained token on GitHub for this repository with read and write access to "Administration",
+   "Actions" and "Variables", and save it in a file with mode `0600`.
 3. Copy [runner.conf.example](runner.conf.example), for example to `~/.config/lanlord-runner/runner.conf`, and set
    `REPO` and `TOKEN_FILE`.
 4. Build the base VM, then take jobs:
@@ -25,8 +38,6 @@ tools/runner/runner.sh run ~/.config/lanlord-runner/runner.conf
 ```
 
 `run` stops with Ctrl-C and deletes the VM of the current job. Run `prepare` again for a newer runner or image.
-
-Jobs only come to these runners if a workflow asks for their labels, for example `runs-on: [self-hosted, lanlord]`.
 
 ## Pull requests from forks
 
