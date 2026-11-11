@@ -32,14 +32,21 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      # The results of the previous push of a pull request.
+      actions: read
     outputs:
-      rust: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.rust == 'true' }}
-      dependencies: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.dependencies == 'true' }}
-      image: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.image == 'true' }}
-      web: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.web == 'true' }}
+      rust: ${{ steps.decide.outputs.rust }}
+      coverage: ${{ steps.decide.outputs.coverage }}
+      dependencies: ${{ steps.decide.outputs.dependencies }}
+      image: ${{ steps.decide.outputs.image }}
+      web: ${{ steps.decide.outputs.web }}
     steps:
+      # The head of a pull request with its history, so the changes since the last push can be listed.
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Decide whether to run everything
         id: full
@@ -51,58 +58,74 @@ jobs:
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
         with:
-          filters: |
-            rust:
-              - 'src/**'
-              - 'tests/**.rs'
-              - 'templates/**'
-              - 'static/**'
-              - 'assets/**'
-              - 'examples/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-              - 'rustfmt.toml'
-              - 'clippy.toml'
-              - '.github/workflows/**'
-            dependencies:
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'deny.toml'
-              - '.github/workflows/**'
-            image:
-              - 'src/**'
-              - 'templates/**'
-              - 'static/**'
-              - 'assets/**'
-              - 'examples/**'
-              - 'Cargo.toml'
-              - 'Cargo.lock'
-              - 'rust-toolchain.toml'
-              - 'Dockerfile'
-              - '.dockerignore'
-              - '.hadolint.yaml'
-              - 'tests/container.sh'
-              - '.zap/**'
-              - '.github/workflows/**'
-            # The web interface: pages, assets and the code that serves them.
-            web:
-              - 'templates/**'
-              - 'static/**'
-              - 'assets/**'
-              - 'src/lib.rs'
-              - 'src/auth.rs'
-              - 'src/auth/**'
-              - 'src/origin.rs'
-              - 'src/*_ui.rs'
-              - 'src/edit.rs'
-              - 'src/groups.rs'
-              - 'src/machines.rs'
-              - 'src/apply.rs'
-              - 'Cargo.lock'
-              - 'Dockerfile'
-              - '.zap/**'
-              - '.github/workflows/**'
+          filters: .github/path-filters.yml
+
+      # A later push to a pull request skips a check whose area it does not touch and that passed on the push before.
+      # A check that failed always runs again: a skipped check counts as passed.
+      - name: List the areas changed since the last push
+        id: delta
+        if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
+        continue-on-error: true
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+        with:
+          token: ''
+          base: ${{ github.event.before }}
+          filters: .github/path-filters.yml
+
+      - name: Read the results of the last push
+        id: previous
+        if: steps.delta.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          run=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$BEFORE&event=pull_request&status=completed" \
+            --jq '.workflow_runs[0].id // empty')
+          if [ -n "$run" ]; then
+            gh api "repos/$REPO/actions/runs/$run/jobs?per_page=100" --jq '.jobs[] | "\(.name)=\(.conclusion)"' > previous.txt
+          fi
+          passed() { grep -qxE "$1=(success|skipped)" previous.txt 2>/dev/null && echo true || echo false; }
+          {
+            echo "rust=$(passed 'Format, lint and test')"
+            echo "coverage=$(passed 'Test coverage')"
+            echo "dependencies=$(passed 'Check dependencies \(advisories, licenses, sources\)')"
+            echo "image=$(passed 'Build, smoke-test and scan the image')"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Decide which checks run
+        id: decide
+        env:
+          FULL: ${{ steps.full.outputs.all }}
+          DELTA: ${{ steps.previous.outcome }}
+          AREA_RUST: ${{ steps.filter.outputs.rust }}
+          AREA_DEPENDENCIES: ${{ steps.filter.outputs.dependencies }}
+          AREA_IMAGE: ${{ steps.filter.outputs.image }}
+          AREA_WEB: ${{ steps.filter.outputs.web }}
+          NEW_RUST: ${{ steps.delta.outputs.rust }}
+          NEW_DEPENDENCIES: ${{ steps.delta.outputs.dependencies }}
+          NEW_IMAGE: ${{ steps.delta.outputs.image }}
+          NEW_WEB: ${{ steps.delta.outputs.web }}
+          PASSED_RUST: ${{ steps.previous.outputs.rust }}
+          PASSED_COVERAGE: ${{ steps.previous.outputs.coverage }}
+          PASSED_DEPENDENCIES: ${{ steps.previous.outputs.dependencies }}
+          PASSED_IMAGE: ${{ steps.previous.outputs.image }}
+        run: |
+          # needed <area in the pull request> <area changed since the last push> <passed on the last push>
+          needed() {
+            if [ "$FULL" = true ]; then echo true
+            elif [ "$1" != true ]; then echo false
+            elif [ "$DELTA" = success ] && [ "$2" = false ] && [ "$3" = true ]; then echo false
+            else echo true
+            fi
+          }
+          {
+            echo "rust=$(needed "$AREA_RUST" "$NEW_RUST" "$PASSED_RUST")"
+            echo "coverage=$(needed "$AREA_RUST" "$NEW_RUST" "$PASSED_COVERAGE")"
+            echo "dependencies=$(needed "$AREA_DEPENDENCIES" "$NEW_DEPENDENCIES" "$PASSED_DEPENDENCIES")"
+            echo "image=$(needed "$AREA_IMAGE" "$NEW_IMAGE" "$PASSED_IMAGE")"
+            echo "web=$(needed "$AREA_WEB" "$NEW_WEB" "$PASSED_IMAGE")"
+          } | tee -a "$GITHUB_OUTPUT"
 
   rust:
     name: Format, lint and test
@@ -156,7 +179,7 @@ jobs:
   coverage:
     name: Test coverage
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: needs.changes.outputs.coverage == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
