@@ -38,7 +38,6 @@ Working rules for lanlord. The project will be published: nothing in the repo de
 - Stage files by name, never `git add -A`: other work may be in the same working copy.
 - Commits are signed; the key is set in the repo's git config.
 - Hooks are installed with `pre-commit install` and never skipped (no `--no-verify`, no `SKIP`).
-- No lines naming an AI or a tool as author (`Co-Authored-By`, "Generated with") in commits, pull requests or files.
 
 ## Pull requests
 
