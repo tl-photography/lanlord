@@ -407,8 +407,7 @@ fn the_lan_reaches_a_network_it_is_allowed_into() {
     assert_eq!(into_guest.get("src"), Some(&Opt::one("iot")));
     assert!(
         result
-            .preview()
-            .steps
+            .steps()
             .iter()
             .any(|step| step.description == "lan may reach iot: new")
     );
@@ -491,8 +490,7 @@ fn a_network_reaches_single_ports_of_a_server() {
     );
     assert!(
         result
-            .preview()
-            .steps
+            .steps()
             .iter()
             .any(|step| step.description == "firewall iot to Server 1883/tcp: new")
     );

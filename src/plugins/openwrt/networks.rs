@@ -15,7 +15,7 @@ use serde_json::Value;
 
 use crate::config::Group;
 use crate::plan::Plan;
-use crate::preview::{Preview, Step};
+use crate::preview::Step;
 
 /// Prefix of the sections lanlord owns.
 pub const PREFIX: &str = "lanlordnet_";
@@ -251,15 +251,6 @@ impl NetworkPlan {
                 details: change.commands(),
             })
             .collect()
-    }
-
-    /// The plan as a preview of its own.
-    #[must_use]
-    pub fn preview(&self) -> Preview {
-        Preview {
-            steps: self.steps(),
-            notes: self.notes.clone(),
-        }
     }
 }
 
