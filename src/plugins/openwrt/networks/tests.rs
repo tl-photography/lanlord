@@ -488,18 +488,19 @@ fn a_network_reaches_single_ports_of_a_server() {
 
 #[test]
 fn a_reached_port_must_look_like_a_port() {
-    assert_eq!(
-        crate::config::parse_reach("Server:1883/tcp").map(|reach| reach.port),
-        Some(1883)
-    );
-    for bad in [
-        "Server:0/tcp",
-        "Server:1883",
-        "Server:1883/icmp",
-        ":1883/tcp",
-        "Server:99999/udp",
+    for (text, port) in [
+        ("Server:1883/tcp", Some(1883)),
+        ("Server:0/tcp", None),
+        ("Server:1883", None),
+        ("Server:1883/icmp", None),
+        (":1883/tcp", None),
+        ("Server:99999/udp", None),
     ] {
-        assert!(crate::config::parse_reach(bad).is_none(), "{bad}");
+        assert_eq!(
+            crate::config::parse_reach(text).map(|reach| reach.port),
+            port,
+            "{text}"
+        );
     }
 }
 
