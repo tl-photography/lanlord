@@ -440,6 +440,38 @@ pub fn linked_plugins(settings: &Settings) -> std::collections::HashMap<String, 
     links
 }
 
+/// A plugin linked to a device, as its badge on the device shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Badge {
+    /// Name of the plugin instance.
+    pub name: String,
+    /// Text of the badge: the plugin's name, or its type when the plugin has the device's name.
+    pub label: String,
+}
+
+/// The badges of the plugins linked to each device.
+#[must_use]
+pub fn plugin_badges(settings: &Settings) -> std::collections::HashMap<String, Vec<Badge>> {
+    let mut badges: std::collections::HashMap<String, Vec<Badge>> = std::collections::HashMap::new();
+    for table in &settings.plugins {
+        let text = |key: &str| table.get(key).and_then(toml::Value::as_str).unwrap_or_default();
+        let (device, name) = (text("device"), text("name"));
+        if device.is_empty() {
+            continue;
+        }
+        let label = if name.eq_ignore_ascii_case(device) {
+            plugin_type(text("type")).map_or(name, |kind| kind.title)
+        } else {
+            name
+        };
+        badges.entry(device.to_owned()).or_default().push(Badge {
+            name: name.to_owned(),
+            label: label.to_owned(),
+        });
+    }
+    badges
+}
+
 fn take_string(table: &mut toml::Table, key: &str) -> Result<String, Error> {
     match table.remove(key) {
         Some(toml::Value::String(value)) => Ok(value),
