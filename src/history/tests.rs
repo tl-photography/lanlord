@@ -41,11 +41,7 @@ fn sample() -> Interface {
         name: "tv".to_owned(),
         mac: "00:00:00:00:00:01".to_owned(),
         group: "lan".to_owned(),
-        ip: None,
-        note: String::new(),
-        self_assigned: false,
-        unreviewed: false,
-        device: String::new(),
+        ..Default::default()
     }
 }
 
@@ -71,13 +67,7 @@ fn group_changes_are_listed() {
     let lan = Group {
         name: "lan".to_owned(),
         vlan: 1,
-        subnet: String::new(),
-        label: String::new(),
-        ssid: String::new(),
-        ssid_password_file: String::new(),
-        ssid_bands: Vec::new(),
-        reachable_from: Vec::new(),
-        reaches: Vec::new(),
+        ..Default::default()
     };
     let before = Config {
         default_group: "lan".to_owned(),
@@ -95,13 +85,7 @@ fn group_changes_are_listed() {
             Group {
                 name: "guest".to_owned(),
                 vlan: 30,
-                subnet: String::new(),
-                label: String::new(),
-                ssid: String::new(),
-                ssid_password_file: String::new(),
-                ssid_bands: Vec::new(),
-                reachable_from: Vec::new(),
-                reaches: Vec::new(),
+                ..Default::default()
             },
         ],
     };

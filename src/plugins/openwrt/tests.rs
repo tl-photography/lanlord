@@ -391,10 +391,7 @@ fn devices() -> DeviceList {
         mac: mac.to_owned(),
         group: "lan".to_owned(),
         ip: Some(Ipv4Addr::from(ip)),
-        self_assigned: false,
-        unreviewed: false,
-        note: String::new(),
-        device: String::new(),
+        ..Default::default()
     };
     DeviceList {
         interfaces: vec![

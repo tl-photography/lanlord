@@ -9,10 +9,7 @@ fn device(name: &str, mac: &str, ip: Option<[u8; 4]>) -> Interface {
         mac: mac.to_owned(),
         group: "lan".to_owned(),
         ip: ip.map(Ipv4Addr::from),
-        note: String::new(),
-        self_assigned: false,
-        unreviewed: false,
-        device: String::new(),
+        ..Default::default()
     }
 }
 

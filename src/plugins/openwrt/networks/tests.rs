@@ -333,11 +333,7 @@ fn a_port_with_one_device_carries_its_vlan_untagged() {
         name: name.to_owned(),
         mac: mac.to_owned(),
         group: group.to_owned(),
-        ip: None,
-        self_assigned: false,
-        unreviewed: false,
-        note: String::new(),
-        device: String::new(),
+        ..Default::default()
     };
     wanted.devices.interfaces = vec![
         interface("bridge", "aa:bb:cc:00:00:01", "iot"),
@@ -379,11 +375,7 @@ fn a_port_never_moves_into_a_network_that_is_not_built() {
         name: "bridge".to_owned(),
         mac: "aa:bb:cc:00:00:01".to_owned(),
         group: "iot".to_owned(),
-        ip: None,
-        self_assigned: false,
-        unreviewed: false,
-        note: String::new(),
-        device: String::new(),
+        ..Default::default()
     }];
     let ports = BTreeMap::from([(
         "lan1".to_owned(),
@@ -467,10 +459,7 @@ fn a_network_reaches_single_ports_of_a_server() {
         mac: "aa:bb:cc:00:00:02".to_owned(),
         group: "lan".to_owned(),
         ip: Some(Ipv4Addr::new(192, 0, 2, 10)),
-        self_assigned: false,
-        unreviewed: false,
-        note: String::new(),
-        device: String::new(),
+        ..Default::default()
     }];
     let result = plan(&wanted, &router(), Role::Router, &passwords(), &BTreeMap::new());
     let mqtt = find(&result.changes, "lanlordnet_iot_to_server_1883_tcp");
