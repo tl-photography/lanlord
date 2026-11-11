@@ -64,12 +64,12 @@ fn plan() -> Plan {
 #[test]
 fn netmasks_follow_the_prefix() {
     for (prefix, mask) in [
-        (0, Ipv4Addr::new(0, 0, 0, 0)),
+        (0, Ipv4Addr::UNSPECIFIED),
         (8, Ipv4Addr::new(255, 0, 0, 0)),
         (24, Ipv4Addr::new(255, 255, 255, 0)),
         (30, Ipv4Addr::new(255, 255, 255, 252)),
-        (32, Ipv4Addr::new(255, 255, 255, 255)),
-        (40, Ipv4Addr::new(255, 255, 255, 255)),
+        (32, Ipv4Addr::BROADCAST),
+        (40, Ipv4Addr::BROADCAST),
     ] {
         assert_eq!(netmask(prefix), mask, "/{prefix}");
     }
