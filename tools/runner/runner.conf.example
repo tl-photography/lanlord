@@ -1,0 +1,35 @@
+# Config of tools/runner/runner.sh. Copy it, for example to ~/.config/lanlord-runner/runner.conf.
+# KEY=value lines; the file is read, never executed.
+
+# The repository the runners take jobs for.
+REPO=owner/lanlord
+
+# File with a fine-grained GitHub token for that repository, with read and write access to "Administration",
+# "Actions" and "Variables". Mode 0600.
+TOKEN_FILE=~/.config/lanlord-runner/token
+
+# Prefix of the VM and runner names.
+NAME=lanlord-runner
+
+# Labels besides self-hosted, Linux and X64. The first one is what the repository variable RUNNER is set to.
+LABELS=lanlord
+
+# Size of every VM.
+CPUS=4
+MEMORY=8G
+DISK=40G
+
+# Ubuntu image of the base VM.
+IMAGE=24.04
+
+# Bridge of the Multipass VMs on the host.
+BRIDGE=mpqemubr0
+
+# Networks the VMs must not reach. Add the local networks if they are public addresses.
+BLOCK="10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 fc00::/7 fe80::/10"
+
+# Minutes a job may wait for GitHub's runners before it is moved here.
+WAIT=10
+
+# Minutes after which new jobs go to GitHub's runners again.
+BACK_AFTER=30

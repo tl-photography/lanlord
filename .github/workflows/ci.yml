@@ -28,7 +28,7 @@ jobs:
   # Only the checks a change needs; releases and manual runs check everything.
   changes:
     name: Find the checks to run
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
       pull-requests: read
@@ -131,7 +131,7 @@ jobs:
     name: Format, lint and test
     needs: changes
     if: needs.changes.outputs.rust == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
       security-events: write
@@ -180,7 +180,7 @@ jobs:
     name: Test coverage
     needs: changes
     if: needs.changes.outputs.coverage == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
       pull-requests: write
@@ -248,7 +248,7 @@ jobs:
     name: Check dependencies (advisories, licenses, sources)
     needs: changes
     if: needs.changes.outputs.dependencies == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -260,7 +260,7 @@ jobs:
 
   secrets:
     name: Scan for secrets
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -275,7 +275,7 @@ jobs:
 
   hooks:
     name: Pre-commit hooks
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -293,7 +293,7 @@ jobs:
     # Next to the Rust job, not after it: the image is the longest job.
     needs: changes
     if: needs.changes.outputs.image == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
     permissions:
       contents: read
       security-events: write
