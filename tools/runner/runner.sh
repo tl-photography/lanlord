@@ -51,6 +51,8 @@ load_config() {
     [[ $LABELS =~ ^[A-Za-z0-9_.,-]+$ ]] || die "LABELS is a comma-separated list"
     [[ $WAIT =~ ^[1-9][0-9]*$ && $BACK_AFTER =~ ^[1-9][0-9]*$ ]] || die "WAIT and BACK_AFTER are minutes"
     LABEL=${LABELS%%,*}
+    # A literal ~/ from the config file, replaced by the home directory.
+    # shellcheck disable=SC2088
     if [[ $TOKEN_FILE == "~/"* ]]; then
         TOKEN_FILE=$HOME/${TOKEN_FILE#"~/"}
     fi
