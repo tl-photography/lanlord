@@ -172,25 +172,21 @@ async fn a_group_gets_its_own_wifi_with_a_password_file() {
         "{file}"
     );
 
-    let (status, page) = post(
-        &data,
-        "/groups/guest/network",
-        "ssid=Home+IoT&password_file=..%2Fsecret&band_2g=on",
-    )
-    .await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(
-        page.contains("needs a password file in the data directory"),
-        "{page}"
-    );
     let long = "x".repeat(33);
-    let (status, _) = post(
-        &data,
-        "/groups/guest/network",
-        &format!("ssid={long}&password_file=iot.wifi&band_2g=on"),
-    )
-    .await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    for (form, message) in [
+        (
+            "ssid=Home+IoT&password_file=..%2Fsecret&band_2g=on".to_owned(),
+            "needs a password file in the data directory",
+        ),
+        (
+            format!("ssid={long}&password_file=iot.wifi&band_2g=on"),
+            "the SSID must be 1 to 32 bytes",
+        ),
+    ] {
+        let (status, page) = post(&data, "/groups/guest/network", &form).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{form}");
+        assert!(page.contains(message), "{form}: {page}");
+    }
 
     assert_eq!(
         post(&data, "/groups/guest/network", "ssid=&password_file=iot.wifi")
