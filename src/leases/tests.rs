@@ -34,13 +34,17 @@ fn list(devices: Vec<Interface>) -> DeviceList {
 
 #[test]
 fn networks_contain_their_addresses() {
-    assert!(LAN.contains(Ipv4Addr::new(192, 0, 2, 200)));
-    assert!(!LAN.contains(Ipv4Addr::new(192, 0, 3, 2)));
     let all = Network {
         address: Ipv4Addr::new(10, 0, 0, 1),
         prefix: 0,
     };
-    assert!(all.contains(Ipv4Addr::new(198, 51, 100, 1)));
+    for (network, address, inside) in [
+        (LAN, Ipv4Addr::new(192, 0, 2, 200), true),
+        (LAN, Ipv4Addr::new(192, 0, 3, 2), false),
+        (all, Ipv4Addr::new(198, 51, 100, 1), true),
+    ] {
+        assert_eq!(network.contains(address), inside, "{address} in {network:?}");
+    }
 }
 
 #[test]

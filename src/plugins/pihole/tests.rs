@@ -353,14 +353,19 @@ async fn stale_previews_wrong_passwords_and_refusals_are_reported() {
 #[test]
 fn plain_http_is_only_allowed_to_the_own_host() {
     let data = Path::new("/data");
-    let build = |url: &str| {
+    for (url, allowed) in [
+        ("https://pi.hole", true),
+        ("http://pi.hole", false),
+        ("http://127.0.0.1:8080", true),
+    ] {
         let table: toml::Table = toml::from_str(&format!(
             "url = \"{url}\"\npassword_file = \"pihole.password\"\ncertificate = \"{FINGERPRINT}\"\n"
         ))
         .unwrap();
-        PiHole::new("pihole".to_owned(), table, data)
-    };
-    assert!(build("https://pi.hole").is_ok());
-    assert!(build("http://pi.hole").is_err());
-    assert!(build("http://127.0.0.1:8080").is_ok());
+        assert_eq!(
+            PiHole::new("pihole".to_owned(), table, data).is_ok(),
+            allowed,
+            "{url}"
+        );
+    }
 }
