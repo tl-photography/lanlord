@@ -487,7 +487,29 @@ async fn an_access_point_without_dhcp_has_nothing_to_apply() {
         .apply(devices().into(), String::new())
         .await
         .unwrap_err();
-    assert!(error.contains("serves no DHCP"), "{error}");
+    assert!(error.contains("nothing to apply"), "{error}");
+}
+
+#[tokio::test]
+async fn another_dhcp_server_keeps_the_static_leases() {
+    let data = tempfile::tempdir().unwrap();
+    let (url, fake) = fake_target(router_with_omv()).await;
+    let router = plugin(&url, data.path(), "secret", 0o600);
+    let plan = Plan {
+        devices: devices(),
+        services: vec![crate::plan::Service {
+            kind: "dhcp",
+            address: Ipv4Addr::new(192, 0, 2, 53),
+            source: "filter".to_owned(),
+        }],
+        dhcp_service: "filter".to_owned(),
+        ..Plan::default()
+    };
+    assert_eq!(router.plan(plan).await.unwrap(), None);
+    assert!(
+        fake.lock().unwrap().committed.contains_key("cfg01"),
+        "its own lease stays"
+    );
 }
 
 #[tokio::test]

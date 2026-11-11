@@ -74,7 +74,7 @@ Rules:
 Stored, changed by the user, written to the history.
 
 ```text
-Network    dns_service
+Network    dns_service, dhcp_service
 Group      name, label, vlan, subnet, ssid, ssid_2g_only, reachable_from, reaches
 Interface  device, name, mac, group, address, note, reviewed
 Address    none | lease(ip) | on_device(ip)
@@ -84,6 +84,8 @@ Address    none | lease(ip) | on_device(ip)
 - The interface is what the network sees: MAC address, address, DNS name, group.
 - `dns_service` chooses one of the offered DNS services for all networks, empty for the router. Devices can reach it
   from every network, and DNS to anywhere else is redirected to it.
+- `dhcp_service` chooses one of the offered DHCP services, empty for the router. Only the chosen one keeps the static
+  leases.
 - A group is one network: a VLAN and a subnet. Rules such as blocklists follow the group. One group is the default for
   unknown devices.
 - The MAC address is the identity of an interface. A device that hides it is unknown each time and stays in the

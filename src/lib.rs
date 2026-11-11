@@ -206,6 +206,7 @@ impl AppState {
             devices,
             groups: config.groups,
             dns_service: config.dns_service,
+            dhcp_service: config.dhcp_service,
         })
     }
 
@@ -271,6 +272,7 @@ pub fn app(state: AppState) -> Router {
         .route("/groups", get(groups::list).post(groups::create))
         .route("/groups/default", axum::routing::post(groups::set_default))
         .route("/settings/dns", axum::routing::post(settings_ui::dns))
+        .route("/settings/dhcp", axum::routing::post(settings_ui::dhcp))
         .route("/groups/{name}/delete", axum::routing::post(groups::delete))
         .route("/groups/{name}/network", axum::routing::post(groups::set_network))
         .route("/settings", get(settings_ui::show).post(settings_ui::save))

@@ -207,20 +207,17 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
             texts.push(format!("Group {} deleted", old.name));
         }
     }
-    if before.dns_service != after.dns_service {
-        texts.push(format!(
-            "DNS service {} → {}",
-            if before.dns_service.is_empty() {
-                "router"
-            } else {
-                &before.dns_service
-            },
-            if after.dns_service.is_empty() {
-                "router"
-            } else {
-                &after.dns_service
-            }
-        ));
+    for (kind, before, after) in [
+        ("DNS", &before.dns_service, &after.dns_service),
+        ("DHCP", &before.dhcp_service, &after.dhcp_service),
+    ] {
+        if before != after {
+            texts.push(format!(
+                "{kind} service {} → {}",
+                or_router(before),
+                or_router(after)
+            ));
+        }
     }
     if before.default_group != after.default_group {
         texts.push(format!(
@@ -230,6 +227,11 @@ pub fn groups(before: &Config, after: &Config) -> Vec<String> {
         ));
     }
     texts
+}
+
+/// A chosen service, or the router when none is chosen.
+fn or_router(service: &str) -> &str {
+    if service.is_empty() { "router" } else { service }
 }
 
 fn table_name(table: &toml::Table) -> String {

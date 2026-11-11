@@ -154,6 +154,20 @@ async fn a_linked_dns_plugin_can_serve_all_networks() {
         StatusCode::SEE_OTHER
     );
     assert!(!groups_file(&data).contains("dns_service"));
+
+    let (status, page) = post(&data, "/settings/dhcp", "service=filter").await;
+    assert_eq!(
+        status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "Pi-hole offers DNS, not DHCP"
+    );
+    assert!(page.contains("filter offers no DHCP service"), "{page}");
+    assert!(page.contains("A plugin that offers DHCP appears here"), "{page}");
+    assert_eq!(
+        post(&data, "/settings/dhcp", "service=").await.0,
+        StatusCode::SEE_OTHER
+    );
+    assert!(!groups_file(&data).contains("dhcp_service"));
 }
 
 #[tokio::test]

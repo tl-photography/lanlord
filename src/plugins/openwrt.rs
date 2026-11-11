@@ -378,7 +378,8 @@ impl OpenWrt {
 
     async fn plan_in(&self, session: &str, plan: &Plan) -> Result<DevicePlan, String> {
         let (hosts, names, served, held) = self.lease_state(session).await?;
-        let leases = (!served.is_empty()).then(|| {
+        // Another DHCP server keeps the static leases, so the router leaves its own alone.
+        let leases = (!served.is_empty() && plan.dhcp().is_none()).then(|| {
             let mut lease_plan = leases::plan(&plan.devices, &hosts, &served, &held);
             leases::plan_names(&plan.devices, &names, &served, &mut lease_plan);
             lease_plan
@@ -444,9 +445,12 @@ impl OpenWrt {
         let password = read_password(&self.password_file).await?;
         let session = self.login(&password).await?;
         let planned = self.plan_in(&session, &plan).await?;
-        let preview = planned
-            .preview()
-            .ok_or_else(|| format!("{}: serves no DHCP, there is nothing to apply", self.name))?;
+        let preview = planned.preview().ok_or_else(|| {
+            format!(
+                "{}: keeps no static leases and manages no networks, there is nothing to apply",
+                self.name
+            )
+        })?;
         if preview.digest() != digest {
             return Err(format!(
                 "{}: the device or the list changed since the preview, check the changes again",
