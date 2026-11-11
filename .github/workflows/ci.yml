@@ -29,6 +29,7 @@ jobs:
       rust: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.rust == 'true' }}
       dependencies: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.dependencies == 'true' }}
       image: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.image == 'true' }}
+      web: ${{ steps.full.outputs.all == 'true' || steps.filter.outputs.web == 'true' }}
     steps:
       - name: Check out code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -75,6 +76,24 @@ jobs:
               - '.dockerignore'
               - '.hadolint.yaml'
               - 'tests/container.sh'
+              - '.zap/**'
+              - '.github/workflows/**'
+            # The web interface: pages, assets and the code that serves them.
+            web:
+              - 'templates/**'
+              - 'static/**'
+              - 'assets/**'
+              - 'src/lib.rs'
+              - 'src/auth.rs'
+              - 'src/auth/**'
+              - 'src/origin.rs'
+              - 'src/*_ui.rs'
+              - 'src/edit.rs'
+              - 'src/groups.rs'
+              - 'src/machines.rs'
+              - 'src/apply.rs'
+              - 'Cargo.lock'
+              - 'Dockerfile'
               - '.zap/**'
               - '.github/workflows/**'
 
@@ -241,11 +260,9 @@ jobs:
 
   docker:
     name: Build, smoke-test and scan the image
-    needs: [changes, rust]
-    # Also when only the Dockerfile changed and the Rust job was skipped, but not after it failed.
-    if: >-
-      !cancelled() && needs.changes.outputs.image == 'true'
-      && needs.rust.result != 'failure'
+    # Next to the Rust job, not after it: the image is the longest job.
+    needs: changes
+    if: needs.changes.outputs.image == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -271,6 +288,7 @@ jobs:
         run: tests/container.sh lanlord:ci
 
       - name: Start the container for the web scan
+        if: needs.changes.outputs.web == 'true'
         run: |
           mkdir -p "$RUNNER_TEMP/data"
           cp examples/groups.toml "$RUNNER_TEMP/data/"
@@ -285,6 +303,7 @@ jobs:
 
       # Passive scan of the running web interface; accepted findings are in .zap/rules.tsv.
       - name: Scan the web interface with ZAP
+        if: needs.changes.outputs.web == 'true'
         uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25
         with:
           target: http://127.0.0.1:8080/
