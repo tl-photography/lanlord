@@ -87,25 +87,26 @@ fn leases_hosts_and_stations_become_one_entry_per_mac() {
 
 #[test]
 fn ubus_errors_are_explained() {
-    assert_eq!(
-        result(&json!({ "result": [0, { "a": 1 }] })).unwrap(),
-        json!({ "a": 1 })
-    );
-    assert_eq!(result(&json!({ "result": [0] })).unwrap(), json!({}));
-    assert!(
-        result(&json!({ "result": [6] }))
-            .unwrap_err()
-            .contains("rpcd ACL")
-    );
-    assert_eq!(result(&json!({ "result": [4] })).unwrap_err(), "not found");
-    assert_eq!(result(&json!({ "result": [5] })).unwrap_err(), "no data");
-    assert_eq!(result(&json!({ "result": [9] })).unwrap_err(), "ubus error 9");
-    assert_eq!(
-        result(&json!({ "error": { "code": -32002, "message": "Access denied" } })).unwrap_err(),
-        "access denied"
-    );
-    assert!(result(&json!({})).is_err());
-    assert!(result(&json!({ "result": [] })).is_err());
+    for (answer, expected) in [
+        (json!({ "result": [0, { "a": 1 }] }), Ok(json!({ "a": 1 }))),
+        (json!({ "result": [0] }), Ok(json!({}))),
+        (json!({ "result": [6] }), Err("rpcd ACL")),
+        (json!({ "result": [4] }), Err("not found")),
+        (json!({ "result": [5] }), Err("no data")),
+        (json!({ "result": [9] }), Err("ubus error 9")),
+        (
+            json!({ "error": { "code": -32002, "message": "Access denied" } }),
+            Err("access denied"),
+        ),
+        (json!({}), Err("")),
+        (json!({ "result": [] }), Err("")),
+    ] {
+        match (result(&answer), expected) {
+            (Ok(value), Ok(wanted)) => assert_eq!(value, wanted, "{answer}"),
+            (Err(error), Err(wanted)) => assert!(error.contains(wanted), "{answer}: {error}"),
+            (got, wanted) => panic!("{answer}: {got:?}, expected {wanted:?}"),
+        }
+    }
 }
 
 fn settings_table(url: &str) -> toml::Table {
@@ -118,12 +119,16 @@ fn settings_table(url: &str) -> toml::Table {
 #[test]
 fn plain_http_is_only_allowed_to_the_own_host() {
     let data = Path::new("/data");
-    let build = |url: &str| OpenWrt::new("router".to_owned(), settings_table(url), data);
-    assert!(build("https://router.lan").is_ok());
-    assert!(build("http://127.0.0.1:8080").is_ok());
-    assert!(build("http://router.lan").is_err());
-    assert!(build("ftp://router.lan").is_err());
-    assert!(build("not a url").is_err());
+    for (url, allowed) in [
+        ("https://router.lan", true),
+        ("http://127.0.0.1:8080", true),
+        ("http://router.lan", false),
+        ("ftp://router.lan", false),
+        ("not a url", false),
+    ] {
+        let built = OpenWrt::new("router".to_owned(), settings_table(url), data);
+        assert_eq!(built.is_ok(), allowed, "{url}");
+    }
     let mut table = settings_table("https://router.lan");
     table.insert("certificate".to_owned(), toml::Value::String("12".to_owned()));
     assert!(OpenWrt::new("router".to_owned(), table, data).is_err());
@@ -203,23 +208,16 @@ async fn reads_station_vlans_of_an_access_point() {
 #[tokio::test]
 async fn login_and_permission_problems_are_reported() {
     let data = tempfile::tempdir().unwrap();
-    let wrong = plugin(&fake_router(json!([4])).await, data.path(), "wrong", 0o600);
-    assert!(
-        wrong
-            .observe()
-            .await
-            .unwrap_err()
-            .contains("login as lanlord failed")
-    );
-
-    let denied = plugin(&fake_router(json!([6])).await, data.path(), "secret", 0o600);
-    assert!(denied.observe().await.unwrap_err().contains("rpcd ACL"));
-
-    let open = plugin(&fake_router(json!([4])).await, data.path(), "secret", 0o644);
-    assert!(open.observe().await.unwrap_err().contains("mode 0600"));
-
-    let empty = plugin(&fake_router(json!([4])).await, data.path(), " \n", 0o600);
-    assert!(empty.observe().await.unwrap_err().contains("empty"));
+    for (login, password, mode, expected) in [
+        (json!([4]), "wrong", 0o600, "login as lanlord failed"),
+        (json!([6]), "secret", 0o600, "rpcd ACL"),
+        (json!([4]), "secret", 0o644, "mode 0600"),
+        (json!([4]), " \n", 0o600, "empty"),
+    ] {
+        let router = plugin(&fake_router(login).await, data.path(), password, mode);
+        let error = router.observe().await.unwrap_err();
+        assert!(error.contains(expected), "{expected}: {error}");
+    }
 
     let missing = OpenWrt::new(
         "router".to_owned(),
@@ -661,30 +659,27 @@ fn the_forwarding_table_keeps_learned_addresses() {
 fn only_a_device_without_dhcp_and_entries_has_nothing_to_compare() {
     let serving = json!({ "values": { "lan": { ".type": "dhcp", "interface": "lan" } } });
     let not_serving = json!({ "values": { "lan": { ".type": "dhcp", "interface": "lan", "ignore": "1" } } });
-    let empty = || Observation {
-        assigned: Some(Vec::new()),
-        ..Observation::default()
+    let station = Assigned {
+        mac: "aa:bb:cc:00:00:01".to_owned(),
+        vlan: Some(20),
+        ..Assigned::default()
     };
-
-    let mut access_point = empty();
-    drop_empty_entries(&mut access_point, &not_serving);
-    assert_eq!(access_point.assigned, None);
-
-    let mut router = empty();
-    drop_empty_entries(&mut router, &serving);
-    assert_eq!(router.assigned, Some(Vec::new()));
-
-    let mut with_station = Observation {
-        assigned: Some(vec![Assigned {
-            mac: "aa:bb:cc:00:00:01".to_owned(),
-            name: String::new(),
-            ip: None,
-            vlan: Some(20),
-        }]),
-        ..Observation::default()
-    };
-    drop_empty_entries(&mut with_station, &not_serving);
-    assert_eq!(with_station.assigned.map(|entries| entries.len()), Some(1));
+    for (entries, dhcp, expected) in [
+        (Vec::new(), &not_serving, None),
+        (Vec::new(), &serving, Some(0)),
+        (vec![station], &not_serving, Some(1)),
+    ] {
+        let mut observation = Observation {
+            assigned: Some(entries),
+            ..Observation::default()
+        };
+        drop_empty_entries(&mut observation, dhcp);
+        assert_eq!(
+            observation.assigned.map(|entries| entries.len()),
+            expected,
+            "{dhcp}"
+        );
+    }
 }
 
 #[tokio::test]

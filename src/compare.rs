@@ -18,7 +18,7 @@ pub struct Present {
 }
 
 /// What a system has configured for a device, for example a static lease or a DNS record.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Assigned {
     /// MAC address, lowercase with colons.
     pub mac: String,
