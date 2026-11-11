@@ -1,7 +1,9 @@
 name: CI
 
+# Branches are checked in their pull request, main after the merge: one run per change, not two.
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
   workflow_call:
@@ -10,6 +12,11 @@ on:
         description: Run every check, whatever changed
         type: boolean
         default: false
+
+# A new push to a pull request stops the run of the push before.
+concurrency:
+  group: ci-${{ github.workflow_ref }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
