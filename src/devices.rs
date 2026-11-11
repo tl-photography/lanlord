@@ -11,7 +11,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 /// What the network sees of a device: one MAC address. Leases, DNS names and clients work per interface.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Interface {
     /// DNS name, without domain.
     pub name: String,

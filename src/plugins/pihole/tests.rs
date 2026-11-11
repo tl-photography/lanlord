@@ -18,10 +18,7 @@ fn device(name: &str, group: &str, ip: Option<[u8; 4]>) -> Interface {
         mac: format!("00:00:00:00:00:{:02x}", name.len()),
         group: group.to_owned(),
         ip: ip.map(Ipv4Addr::from),
-        self_assigned: false,
-        unreviewed: false,
-        note: String::new(),
-        device: String::new(),
+        ..Default::default()
     }
 }
 

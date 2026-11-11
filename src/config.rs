@@ -11,7 +11,7 @@ use crate::devices::{Error, is_valid_name, write_private};
 use crate::leases::Network;
 
 /// A group of devices, mapped to a VLAN.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Group {
     /// Short name, used in the device list.

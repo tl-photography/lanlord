@@ -14,13 +14,7 @@ fn names_come_from_the_host_name_or_the_mac() {
 fn a_taken_name_gets_a_number() {
     let interface = |name: &str| Interface {
         name: name.to_owned(),
-        mac: String::new(),
-        group: String::new(),
-        ip: None,
-        self_assigned: false,
-        unreviewed: false,
-        note: String::new(),
-        device: String::new(),
+        ..Default::default()
     };
     let list = DeviceList {
         interfaces: vec![interface("phone"), interface("Phone-2")],

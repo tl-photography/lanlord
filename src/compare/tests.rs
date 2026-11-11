@@ -8,24 +8,12 @@ fn groups() -> Vec<Group> {
         Group {
             name: "lan".to_owned(),
             vlan: 1,
-            subnet: String::new(),
-            label: String::new(),
-            ssid: String::new(),
-            ssid_password_file: String::new(),
-            ssid_bands: Vec::new(),
-            reachable_from: Vec::new(),
-            reaches: Vec::new(),
+            ..Default::default()
         },
         Group {
             name: "iot".to_owned(),
             vlan: 20,
-            subnet: String::new(),
-            label: String::new(),
-            ssid: String::new(),
-            ssid_password_file: String::new(),
-            ssid_bands: Vec::new(),
-            reachable_from: Vec::new(),
-            reaches: Vec::new(),
+            ..Default::default()
         },
     ]
 }
@@ -38,20 +26,13 @@ fn list() -> DeviceList {
                 mac: "00:00:00:00:00:01".to_owned(),
                 group: "lan".to_owned(),
                 ip: Some(Ipv4Addr::new(192, 0, 2, 2)),
-                note: String::new(),
-                self_assigned: false,
-                unreviewed: false,
-                device: String::new(),
+                ..Default::default()
             },
             Interface {
                 name: "plug".to_owned(),
                 mac: "00:00:00:00:00:02".to_owned(),
                 group: "iot".to_owned(),
-                ip: None,
-                note: String::new(),
-                self_assigned: false,
-                unreviewed: false,
-                device: String::new(),
+                ..Default::default()
             },
         ],
     }
@@ -165,9 +146,7 @@ fn a_device_that_sets_its_address_itself_has_no_lease_to_miss() {
             group: "lan".to_owned(),
             ip: Some([192, 0, 2, 1].into()),
             self_assigned: true,
-            unreviewed: false,
-            note: String::new(),
-            device: String::new(),
+            ..Default::default()
         }],
     };
     assert_eq!(compare(&list, &groups(), &Observation::default()), Vec::new());

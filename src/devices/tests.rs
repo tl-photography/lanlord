@@ -13,11 +13,7 @@ fn device(name: &str, mac: &str) -> Interface {
         name: name.to_owned(),
         mac: mac.to_owned(),
         group: "lan".to_owned(),
-        ip: None,
-        note: String::new(),
-        self_assigned: false,
-        unreviewed: false,
-        device: String::new(),
+        ..Default::default()
     }
 }
 
