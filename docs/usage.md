@@ -55,6 +55,12 @@ and says so in the history and a notification. It is off by default.
 On the Settings page: the DNS server of all networks, the router or a plugin that offers DNS, like Pi-hole. A plugin
 offers it at the fixed address of the device it is linked to.
 
+## DHCP
+
+On the Settings page: the DHCP server that keeps the static leases, the router or a plugin that offers DHCP at the fixed
+address of the device it is linked to. Only the chosen one keeps them. With a plugin chosen, the router leaves its own
+static leases alone.
+
 ## Own Wi-Fi
 
 A group can have an SSID of its own, for example for ESP8266 devices that fail with fast roaming. Its password is in a

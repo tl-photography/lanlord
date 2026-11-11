@@ -34,4 +34,18 @@
   <div class="actions"><button type="submit">Save</button></div>
   {% if dns_options.is_empty() %}<p><small>A plugin that offers DNS, like Pi-hole, appears here once it is linked to a device with a fixed address.</small></p>{% endif %}
 </form>
+<form method="post" action="/settings/dhcp" class="panel fields">
+  <h2>DHCP</h2>
+  <p>This DHCP server keeps the static leases of all devices with a fixed address. Any other, like the router, leaves its own alone.</p>
+  <label>DHCP server
+    <select name="service">
+      <option value=""{% if dhcp_service.is_empty() %} selected{% endif %}>The router</option>
+      {% for option in dhcp_options %}
+      <option value="{{ option.source }}"{% if option.source == dhcp_service %} selected{% endif %}>{{ option.label }}</option>
+      {% endfor %}
+    </select>
+  </label>
+  <div class="actions"><button type="submit">Save</button></div>
+  {% if dhcp_options.is_empty() %}<p><small>A plugin that offers DHCP appears here once it is linked to a device with a fixed address.</small></p>{% endif %}
+</form>
 {% endblock %}

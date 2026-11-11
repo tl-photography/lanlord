@@ -16,6 +16,8 @@ pub struct Plan {
     pub services: Vec<Service>,
     /// The plugin whose DNS service all networks use; empty for the router.
     pub dns_service: String,
+    /// The plugin whose DHCP service keeps the static leases; empty for the router.
+    pub dhcp_service: String,
 }
 
 /// Something a plugin offers to the network, at the address of the device it is linked to.
@@ -33,9 +35,19 @@ impl Plan {
     /// The address of the chosen DNS service; `None` for the router.
     #[must_use]
     pub fn dns(&self) -> Option<Ipv4Addr> {
+        self.offered("dns", &self.dns_service)
+    }
+
+    /// The address of the chosen DHCP service; `None` for the router.
+    #[must_use]
+    pub fn dhcp(&self) -> Option<Ipv4Addr> {
+        self.offered("dhcp", &self.dhcp_service)
+    }
+
+    fn offered(&self, kind: &str, source: &str) -> Option<Ipv4Addr> {
         self.services
             .iter()
-            .find(|service| service.kind == "dns" && service.source == self.dns_service)
+            .find(|service| service.kind == kind && service.source == source)
             .map(|service| service.address)
     }
 }
@@ -53,20 +65,44 @@ impl From<DeviceList> for Plan {
 mod tests {
     use super::*;
 
+    /// A service kind, the field that chooses it and the method that gives its address.
+    type Choice = (
+        &'static str,
+        fn(&mut Plan) -> &mut String,
+        fn(&Plan) -> Option<Ipv4Addr>,
+    );
+
     #[test]
-    fn the_chosen_dns_service_gives_the_address() {
-        let mut plan = Plan {
+    fn the_chosen_service_gives_the_address() {
+        let address = Ipv4Addr::new(192, 0, 2, 53);
+        let choices: [Choice; 2] = [
+            ("dns", |plan| &mut plan.dns_service, Plan::dns),
+            ("dhcp", |plan| &mut plan.dhcp_service, Plan::dhcp),
+        ];
+        for (kind, choice, chosen) in choices {
+            let mut plan = Plan {
+                services: vec![Service {
+                    kind,
+                    address,
+                    source: "filter".to_owned(),
+                }],
+                ..Plan::default()
+            };
+            assert_eq!(chosen(&plan), None, "{kind}: nothing chosen is the router");
+            "filter".clone_into(choice(&mut plan));
+            assert_eq!(chosen(&plan), Some(address), "{kind}");
+            "gone".clone_into(choice(&mut plan));
+            assert_eq!(chosen(&plan), None, "{kind}: a plugin that offers nothing");
+        }
+        let plan = Plan {
             services: vec![Service {
                 kind: "dns",
-                address: Ipv4Addr::new(192, 0, 2, 53),
+                address,
                 source: "filter".to_owned(),
             }],
+            dhcp_service: "filter".to_owned(),
             ..Plan::default()
         };
-        assert_eq!(plan.dns(), None, "nothing chosen is the router");
-        "filter".clone_into(&mut plan.dns_service);
-        assert_eq!(plan.dns(), Some(Ipv4Addr::new(192, 0, 2, 53)));
-        "gone".clone_into(&mut plan.dns_service);
-        assert_eq!(plan.dns(), None);
+        assert_eq!(plan.dhcp(), None, "a DNS service is no DHCP service");
     }
 }

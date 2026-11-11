@@ -1,7 +1,7 @@
 # Plugin `openwrt`
 
 Reports DHCP leases, static leases, Wi-Fi clients and Wi-Fi VLANs per MAC address of an OpenWrt router or access point,
-and applies static leases if the device serves DHCP.
+and applies static leases if the device serves DHCP and no plugin is chosen as DHCP server on the Settings page.
 
 lanlord uses the ubus JSON-RPC API that LuCI uses, as its own rpcd user. An ACL on the device decides what that
 user may read and change, for example in `/usr/share/rpcd/acl.d/lanlord.json`:

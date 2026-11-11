@@ -121,6 +121,9 @@ pub struct Config {
     /// The plugin whose DNS service all networks use; empty for the router.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dns_service: String,
+    /// The plugin whose DHCP service keeps the static leases; empty for the router.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub dhcp_service: String,
     /// All groups.
     #[serde(default, rename = "group")]
     pub groups: Vec<Group>,
