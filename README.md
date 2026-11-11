@@ -296,6 +296,8 @@ Accepted ZAP findings are listed with a reason in [.zap/rules.tsv](.zap/rules.ts
 Findings of CodeQL, clippy and Trivy go to GitHub code scanning. The coverage summary is posted as a comment on
 each pull request and updated with every push.
 
+Jobs can also run on a PC, each in a disposable VM: see [tools/runner](tools/runner/README.md).
+
 A weekly run checks new advisories for the dependencies and the base images.
 Dependabot keeps the crates, the actions, the base images and the pre-commit hooks up to date.
 
