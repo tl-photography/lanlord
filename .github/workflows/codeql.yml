@@ -16,7 +16,7 @@ permissions:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     permissions:
       contents: read
       security-events: write
